@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Allow: /contact
+Allow: /home
+Allow: /login
+Allow: /register
+Disallow: /api/
+
+Sitemap: https://parallaxflow.in/sitemap.xml

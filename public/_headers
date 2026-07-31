@@ -1,0 +1,71 @@
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  X-XSS-Protection: 1; mode=block
+  Referrer-Policy: strict-origin-when-cross-origin
+
+/
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+
+/index.html
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+
+/home
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+
+/home/
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+
+/contact
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+
+/contact/
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+
+/login
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+
+/login/
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+
+/register
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+
+/register/
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+
+/forgot-password
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+
+/forgot-password/
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+
+/404.html
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

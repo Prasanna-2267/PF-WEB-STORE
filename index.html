@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#090A0D" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>Parallax Flow</title>
+    <meta name="description" content="Learning, Designed Around You." />
+    <link rel="canonical" href="https://parallaxflow.in/" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://parallaxflow.in/" />
+    <meta property="og:site_name" content="Parallax Flow" />
+    <meta property="og:title" content="Parallax Flow" />
+    <meta property="og:description" content="Learning, Designed Around You." />
+    <meta property="og:image" content="https://parallaxflow.in/logo.png" />
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://parallaxflow.in/" />
+    <meta name="twitter:title" content="Parallax Flow" />
+    <meta name="twitter:description" content="Learning, Designed Around You." />
+    <meta name="twitter:image" content="https://parallaxflow.in/logo.png" />
+
+    <script>
+      (() => {
+        const retryParameter = '__pf_retry';
+
+        window.addEventListener('error', (event) => {
+          const failedScript = event.target;
+          if (!(failedScript instanceof HTMLScriptElement) || !failedScript.src.includes('/assets/')) {
+            return;
+          }
+
+          const nextUrl = new URL(window.location.href);
+          if (nextUrl.searchParams.has(retryParameter)) {
+            return;
+          }
+
+          nextUrl.searchParams.set(retryParameter, Date.now().toString());
+          window.location.replace(nextUrl.toString());
+        }, true);
+
+        window.addEventListener('load', () => {
+          const currentUrl = new URL(window.location.href);
+          if (!currentUrl.searchParams.has(retryParameter) || !document.getElementById('root')?.childElementCount) {
+            return;
+          }
+
+          currentUrl.searchParams.delete(retryParameter);
+          window.history.replaceState(window.history.state, '', currentUrl.toString());
+        });
+      })();
+    </script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  </head>
+  <body class="bg-transparent text-slate-100 dark:text-slate-100 antialiased selection:bg-neon-teal selection:text-obsidian-950 min-h-screen overflow-x-hidden">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

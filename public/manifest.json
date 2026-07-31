@@ -1,0 +1,18 @@
+{
+  "short_name": "ParallaxFlow",
+  "name": "Parallax Flow | Intelligent Learning Platform",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#090A0D",
+  "background_color": "#090A0D",
+  "description": "Transform authentic knowledge into structured, visual, and adaptive learning experiences."
+}
