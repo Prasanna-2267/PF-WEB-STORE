@@ -6,6 +6,7 @@ The route registry is `src/config/routes.ts`. The router is `src/app/router/AppR
 | --- | --- | --- | --- |
 | `/` | PublicLayout | HomePage | Public |
 | `/home` | PublicLayout | HomePage | Public |
+| `/about` | PublicLayout | HomePage | Public |
 | `/contact` | PublicLayout | HomePage | Public |
 | `/login` | AuthLayout | LoginPage | Signed-out visitors |
 | `/register` | AuthLayout | RegisterPage | Signed-out visitors |
@@ -13,6 +14,7 @@ The route registry is `src/config/routes.ts`. The router is `src/app/router/AppR
 | `*` | — | Redirect to `/` | Public |
 
 `/contact` renders the landing page and scrolls to the contact section after the opening transition.
+`/about` renders the landing page and scrolls to the about section with dedicated canonical SEO metadata (`/about`).
 
 `PublicOnlyRoute` sends an already authenticated visitor to `/`. There are no protected content routes in the current release.
 

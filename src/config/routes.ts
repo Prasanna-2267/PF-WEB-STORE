@@ -5,6 +5,7 @@ export const ROUTES = {
   // Public Landing Page
   HOME: '/',
   HOME_ALIAS: '/home',
+  ABOUT: '/about',
   CONTACT: '/contact',
   
   // Public Only Auth

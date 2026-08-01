@@ -6,6 +6,7 @@ Production marketing and authentication website for Parallax Flow, an Android-fi
 
 - Animated logo introduction
 - Flagship landing-page hero and Android product composition
+- About Parallax Flow chapter with a pinned introduction and one large five-stage interactive glass story card
 - Responsive desktop, tablet, and mobile layouts
 - Light and dark themes
 - Contact section with a local confirmation modal
@@ -14,7 +15,7 @@ Production marketing and authentication website for Parallax Flow, an Android-fi
 - Route-aware title, description, canonical, Open Graph, Twitter, and JSON-LD metadata
 - Cloudflare Pages registered-route rewrites, security headers, stale-entry recovery, and immutable hashed-asset caching
 
-The About us, PALM, and Store labels currently communicate “Coming soon”; they do not have application routes. Signing in returns the visitor to the landing page and changes the main action to Sign Out.
+About us is an active same-page destination (`#about`). PALM and Store still communicate “Coming soon” and do not have application routes. Signing in returns the visitor to the landing page and changes the main action to Sign Out.
 
 ## Routes
 

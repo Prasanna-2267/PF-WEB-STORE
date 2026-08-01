@@ -12,6 +12,7 @@ The landing page includes:
 - Fixed responsive navigation
 - Light/dark theme control
 - Product-led hero with a CSS-rendered Android interface and floating learning panels
+- About Parallax Flow chapter with a pinned introduction, one large five-stage glass story card, and stage-specific editorial imagery
 - Contact form and local success modal
 - “Coming soon” modal for the Android application call to action
 - Production footer and external contact links
@@ -26,8 +27,8 @@ The authentication experience includes:
 
 ## Current functional boundaries
 
-- Home and Connect with us are the active landing-page destinations.
-- About us, PALM, and Store are visible future labels and intentionally have no route.
+- Home, About us, and Connect with us are active same-page destinations.
+- PALM and Store are visible future labels and intentionally have no route.
 - Login and registration persist a mock session through Zustand.
 - An authenticated visitor returns to the landing page; no separate signed-in screen exists.
 - The contact form does not call an API.

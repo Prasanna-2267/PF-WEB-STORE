@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -26,8 +26,10 @@ import { SeoHead } from '@/seo/SeoHead';
 import './theme.css';
 import './navbar.css';
 import './hero.css';
+import './about.css';
 import './contact.css';
 import './footer.css';
+import './responsive.css';
 
 const fadeUp = {
   initial: { opacity: 0, y: 24 },
@@ -101,6 +103,326 @@ const HeroShowcase: React.FC = () => (
   </div>
 );
 
+const aboutStages = [
+  {
+    number: '01',
+    tag: 'Our story',
+    title: 'Curiosity Changed Everything',
+    content: (
+      <>
+        <p>Every meaningful journey begins with curiosity.</p>
+        <p>When classrooms moved online during the pandemic, one question quietly remained:</p>
+        <p className="pf-about-card__question">Why do some lessons feel unnecessarily difficult to understand?</p>
+        <p>Instead of accepting complexity, concepts were redesigned into colourful notes, structured explanations, and visual presentations that helped friends understand naturally.</p>
+        <p>It wasn&apos;t the beginning of a company.</p>
+        <p className="pf-about-card__emphasis">It was the beginning of a question.</p>
+      </>
+    ),
+    image: '/images/about/01-curiosity.jpg',
+    imageAlt: 'An open book shaped into a question mark beside a glass sphere.',
+  },
+  {
+    number: '02',
+    tag: 'Shared learning',
+    title: 'Understanding Became a Shared Experience',
+    content: (
+      <>
+        <p>One discovery changed everything.</p>
+        <p>Students rarely remembered isolated facts.</p>
+        <p>They remembered stories.</p>
+        <p>Lessons became <span className="pf-about-card__emphasis">narratives</span>.</p>
+        <p>Concepts became <span className="pf-about-card__emphasis">journeys</span>.</p>
+        <p>Entire chapters unfolded like connected <span className="pf-about-card__emphasis">scenes instead</span> of disconnected pages.</p>
+        <p>As those visual presentations were shared through online sessions and collaborative learning, they gradually reached hundreds of learners.</p>
+        <p>Knowledge hadn&apos;t changed.</p>
+        <p className="pf-about-card__emphasis">Its presentation—and its reach—had.</p>
+      </>
+    ),
+    image: '/images/about/02-shared-understanding.jpg',
+    imageAlt: 'Glass lenses bringing the ideas on two study pages into focus.',
+  },
+  {
+    number: '03',
+    tag: 'Design philosophy',
+    title: 'Learning Needed to\nEvolve',
+    content: (
+      <>
+        <p>Professional education revealed a deeper challenge.</p>
+        <p>Finding information was easy.</p>
+        <p>Understanding it wasn&apos;t.</p>
+        <p>Thousands of pages.</p>
+        <p>Dense theory.</p>
+        <p>Endless revision.</p>
+        <p>The solution wasn&apos;t removing knowledge.</p>
+        <p>It was redesigning how knowledge was experienced.</p>
+        <ul>
+          <li>Visual architecture.</li>
+          <li>Infographics.</li>
+          <li>Meaningful layouts.</li>
+          <li>Better connections.</li>
+        </ul>
+        <p>Every page was designed to preserve academic integrity while making learning intuitive.</p>
+      </>
+    ),
+    image: '/images/about/03-learning-evolved.jpg',
+    imageAlt: 'Paper layers transforming into an adaptive ribbon around a blue sphere.',
+  },
+  {
+    number: '04',
+    tag: 'Evolution',
+    title: 'From Learners to\nan Ecosystem',
+    content: (
+      <>
+        <p>The ideas were first tested with learners.</p>
+        <p>The response remained remarkably consistent.</p>
+        <div className="pf-about-card__cadence">
+          <span>Concepts became clearer.</span>
+          <span>Revision became faster.</span>
+          <span>Confidence grew stronger.</span>
+        </div>
+        <p>That validation revealed something bigger.</p>
+        <p>With technology, these ideas evolved into an adaptive learning ecosystem bringing together:</p>
+        <ul>
+          <li>Resources</li>
+          <li>Progress Tracking</li>
+          <li>Revision Planning</li>
+          <li>Practice Questions</li>
+          <li>Learning Analytics</li>
+        </ul>
+        <p>Technology wasn&apos;t replacing education.</p>
+        <p className="pf-about-card__emphasis">It was extending its reach.</p>
+      </>
+    ),
+    image: '/images/about/04-ecosystem.jpg',
+    imageAlt: 'A connected ecosystem of learning objects arranged around one center.',
+  },
+  {
+    number: '05',
+    tag: 'Our vision',
+    title: 'One Philosophy.\nInfinite Learning Journeys.',
+    content: (
+      <>
+        <p>One final realization shaped the future.</p>
+        <p>Better learning should never be a privilege.</p>
+        <p>Every learner deserves a better way to understand knowledge—</p>
+        <p>regardless of age, institution, discipline, or destination.</p>
+        <p>Years of observations, experiments, and conversations converged into one vision.</p>
+        <p>That vision became <span className="pf-about-card__emphasis">Parallax Flow</span>.</p>
+        <div className="pf-about-card__cadence">
+          <span>Knowledge remains constant.</span>
+          <span>Learners do not.</span>
+        </div>
+        <p>Our responsibility is not to change knowledge.</p>
+        <p>It is to transform the way it is experienced.</p>
+      </>
+    ),
+    image: '/images/about/05-infinite-journeys.jpg',
+    imageAlt: 'Multiple glass paths flowing from one origin across a paper landscape.',
+  },
+] as const;
+
+const AboutCardStack: React.FC<{ reduceMotion: boolean | null }> = ({ reduceMotion }) => {
+  const [activeStage, setActiveStage] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+  const cardRef = useRef<HTMLElement>(null);
+  const cardHovered = useRef(false);
+  const wheelDistance = useRef(0);
+  const touchStartY = useRef<number | null>(null);
+  const transitionLocked = useRef(false);
+  const transitionTimer = useRef<number | null>(null);
+  const lastStage = aboutStages.length - 1;
+  const stage = aboutStages[activeStage];
+  const stackedStages = [
+    ...aboutStages.slice(activeStage + 1),
+    ...aboutStages.slice(0, activeStage),
+  ].slice(0, 3);
+
+  const moveStage = (direction: 1 | -1) => {
+    if (transitionLocked.current) return;
+    transitionLocked.current = true;
+    setActiveStage((current) => Math.min(lastStage, Math.max(0, current + direction)));
+    if (transitionTimer.current) window.clearTimeout(transitionTimer.current);
+    transitionTimer.current = window.setTimeout(() => {
+      transitionLocked.current = false;
+    }, reduceMotion ? 40 : 760);
+  };
+
+  const jumpToStage = (stageNumber: string) => {
+    const targetStage = aboutStages.findIndex((item) => item.number === stageNumber);
+    if (targetStage < 0 || targetStage === activeStage) return;
+    transitionLocked.current = false;
+    wheelDistance.current = 0;
+    setActiveStage(targetStage);
+  };
+
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+
+    const onWheel = (event: WheelEvent) => {
+      if (!cardHovered.current) return;
+      if (!event.deltaY) return;
+      const direction: 1 | -1 = event.deltaY > 0 ? 1 : -1;
+      const canMove = direction > 0 ? activeStage < lastStage : activeStage > 0;
+
+      if (canMove) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (transitionLocked.current) return;
+        wheelDistance.current += event.deltaY;
+
+        if (Math.abs(wheelDistance.current) >= 34) {
+          moveStage(direction);
+          wheelDistance.current = 0;
+        }
+        return;
+      }
+
+      wheelDistance.current = 0;
+    };
+
+    card.addEventListener('wheel', onWheel, { passive: false });
+    return () => card.removeEventListener('wheel', onWheel);
+  }, [activeStage, lastStage, reduceMotion]);
+
+  useEffect(() => () => {
+    if (transitionTimer.current) window.clearTimeout(transitionTimer.current);
+  }, []);
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'PageDown') {
+      if (activeStage < lastStage) {
+        event.preventDefault();
+        moveStage(1);
+      }
+    }
+
+    if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+      if (activeStage > 0) {
+        event.preventDefault();
+        moveStage(-1);
+      }
+    }
+  };
+
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    touchStartY.current = event.touches[0]?.clientY ?? null;
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const startY = touchStartY.current;
+    const endY = event.changedTouches[0]?.clientY;
+    touchStartY.current = null;
+    if (startY === null || endY === undefined) return;
+
+    const distance = startY - endY;
+    if (Math.abs(distance) < 42) return;
+    if (distance > 0 && activeStage < lastStage) moveStage(1);
+    if (distance < 0 && activeStage > 0) moveStage(-1);
+  };
+
+  return (
+    <div className="pf-about-stack-shell">
+      <div
+        className={`pf-about-stack${activeStage === lastStage ? ' is-final-stage' : ''}${isHovered ? ' is-hovered' : ''}`}
+        role="region"
+        aria-label={`About Parallax Flow, stage ${activeStage + 1} of ${aboutStages.length}`}
+      >
+        <div className="pf-about-stack__glow" aria-hidden="true" />
+        {[...stackedStages].reverse().map((stackedStage, reverseIndex) => {
+          const depth = stackedStages.length - reverseIndex;
+          return (
+            <motion.button
+              key={`stack-${stackedStage.number}`}
+              type="button"
+              className="pf-about-card-layer"
+              initial={reduceMotion ? false : { opacity: 0, y: -20 - depth * 12, scale: 0.96 }}
+              whileInView={reduceMotion ? undefined : { opacity: .92 - depth * .08, y: 0, scale: 1 }}
+              viewport={{ once: true, amount: 0.2 }}
+              whileHover={reduceMotion ? undefined : { scale: 1.003 }}
+              whileTap={reduceMotion ? undefined : { scale: .997 }}
+              transition={{ duration: reduceMotion ? .01 : .7, delay: reduceMotion ? 0 : depth * 0.09, ease: [0.22, 1, 0.36, 1] }}
+              style={{ zIndex: 4 - depth }}
+              data-depth={depth}
+              onClick={() => jumpToStage(stackedStage.number)}
+              aria-label={`Open stage ${stackedStage.number}: ${stackedStage.title}`}
+            >
+              <span>{stackedStage.number}</span>
+              <strong>{stackedStage.title}</strong>
+            </motion.button>
+          );
+        })}
+        <motion.article
+          ref={cardRef}
+          className={`pf-about-card${activeStage === lastStage ? ' is-final' : ''}`}
+          tabIndex={0}
+          initial={reduceMotion ? false : { opacity: 0, y: 45, scale: 0.97 }}
+          whileInView={{ opacity: 1, y: 0, scale: 1 }}
+          viewport={{ once: true, amount: 0.25 }}
+          whileHover={reduceMotion ? undefined : { y: -8, scale: 1.009 }}
+          transition={{ duration: reduceMotion ? .01 : 0.75, ease: [0.22, 1, 0.36, 1] }}
+          onMouseEnter={() => {
+            cardHovered.current = true;
+            setIsHovered(true);
+          }}
+          onMouseLeave={() => {
+            cardHovered.current = false;
+            setIsHovered(false);
+            wheelDistance.current = 0;
+          }}
+          onKeyDown={handleKeyDown}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          style={{ touchAction: activeStage === lastStage ? 'pan-y' : 'none' }}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={stage.number}
+              className="pf-about-card__stage"
+              initial={{ opacity: 0, y: reduceMotion ? 0 : 30, scale: reduceMotion ? 1 : .975, filter: reduceMotion ? 'none' : 'blur(8px)' }}
+              animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, y: reduceMotion ? 0 : -24, scale: reduceMotion ? 1 : .96, filter: reduceMotion ? 'none' : 'blur(7px)' }}
+              transition={{ duration: reduceMotion ? .01 : .52, ease: [0.22, 1, 0.36, 1] }}
+              aria-live="polite"
+            >
+              <div className="pf-about-card__copy">
+                <span className="pf-about-card__number">{stage.number}</span>
+                <div>
+                  <p className="pf-about-card__eyebrow">{stage.tag}</p>
+                  <h3>{stage.title}</h3>
+                  <div className="pf-about-card__body">{stage.content}</div>
+                </div>
+              </div>
+              <figure className="pf-about-card__visual">
+                <img src={stage.image} alt={stage.imageAlt} loading={activeStage === 0 ? 'eager' : 'lazy'} />
+              </figure>
+            </motion.div>
+          </AnimatePresence>
+          <div className="pf-about-card__footer">
+            <span>{activeStage + 1} / {aboutStages.length}</span>
+            <div className="pf-about-card__steps" aria-label="About story progress">
+              {aboutStages.map((item, index) => (
+                <button
+                  key={item.number}
+                  type="button"
+                  className={index === activeStage ? 'is-active' : ''}
+                  onClick={() => setActiveStage(index)}
+                  aria-label={`Show stage ${index + 1}: ${item.title}`}
+                  aria-current={index === activeStage ? 'step' : undefined}
+                />
+              ))}
+            </div>
+          </div>
+        </motion.article>
+        <p className="pf-about-stack__instruction">
+          <span className="pf-about-stack__instruction--desktop"></span>
+          <span className="pf-about-stack__instruction--mobile">Swipe on the card to explore the story.</span>
+        </p>
+      </div>
+    </div>
+  );
+};
+
 export const HomePage: React.FC = () => {
   const [showOpening, setShowOpening] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -117,6 +439,8 @@ export const HomePage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isContactPage = location.pathname === ROUTES.CONTACT;
+  const isAboutPage = location.pathname === ROUTES.ABOUT;
+  const isHomeAlias = location.pathname === ROUTES.HOME_ALIAS;
 
   useEffect(() => {
     if (isContactPage && !showOpening) {
@@ -124,18 +448,35 @@ export const HomePage: React.FC = () => {
       if (contactEl) {
         contactEl.scrollIntoView({ behavior: 'smooth' });
       }
+    } else if (isAboutPage && !showOpening) {
+      const aboutEl = document.getElementById('about');
+      if (aboutEl) {
+        aboutEl.scrollIntoView({ behavior: 'smooth' });
+      }
     }
-  }, [isContactPage, showOpening]);
+  }, [isContactPage, isAboutPage, showOpening]);
+
+  const handleBrandClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (location.pathname !== ROUTES.HOME) {
+      navigate(ROUTES.HOME);
+    }
+    if (window.location.hash) {
+      window.history.pushState(null, '', window.location.pathname);
+    }
+    document.title = 'Parallax Flow';
+    setMenuOpen(false);
+  };
 
   const handleHomeClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     if (location.pathname !== ROUTES.HOME_ALIAS) {
       navigate(ROUTES.HOME_ALIAS);
-    } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      if (window.location.hash) {
-        window.history.pushState(null, '', window.location.pathname);
-      }
+    }
+    if (window.location.hash) {
+      window.history.pushState(null, '', window.location.pathname);
     }
     document.title = 'Parallax Flow';
     setMenuOpen(false);
@@ -152,6 +493,20 @@ export const HomePage: React.FC = () => {
       }
     }
     document.title = 'Contact | Parallax Flow';
+    setMenuOpen(false);
+  };
+
+  const handleAboutClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    if (location.pathname !== ROUTES.ABOUT) {
+      navigate(ROUTES.ABOUT);
+    } else {
+      const aboutEl = document.getElementById('about');
+      if (aboutEl) {
+        aboutEl.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+    document.title = 'About Us | Parallax Flow';
     setMenuOpen(false);
   };
 
@@ -174,14 +529,32 @@ export const HomePage: React.FC = () => {
     return () => observer.disconnect();
   }, [location.pathname]);
 
-  const isHomeAlias = location.pathname === ROUTES.HOME_ALIAS;
-
   return (
     <div className="pf-site">
       <SeoHead
-        title={isContactPage ? 'Contact | Parallax Flow' : 'Parallax Flow'}
-        description={isContactPage ? 'Send a message to Parallax Flow. Tell us how we can help.' : 'Learning, Designed Around You.'}
-        canonicalPath={isContactPage ? '/contact' : isHomeAlias ? '/home' : '/'}
+        title={
+          isContactPage
+            ? 'Contact | Parallax Flow'
+            : isAboutPage
+            ? 'About Us | Parallax Flow'
+            : 'Parallax Flow'
+        }
+        description={
+          isContactPage
+            ? 'Send a message to Parallax Flow. Tell us how we can help.'
+            : isAboutPage
+            ? 'Discover the story, design philosophy, and vision behind Parallax Flow—an adaptive learning ecosystem.'
+            : 'Learning, Designed Around You.'
+        }
+        canonicalPath={
+          isContactPage
+            ? '/contact'
+            : isAboutPage
+            ? '/about'
+            : isHomeAlias
+            ? '/home'
+            : '/'
+        }
       />
       <AnimatePresence>
         {showOpening && (
@@ -211,16 +584,13 @@ export const HomePage: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: reduceMotion ? 0.01 : 0.6, ease: [0.22, 1, 0.36, 1] }}
         >
-          <Link to={ROUTES.HOME} className="pf-brand" aria-label="Parallax Flow home">
+          <Link to={ROUTES.HOME} className="pf-brand" aria-label="Parallax Flow home" onClick={handleBrandClick}>
             <img src="/logo.png" alt="Parallax Flow Logo" className="pf-brand__logo-img" />
             <span>Parallax Flow</span>
           </Link>
           <nav className="pf-nav__links" aria-label="Primary navigation">
             <a href="/home" onClick={handleHomeClick}>Home</a>
-            <span className="pf-tooltip-wrap">
-              <a href="#" onClick={(e) => e.preventDefault()}>About us</a>
-              <span className="pf-tooltip">Coming soon</span>
-            </span>
+            <a href="#about" onClick={handleAboutClick}>About us</a>
             <span className="pf-tooltip-wrap">
               <a href="#" onClick={(e) => e.preventDefault()}>PALM <sup>↗</sup></a>
               <span className="pf-tooltip">Coming soon</span>
@@ -267,10 +637,7 @@ export const HomePage: React.FC = () => {
         {menuOpen && (
           <motion.nav className="pf-mobile-menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <a href="/home" onClick={handleHomeClick}>Home</a>
-            <span className="pf-tooltip-wrap">
-              <a href="#" onClick={(e) => { e.preventDefault(); setMenuOpen(false); }}>About us</a>
-              <span className="pf-tooltip">Coming soon</span>
-            </span>
+            <a href="#about" onClick={handleAboutClick}>About us</a>
             <span className="pf-tooltip-wrap">
               <a href="#" onClick={(e) => { e.preventDefault(); setMenuOpen(false); }}>PALM ↗</a>
               <span className="pf-tooltip">Coming soon</span>
@@ -323,8 +690,26 @@ export const HomePage: React.FC = () => {
           <p className="pf-scroll-cue">Scroll to explore <span>↓</span></p>
         </section>
 
+        <section className="pf-about pf-section" id="about">
+          <motion.div className="pf-section-label" {...fadeUp}><span>01</span> About Parallax Flow</motion.div>
+          <div className="pf-about__scene">
+            <div className="pf-about__intro-shell">
+              <div className="pf-about__intro">
+                <motion.div {...fadeUp}>
+                  <p className="pf-eyebrow">A learning environment that keeps evolving</p>
+                  <h2>Every journey starts<br /><em>with a question.</em></h2>
+                </motion.div>
+                <motion.p className="pf-about__summary" {...fadeUp} transition={{ ...fadeUp.transition, delay: 0.1 }}>
+                  Parallax Flow began with a simple belief: learning should feel clear, personal, and alive to the student moving through it.
+                </motion.p>
+              </div>
+            </div>
+            <AboutCardStack reduceMotion={reduceMotion} />
+          </div>
+        </section>
+
         <section className="pf-contact pf-section" id="contact">
-          <motion.div className="pf-section-label" {...fadeUp}><span>01</span> Connect with us</motion.div>
+          <motion.div className="pf-section-label" {...fadeUp}><span>02</span> Connect with us</motion.div>
           <div className="pf-contact__layout">
             <motion.div {...fadeUp}>
               <p className="pf-eyebrow">Let’s start a conversation</p>
@@ -428,7 +813,7 @@ export const HomePage: React.FC = () => {
           <div className="pf-footer-pro__cols">
             <div className="pf-footer-pro__col">
               <h4>Discover</h4>
-              <a href="#" onClick={(e) => e.preventDefault()}>About Us</a>
+              <a href="#about" onClick={handleAboutClick}>About Us</a>
               <a href="#" onClick={(e) => e.preventDefault()}>PALM</a>
             </div>
 

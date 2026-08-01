@@ -15,6 +15,7 @@
 }
 
 .pf-contact {
+  padding-top: clamp(64px, 7vw, 104px);
   background: var(--white);
 }
 
@@ -200,6 +201,10 @@
   .pf-contact__layout {
     grid-template-columns: 1fr;
     gap: 35px;
+  }
+
+  .pf-contact {
+    padding-top: 68px;
   }
 
   .pf-section-label {

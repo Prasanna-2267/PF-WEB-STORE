@@ -33,6 +33,14 @@ export const AppRouter: React.FC = () => {
           }
         />
         <Route
+          path={ROUTES.ABOUT}
+          element={
+            <PublicLayout>
+              <HomePage />
+            </PublicLayout>
+          }
+        />
+        <Route
           path={ROUTES.CONTACT}
           element={
             <PublicLayout>

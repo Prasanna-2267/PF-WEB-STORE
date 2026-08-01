@@ -1,6 +1,7 @@
 User-agent: *
 Allow: /
 Allow: /contact
+Allow: /about
 Allow: /home
 Allow: /login
 Allow: /register

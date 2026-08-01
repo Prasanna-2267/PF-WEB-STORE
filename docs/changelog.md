@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-08-01 — About Parallax Flow chapter
+
+- Added an in-page About us destination between the hero and Connect with us.
+- Added a five-stage glass-card story with contained wheel, keyboard, touch, and direct progress-control navigation.
+- Reworked the story into one large persistent card that rises over the pinned About introduction instead of rendering five separate card surfaces.
+- Added five original stage-specific editorial images and optimized the complete image set to approximately 417 KB for production delivery.
+- Tightened the About heading spacing, exposed three labelled story layers behind the active card, and added hover-gated wheel progression with restrained image movement.
+- Moved the three background layers above the active card, increased their visual separation, and made every exposed layer directly clickable for stage navigation.
+- Split the About introduction and card stack into consecutive sticky chapters so the editorial heading releases before the cards pin, eliminating navbar, headline, and card-layer overlaps.
+- Reduced the transition gap between the About introduction and cards, and increased each exposed stage tab to a fixed responsive height so the nearest next stage remains fully readable and clickable.
+- Kept regular page scrolling outside the cards, so visitors can move directly to Connect with us at any stage.
+- Added the final-stage light bloom and continuation treatment.
+
 ## 2026-07-28 — custom-domain boot and responsive repair
 
 - Traced the intermittent custom-domain blank screen to stale entry HTML being able to request a removed hashed bundle while the broad SPA rewrite returned `index.html` as that JavaScript URL with a one-year immutable asset cache policy.

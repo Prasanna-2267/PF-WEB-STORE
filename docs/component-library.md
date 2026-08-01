@@ -18,6 +18,7 @@
 - Hero copy and action
 - Android product preview
 - Floating learning cards
+- Pinned five-stage About story (`AboutCardStack`) using one large glass card and stage-specific editorial imagery
 - Contact form
 - Contact success modal
 - Android “Coming Soon” modal
