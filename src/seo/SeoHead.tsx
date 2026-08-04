@@ -1,16 +1,35 @@
 import React, { useEffect } from 'react';
-import { generateOrganizationJsonLd } from './structuredData';
+import { generateOrganizationJsonLd, JsonLdObject } from './structuredData';
 
 interface SeoHeadProps {
   title?: string;
   description?: string;
   canonicalPath?: string;
+  robots?: string;
+  ogType?: string;
+  image?: string;
+  jsonLd?: JsonLdObject | JsonLdObject[];
 }
+
+const SITE_URL = 'https://parallaxflow.in';
+const DEFAULT_IMAGE = `${SITE_URL}/logo.png`;
+
+const toAbsoluteUrl = (value: string): string => {
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+
+  return `${SITE_URL}${value.startsWith('/') ? value : `/${value}`}`;
+};
 
 export const SeoHead: React.FC<SeoHeadProps> = ({
   title = 'Parallax Flow',
   description = 'Learning, Designed Around You.',
   canonicalPath = '/',
+  robots = 'index, follow',
+  ogType = 'website',
+  image = DEFAULT_IMAGE,
+  jsonLd,
 }) => {
   useEffect(() => {
     // 1. Document Title
@@ -25,8 +44,18 @@ export const SeoHead: React.FC<SeoHeadProps> = ({
     }
     metaDesc.setAttribute('content', description);
 
-    // 3. Canonical URL
-    const canonicalUrl = `https://parallaxflow.in${canonicalPath}`;
+    // 3. Robots
+    let robotsMeta = document.querySelector('meta[name="robots"]');
+    if (!robotsMeta) {
+      robotsMeta = document.createElement('meta');
+      robotsMeta.setAttribute('name', 'robots');
+      document.head.appendChild(robotsMeta);
+    }
+    robotsMeta.setAttribute('content', robots);
+
+    // 4. Canonical URL
+    const canonicalUrl = toAbsoluteUrl(canonicalPath);
+    const socialImageUrl = toAbsoluteUrl(image);
     let canonicalLink = document.querySelector('link[rel="canonical"]');
     if (!canonicalLink) {
       canonicalLink = document.createElement('link');
@@ -35,14 +64,14 @@ export const SeoHead: React.FC<SeoHeadProps> = ({
     }
     canonicalLink.setAttribute('href', canonicalUrl);
 
-    // 4. Open Graph Meta Tags
+    // 5. Open Graph Meta Tags
     const ogTags = [
       { property: 'og:title', content: title },
       { property: 'og:description', content: description },
       { property: 'og:url', content: canonicalUrl },
-      { property: 'og:type', content: 'website' },
+      { property: 'og:type', content: ogType },
       { property: 'og:site_name', content: 'Parallax Flow' },
-      { property: 'og:image', content: 'https://parallaxflow.in/logo.png' }
+      { property: 'og:image', content: socialImageUrl }
     ];
 
     ogTags.forEach(({ property, content }) => {
@@ -55,13 +84,13 @@ export const SeoHead: React.FC<SeoHeadProps> = ({
       tag.setAttribute('content', content);
     });
 
-    // 5. Twitter Card Meta Tags
+    // 6. Twitter Card Meta Tags
     const twitterTags = [
       { name: 'twitter:title', content: title },
       { name: 'twitter:description', content: description },
       { name: 'twitter:url', content: canonicalUrl },
       { name: 'twitter:card', content: 'summary_large_image' },
-      { name: 'twitter:image', content: 'https://parallaxflow.in/logo.png' }
+      { name: 'twitter:image', content: socialImageUrl }
     ];
 
     twitterTags.forEach(({ name, content }) => {
@@ -74,7 +103,7 @@ export const SeoHead: React.FC<SeoHeadProps> = ({
       tag.setAttribute('content', content);
     });
 
-    // 6. JSON-LD Structured Data
+    // 7. JSON-LD Structured Data
     const jsonLdScriptId = 'parallax-flow-jsonld';
     let script = document.getElementById(jsonLdScriptId) as HTMLScriptElement | null;
     if (!script) {
@@ -83,8 +112,10 @@ export const SeoHead: React.FC<SeoHeadProps> = ({
       script.type = 'application/ld+json';
       document.head.appendChild(script);
     }
-    script.text = JSON.stringify(generateOrganizationJsonLd());
-  }, [title, description, canonicalPath]);
+
+    const routeJsonLd = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
+    script.text = JSON.stringify([...generateOrganizationJsonLd(), ...routeJsonLd]);
+  }, [title, description, canonicalPath, robots, ogType, image, jsonLd]);
 
   return null;
 };

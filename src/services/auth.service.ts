@@ -36,6 +36,12 @@ export const authService = {
         androidAppConnected: true,
         role: 'student',
         purchasedNoteIds: ['financial-reporting-intermediate'],
+        enrolledCourse: {
+          id: 'course-ca-intermediate',
+          slug: 'ca-intermediate',
+          name: 'CA Intermediate',
+        },
+        subscription: 'Premium',
       },
     };
   },
@@ -52,6 +58,12 @@ export const authService = {
         androidAppConnected: false,
         role: 'student',
         purchasedNoteIds: [],
+        enrolledCourse: {
+          id: 'course-ca-intermediate',
+          slug: 'ca-intermediate',
+          name: 'CA Intermediate',
+        },
+        subscription: 'Free',
       },
     };
   },

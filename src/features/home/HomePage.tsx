@@ -595,10 +595,7 @@ export const HomePage: React.FC = () => {
               <a href="#" onClick={(e) => e.preventDefault()}>PALM <sup>↗</sup></a>
               <span className="pf-tooltip">Coming soon</span>
             </span>
-            <span className="pf-tooltip-wrap">
-              <a href="#" onClick={(e) => e.preventDefault()}>Store <sup>↗</sup></a>
-              <span className="pf-tooltip">Coming soon</span>
-            </span>
+            <Link to={ROUTES.STORE}>Store <sup>↗</sup></Link>
             <a href="#contact" onClick={handleContactClick}>Connect with us</a>
           </nav>
           <div className="pf-nav__utilities">
@@ -642,10 +639,7 @@ export const HomePage: React.FC = () => {
               <a href="#" onClick={(e) => { e.preventDefault(); setMenuOpen(false); }}>PALM ↗</a>
               <span className="pf-tooltip">Coming soon</span>
             </span>
-            <span className="pf-tooltip-wrap">
-              <a href="#" onClick={(e) => { e.preventDefault(); setMenuOpen(false); }}>Store ↗</a>
-              <span className="pf-tooltip">Coming soon</span>
-            </span>
+            <Link to={ROUTES.STORE} onClick={() => setMenuOpen(false)}>Store ↗</Link>
             <a href="#contact" onClick={handleContactClick}>Connect with us</a>
             {isAuthenticated ? (
               <button className="pf-nav__action" type="button" onClick={() => { setMenuOpen(false); logout(); }}>
@@ -821,7 +815,7 @@ export const HomePage: React.FC = () => {
               <h4>Explore</h4>
               <a href="#" onClick={(e) => e.preventDefault()}>Learning Platform</a>
               <a href="#" onClick={(e) => e.preventDefault()}>Learning Resources</a>
-              <a href="#" onClick={(e) => e.preventDefault()}>Notes Store</a>
+              <Link to={ROUTES.STORE}>Notes Store</Link>
             </div>
 
             <div className="pf-footer-pro__col">

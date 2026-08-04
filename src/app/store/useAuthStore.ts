@@ -2,6 +2,12 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { APP_CONSTANTS } from '@/config/constants';
 
+export interface EnrolledCourse {
+  id: string;
+  slug: string;
+  name: string;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -10,6 +16,8 @@ export interface UserProfile {
   androidAppConnected: boolean;
   role: 'student' | 'admin';
   purchasedNoteIds: string[];
+  enrolledCourse?: EnrolledCourse;
+  subscription?: 'Free' | 'Premium';
 }
 
 interface AuthState {
