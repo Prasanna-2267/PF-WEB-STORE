@@ -27,6 +27,7 @@ export type StoreCollection = 'best-sellers' | 'new-releases' | 'most-popular' |
 export type StorePreviewKind = 'cover' | 'sample-page' | 'contents';
 
 export interface CourseCategory {
+  id?: string;
   slug: CourseSlug;
   family: CourseFamily;
   name: string;
@@ -57,6 +58,7 @@ export interface StoreProduct {
   title: string;
   slug: string;
   course: CourseSlug;
+  courseId?: string;
   subject: string;
   faculty: string;
   coverImage?: string;
@@ -83,6 +85,8 @@ export interface StoreProduct {
   audience: readonly string[];
   pageCount?: number;
   deepLink: string;
+  /** Real admin-entered store sections (heading + content). Only render when non-empty. */
+  storeSections?: ReadonlyArray<{ id: string; heading: string; content: string; displayOrder: number }>;
 }
 
 export type StoreCatalogSort = 'featured' | 'newest' | 'rating' | 'price-low' | 'price-high' | 'title';

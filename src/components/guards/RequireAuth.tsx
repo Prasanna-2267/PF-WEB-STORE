@@ -18,8 +18,10 @@ export interface AuthRedirectState {
 }
 
 export const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const { initialized, isAuthenticated } = useAuthStore();
   const location = useLocation();
+
+  if (!initialized) return null;
 
   if (!isAuthenticated) {
     const redirectState: AuthRedirectState = {

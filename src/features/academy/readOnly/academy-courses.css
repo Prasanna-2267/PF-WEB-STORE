@@ -1,0 +1,19 @@
+.pf-academy-course-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.pf-academy-course-toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.pf-academy-course-toolbar .pf-admin-search-field { flex: 1; min-width: 240px; }
+.pf-academy-course-toolbar .pf-admin-select { width: 150px; }
+.pf-academy-course-code { padding: 2px 8px; color: #1d4ed8 !important; border-radius: 4px; background: #eff6ff; }
+.pf-academy-course-detail-label { margin-bottom: 4px; color: #64748b; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.pf-academy-course-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.pf-academy-course-metrics > div { padding: 14px; text-align: center; border: 1px solid #e2e8f0; border-radius: 9px; background: #f8fafc; }
+.pf-academy-course-metrics strong, .pf-academy-course-metrics span { display: block; }
+.pf-academy-course-metrics strong { color: #2563eb; font-size: 20px; }
+.pf-academy-course-metrics span { margin-top: 2px; color: #64748b; font-size: 11px; font-weight: 600; }
+.pf-academy-course-linked { padding: 16px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+.pf-academy-course-linked h4 { margin: 0 0 12px; color: #0f172a; font-size: 14px; }
+.pf-academy-course-linked > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; margin-top: 7px; border-radius: 8px; background: #f8fafc; font-size: 13px; }
+.pf-academy-course-linked > div > span { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.pf-academy-course-linked a { color: #2563eb; text-decoration: none; }
+.pf-academy-course-linked small { display: block; margin-top: 2px; color: #64748b; }
+.pf-academy-course-linked p { margin: 0; color: #64748b; font-size: 13px; }
+@media (max-width: 700px) { .pf-academy-course-metrics { grid-template-columns: 1fr; } .pf-academy-course-toolbar .pf-admin-select { width: 100%; } }

@@ -1,47 +1,56 @@
 # Parallax Flow website
 
-Production marketing and authentication website for Parallax Flow, an Android-first learning experience.
+Parallax Flow is an Android-first learning ecosystem with three connected web experiences:
 
-## Current production scope
+- the public marketing website;
+- the premium learning-resource Store; and
+- an isolated Super Admin Console.
+
+## Current scope
+
+### Marketing website
 
 - Animated logo introduction
-- Flagship landing-page hero and Android product composition
-- About Parallax Flow chapter with a pinned introduction and one large five-stage interactive glass story card
-- Responsive desktop, tablet, and mobile layouts
-- Light and dark themes
-- Contact section with a local confirmation modal
-- Shared production footer
-- Login, registration, and password-reset screens
-- Route-aware title, description, canonical, Open Graph, Twitter, and JSON-LD metadata
-- Cloudflare Pages registered-route rewrites, security headers, stale-entry recovery, and immutable hashed-asset caching
+- Product-led landing hero
+- Five-stage About Parallax Flow story
+- Contact experience and production footer
+- Responsive light and dark themes
 
-About us is an active same-page destination (`#about`). PALM and Store still communicate “Coming soon” and do not have application routes. Signing in returns the visitor to the landing page and changes the main action to Sign Out.
+### Store
 
-## Routes
+- Public discovery, category, and product pages
+- Cart, checkout, purchase-success, purchases, and profile routes
+- Authentication-gated commerce actions
+- Browser-persistent demonstration catalog/cart data
 
-| Path | Screen |
-| --- | --- |
-| `/` | Landing page |
-| `/home` | Landing-page alias |
-| `/contact` | Landing page scrolled to Connect with us |
-| `/login` | Sign in |
-| `/register` | Create account |
-| `/forgot-password` | Password reset |
-| Any other in-app path | React Router redirects to `/` |
-| Any unknown direct request | Cloudflare serves the production `404.html` |
+### Super Admin Console
+
+- Protected `/admin/*` route hierarchy
+- Responsive sidebar shell with light/dark themes
+- Overview metrics, trend charts, recent orders, and inventory totals
+- Searchable/filterable/sortable/paginated student directory
+- Canonical student details reached from Students or Orders
+- Grant access, change role, enable/disable account, and force-logout workflows
+- Searchable/filterable/sortable/paginated order management
+- Drive-style Content library with unlimited folder nesting, search, uploads, previews, details, drag/drop, multi-select, copy/move, and recursive deletion
+- Package catalogue with reusable Content Library file/folder selection, INR pricing, lifecycle status, preview, editing, and safe deletion
+- Complete Question Bank with normal/case MCQ and descriptive authoring, rich text, classification, lifecycle controls, trash recovery, and learner preview
+- Spreadsheet question import with validation, Case ID grouping, preview, taxonomy safeguards, and CSV template download
+- Broadcast workspace with audience targeting, app/website placement controls, scheduling, preview, lifecycle actions, and browser-persistent draft data
+- Loading, empty, error, success, dialog, and reduced-motion states
+- Placeholder routes remain only for later Account and Settings phases
 
 ## Technology
 
 - React 18 and TypeScript
 - Vite 6
 - React Router 7
-- Zustand persistence for theme and local auth state
-- Framer Motion for visible interface transitions
-- Lenis for the existing smooth-scroll behavior
+- Zustand
+- Framer Motion
+- Lenis for the public experience
 - Lucide React icons
-- Tailwind base/utilities plus focused page CSS
 
-Three.js, React Three Fiber, global canvas rendering, unused query/form providers, and unused legacy feature code are intentionally not part of the production application.
+The Admin Console is lazy-loaded and isolated from the public and Store layouts. It opts out of the public Lenis scroll controller.
 
 ## Local development
 
@@ -59,39 +68,35 @@ npm run preview
 
 ## Deployment
 
-Cloudflare Pages should use:
+Cloudflare Pages:
 
 - Build command: `npm run build`
 - Output directory: `dist`
 
-Keep these deployment files:
+`public/_redirects` provides the SPA fallback. `public/_headers` applies entry-document cache protection and prevents indexing of `/admin` and `/admin/*`. Admin screens also emit `noindex, nofollow, noarchive` metadata.
 
-- `public/_redirects` for exact rewrites of the registered non-root client routes
-- `public/_headers` for no-store/no-transform HTML headers and immutable hashed-asset caching
-- `public/404.html` so missing bundles and unknown direct requests remain real 404 responses
-- `public/robots.txt`
-- `public/sitemap.xml`
-- `public/manifest.json`
+## Security and data boundary
 
-The legacy Vercel deployment configuration has been removed. Cloudflare Pages is the only documented deployment target.
+Authentication and admin data currently use explicitly labelled browser-side development adapters. The console is fully navigable and its actions persist locally for product review, but this is not a production security boundary.
 
-Do not replace the exact route rewrites with `/* /index.html 200`. A catch-all rewrite turns missing hashed JavaScript requests into HTML, and the `/assets/*` cache rule can then preserve that invalid response. The entry document includes a one-time cache-busted retry for a stale bundle reference, but correct 404 behavior remains the primary safeguard.
+Before real administrators or student records are used, a trusted backend must:
 
-## Important behavior
+- verify passwords and Google ID tokens server-side;
+- issue secure sessions;
+- enforce `SUPER_ADMIN` and per-action permissions on every endpoint;
+- own students, orders, entitlements, sessions, receipts, and audit records;
+- validate, rate-limit, and audit every privileged mutation.
 
-Authentication is currently a local mock service. It persists a generated session in local storage; it does not call a production identity API.
-
-The contact form currently validates in the browser, clears after submission, and shows a confirmation modal. It does not transmit a message to a backend.
+Never expose real student, order, or payment data through the current mock repository.
 
 ## Documentation
 
 - [Current state](docs/current-state.md)
 - [Architecture](docs/architecture.md)
 - [Routing](docs/routing.md)
+- [Integration contract](docs/api-contract.md)
 - [Design system](docs/design-system.md)
 - [Animation system](docs/animation-system.md)
 - [Component inventory](docs/component-library.md)
-- [Integration contract](docs/api-contract.md)
-- [Production plan](docs/plan.md)
 - [Todo](docs/todo.md)
 - [Changelog](docs/changelog.md)

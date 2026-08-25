@@ -1,0 +1,1172 @@
+.pf-admin .pf-admin-person,
+.pf-admin .pf-admin-person-link,
+.pf-admin .pf-admin-order-buyer {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 9px;
+}
+
+.pf-admin .pf-admin-person > span:last-child,
+.pf-admin .pf-admin-order-buyer {
+  min-width: 0;
+}
+
+.pf-admin .pf-admin-person strong,
+.pf-admin .pf-admin-person small,
+.pf-admin .pf-admin-order-buyer strong,
+.pf-admin .pf-admin-order-buyer small {
+  display: block;
+}
+
+.pf-admin .pf-admin-person strong,
+.pf-admin .pf-admin-order-buyer strong {
+  overflow: hidden;
+  color: var(--admin-ink);
+  font-size: 11.5px;
+  font-weight: 730;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-admin .pf-admin-person small,
+.pf-admin .pf-admin-order-buyer small {
+  max-width: 220px;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--admin-muted);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-admin .pf-admin-person-link {
+  border-radius: 10px;
+}
+
+.pf-admin .pf-admin-person-link:hover .pf-admin-person strong,
+.pf-admin .pf-admin-order-buyer:hover strong {
+  color: var(--admin-primary);
+}
+
+.pf-admin .pf-admin-metric {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  min-height: 126px;
+  overflow: hidden;
+}
+
+.pf-admin .pf-admin-metric.has-action {
+  overflow: visible;
+}
+
+.pf-admin .pf-admin-metric.has-action > div:not(.pf-admin-metric__action) {
+  padding-right: 68px;
+}
+
+.pf-admin .pf-admin-metric__action {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  right: 12px;
+  padding: 0;
+}
+
+.pf-admin .pf-admin-overview-filter {
+  position: relative;
+  display: inline-flex;
+  width: 108px;
+  min-height: 30px;
+  align-items: center;
+  color: var(--admin-ink-soft);
+  border: 1px solid var(--admin-line-strong);
+  border-radius: 9px;
+  background: var(--admin-surface-strong);
+  box-shadow: 0 5px 14px rgba(28, 49, 91, 0.08);
+}
+
+.pf-admin .pf-admin-overview-filter svg {
+  position: absolute;
+  z-index: 1;
+  left: 8px;
+  pointer-events: none;
+}
+
+.pf-admin .pf-admin-overview-filter select {
+  width: 100%;
+  min-height: 30px;
+  overflow: hidden;
+  padding: 0 7px 0 27px;
+  color: inherit;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 720;
+  text-overflow: ellipsis;
+}
+
+.pf-admin .pf-admin-overview-filter:focus-within {
+  border-color: var(--admin-primary);
+  box-shadow: 0 0 0 3px var(--admin-accent-soft);
+}
+
+.pf-admin .pf-admin-metric::after {
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 120px;
+  height: 120px;
+  content: '';
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(91, 140, 255, 0.14), transparent 68%);
+  pointer-events: none;
+}
+
+.pf-admin .pf-admin-metric__icon,
+.pf-admin .pf-admin-content-grid article > span,
+.pf-admin .pf-admin-study-stats article > span,
+.pf-admin .pf-admin-order-summary article > svg,
+.pf-admin .pf-admin-record-list__icon,
+.pf-admin .pf-admin-session-list > li > span:first-child {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: var(--admin-primary);
+  border: 1px solid rgba(91, 140, 255, 0.2);
+  border-radius: 11px;
+  background: var(--admin-accent-soft);
+}
+
+.pf-admin .pf-admin-metric > div p,
+.pf-admin .pf-admin-study-stats p,
+.pf-admin .pf-admin-order-summary p,
+.pf-admin .pf-admin-content-grid p {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 10px;
+  font-weight: 640;
+}
+
+.pf-admin .pf-admin-metric > div strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--admin-ink);
+  font-size: clamp(20px, 1.8vw, 26px);
+  font-weight: 730;
+  letter-spacing: -0.04em;
+}
+
+.pf-admin .pf-admin-metric footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--admin-line);
+  color: var(--admin-muted);
+  font-size: 9.5px;
+}
+
+.pf-admin .pf-admin-metric__change {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  color: var(--admin-success);
+  border-radius: 999px;
+  background: var(--admin-success-soft);
+  font-weight: 780;
+}
+
+.pf-admin .pf-admin-metric__change.is-negative {
+  color: var(--admin-danger);
+  background: var(--admin-danger-soft);
+}
+
+.pf-admin .pf-admin-metric__change--neutral {
+  color: var(--admin-info);
+  background: var(--admin-info-soft);
+}
+
+.pf-admin .pf-admin-analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(10px, 1.4vw, 18px);
+}
+
+.pf-admin .pf-admin-revenue-breakdown {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.78fr) minmax(0, 1.22fr);
+  align-items: center;
+  min-height: 190px;
+  gap: clamp(14px, 2vw, 24px);
+}
+
+.pf-admin .pf-admin-donut {
+  position: relative;
+  width: min(100%, 190px);
+  margin: 0;
+  aspect-ratio: 1;
+  justify-self: center;
+}
+
+.pf-admin .pf-admin-donut svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform: rotate(-90deg);
+}
+
+.pf-admin .pf-admin-donut circle {
+  fill: none;
+  stroke-width: 14;
+  transform-origin: 60px 60px;
+}
+
+.pf-admin .pf-admin-donut__track {
+  stroke: var(--admin-line);
+}
+
+.pf-admin .pf-admin-donut__segment {
+  stroke-linecap: round;
+  filter: drop-shadow(0 5px 8px rgba(49, 91, 206, 0.12));
+}
+
+.pf-admin .pf-admin-donut figcaption {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 29%;
+  text-align: center;
+}
+
+.pf-admin .pf-admin-donut figcaption span,
+.pf-admin .pf-admin-donut figcaption small {
+  color: var(--admin-muted);
+  font-size: 8.5px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.pf-admin .pf-admin-donut figcaption strong {
+  margin: 3px 0;
+  color: var(--admin-ink);
+  font-size: clamp(15px, 1.5vw, 20px);
+  letter-spacing: -0.04em;
+}
+
+.pf-admin .pf-admin-donut-legend {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.pf-admin .pf-admin-donut-legend__item {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--admin-line);
+}
+
+.pf-admin .pf-admin-donut-legend__item:last-child {
+  border-bottom: 0;
+}
+
+.pf-admin .pf-admin-donut-legend__swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.09);
+}
+
+.pf-admin .pf-admin-donut-legend__item > div {
+  min-width: 0;
+}
+
+.pf-admin .pf-admin-donut-legend__item > div:last-child {
+  text-align: right;
+}
+
+.pf-admin .pf-admin-donut-legend__item strong,
+.pf-admin .pf-admin-donut-legend__item small {
+  display: block;
+}
+
+.pf-admin .pf-admin-donut-legend__item strong {
+  overflow: hidden;
+  color: var(--admin-ink-soft);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-admin .pf-admin-donut-legend__item small,
+.pf-admin .pf-admin-donut-legend__empty {
+  margin: 1px 0 0;
+  color: var(--admin-muted);
+  font-size: 8.5px;
+}
+
+.pf-admin .pf-admin-health {
+  display: grid;
+  min-height: 190px;
+  align-content: center;
+  gap: 15px;
+}
+
+.pf-admin .pf-admin-health__row {
+  display: grid;
+  gap: 7px;
+}
+
+.pf-admin .pf-admin-health__row > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--admin-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.pf-admin .pf-admin-health__row strong {
+  color: var(--admin-ink);
+  font-size: 12px;
+}
+
+.pf-admin .pf-admin-health__track {
+  display: block;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--admin-line);
+}
+
+.pf-admin .pf-admin-health__track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--admin-info);
+  transition: width 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pf-admin .pf-admin-health__track.is-success i { background: var(--admin-success); }
+.pf-admin .pf-admin-health__track.is-warning i { background: var(--admin-warning); }
+.pf-admin .pf-admin-health__track.is-danger i { background: var(--admin-danger); }
+
+.pf-admin .pf-admin-content-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.pf-admin .pf-admin-content-grid article {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+  padding: clamp(12px, 1.4vw, 18px);
+  border-right: 1px solid var(--admin-line);
+}
+
+.pf-admin .pf-admin-content-grid article:last-child { border-right: 0; }
+.pf-admin .pf-admin-content-grid article > span { width: 34px; height: 34px; flex: 0 0 34px; border-radius: 10px; }
+.pf-admin .pf-admin-content-grid strong { display: block; color: var(--admin-ink); font-size: 16px; font-weight: 730; }
+.pf-admin .pf-admin-content-grid p { margin-top: 2px; }
+
+.pf-admin .pf-admin-student-toolbar,
+.pf-admin .pf-admin-order-toolbar {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+}
+
+.pf-admin .pf-admin-orders-page,
+.pf-admin .pf-admin-orders-page .pf-admin-table-card {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pf-admin .pf-admin-orders-page .pf-admin-table-card {
+  overflow: hidden;
+}
+
+/* Orders is intentionally denser than the data-authoring workspaces. The
+   desktop treatment is approximately 20% smaller while mobile keeps generous
+   touch targets and the dedicated card layout. */
+@media (min-width: 1101px) {
+  .pf-admin .pf-admin-orders-page {
+    gap: clamp(11px, 1.4vw, 19px);
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-page-header {
+    gap: 11px;
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-page-header h1 {
+    font-size: clamp(18px, 1.76vw, 26px);
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-page-header__description {
+    margin-top: 4px;
+    font-size: clamp(9.5px, 0.8vw, 10.5px);
+    line-height: 1.45;
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-course-selector {
+    min-width: min(100%, 176px);
+    gap: 3px;
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-course-selector > span,
+  .pf-admin .pf-admin-orders-page .pf-admin-field > span:first-child {
+    font-size: 8px;
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-course-selector select,
+  .pf-admin .pf-admin-orders-page .pf-admin-input,
+  .pf-admin .pf-admin-orders-page .pf-admin-select {
+    min-height: 30px;
+    border-radius: 8px;
+    font-size: 9.5px;
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-course-selector select {
+    padding-inline: 8px 26px;
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-search-field > svg {
+    left: 9px;
+    width: 13px;
+    height: 13px;
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-search-field .pf-admin-input {
+    padding-left: 28px;
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-table-card__header {
+    min-height: 42px;
+    padding: 9px clamp(11px, 1.3vw, 16px);
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-order-toolbar {
+    grid-template-columns: minmax(208px, 2fr) minmax(106px, 0.7fr) minmax(114px, 0.75fr);
+    gap: 8px;
+  }
+}
+
+.pf-admin .pf-admin-order-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) minmax(132px, 0.7fr) minmax(142px, 0.75fr);
+  align-items: end;
+}
+
+.pf-admin .pf-admin-student-toolbar .pf-admin-search-field,
+.pf-admin .pf-admin-order-toolbar .pf-admin-search-field {
+  flex: 2 1 220px;
+  min-width: 180px;
+}
+
+.pf-admin .pf-admin-student-toolbar .pf-admin-field,
+.pf-admin .pf-admin-order-toolbar .pf-admin-field {
+  flex: 1 1 125px;
+  min-width: 115px;
+}
+
+.pf-admin .pf-admin-order-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: clamp(8px, 1vw, 12px);
+}
+
+.pf-admin .pf-admin-study-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(10px, 1.3vw, 16px);
+}
+
+.pf-admin .pf-admin-study-stats article,
+.pf-admin .pf-admin-order-summary article {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+  min-height: 72px;
+  padding: 12px 14px;
+}
+
+@media (min-width: 1101px) {
+  .pf-admin .pf-admin-order-summary article {
+    min-height: 58px;
+    gap: 8px;
+    padding: 9px 11px;
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-order-summary article > svg {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+    padding: 6px;
+    border-radius: 8px;
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-order-summary strong {
+    font-size: 12px;
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-order-summary p {
+    font-size: 9px;
+  }
+}
+
+.pf-admin .pf-admin-study-stats article > span,
+.pf-admin .pf-admin-order-summary article > svg {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 8px;
+  border-radius: 10px;
+}
+
+.pf-admin .pf-admin-study-stats strong,
+.pf-admin .pf-admin-order-summary strong {
+  display: block;
+  color: var(--admin-ink);
+  font-size: 15px;
+  font-weight: 730;
+  letter-spacing: -0.02em;
+}
+
+.pf-admin .pf-admin-study-stats p,
+.pf-admin .pf-admin-order-summary p {
+  margin-top: 2px;
+}
+
+.pf-admin .pf-admin-students-table {
+  min-width: 720px;
+}
+
+.pf-admin .pf-admin-orders-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.pf-admin .pf-admin-orders-table th,
+.pf-admin .pf-admin-orders-table td {
+  min-width: 0;
+  padding: 9px 9px;
+}
+
+.pf-admin .pf-admin-orders-table td {
+  height: 58px;
+}
+
+@media (min-width: 1101px) {
+  .pf-admin .pf-admin-orders-table th,
+  .pf-admin .pf-admin-orders-table td {
+    padding: 7px;
+  }
+
+  .pf-admin .pf-admin-orders-table th {
+    font-size: 7.5px;
+  }
+
+  .pf-admin .pf-admin-orders-table td {
+    height: 47px;
+    font-size: 9px;
+  }
+
+  .pf-admin .pf-admin-orders-table td code,
+  .pf-admin .pf-admin-orders-table td > strong,
+  .pf-admin .pf-admin-orders-table .pf-admin-order-buyer strong {
+    font-size: 9px;
+  }
+
+  .pf-admin .pf-admin-orders-table .pf-admin-order-buyer small,
+  .pf-admin .pf-admin-orders-table .pf-admin-product-list,
+  .pf-admin .pf-admin-orders-table .pf-admin-order-date small {
+    font-size: 7.5px;
+  }
+
+  .pf-admin .pf-admin-orders-table .pf-admin-status {
+    min-height: 20px;
+    gap: 4px;
+    padding: 2px 6px;
+    font-size: 7px;
+  }
+
+  .pf-admin .pf-admin-orders-table .pf-admin-status__dot {
+    width: 4px;
+    height: 4px;
+  }
+
+  .pf-admin .pf-admin-orders-table .pf-admin-details-button,
+  .pf-admin .pf-admin-orders-table .pf-admin-no-receipt {
+    font-size: 8px;
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-pagination {
+    padding: 8px clamp(11px, 1.3vw, 16px);
+    font-size: 8.5px;
+  }
+
+  .pf-admin .pf-admin-orders-page .pf-admin-pagination button {
+    min-height: 27px;
+    padding-inline: 9px;
+    font-size: 8.5px;
+  }
+}
+
+.pf-admin .pf-admin-orders-table td code,
+.pf-admin .pf-admin-orders-table td > strong {
+  font-size: 11px;
+}
+
+.pf-admin .pf-admin-orders-table {
+  width: 100%;
+  min-width: 100%;
+  table-layout: auto;
+}
+
+.pf-admin .pf-admin-orders-col--order { width: 15%; }
+.pf-admin .pf-admin-orders-col--buyer { width: 22%; }
+.pf-admin .pf-admin-orders-col--items { width: 14%; }
+.pf-admin .pf-admin-orders-col--amount { width: 9%; }
+.pf-admin .pf-admin-orders-col--payment { width: 11%; }
+.pf-admin .pf-admin-orders-col--access { width: 9%; }
+.pf-admin .pf-admin-orders-col--status { width: 8%; }
+.pf-admin .pf-admin-orders-col--date { width: 8%; }
+.pf-admin .pf-admin-orders-col--receipt { width: 4%; }
+.pf-admin .pf-admin-orders-col--date { width: 7%; }
+.pf-admin .pf-admin-orders-col--receipt { width: 5%; }
+
+.pf-admin .pf-admin-order-id,
+.pf-admin .pf-admin-payment-method,
+.pf-admin .pf-admin-order-date {
+  white-space: nowrap;
+}
+
+.pf-admin .pf-admin-order-date {
+  display: grid;
+  gap: 1px;
+  color: var(--admin-ink-soft);
+  line-height: 1.25;
+}
+
+.pf-admin .pf-admin-order-date small {
+  color: var(--admin-muted);
+  font-size: 9px;
+}
+
+.pf-admin .pf-admin-student-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: clamp(14px, 1.8vw, 22px);
+  background:
+    linear-gradient(130deg, rgba(91, 140, 255, 0.09), transparent 48%),
+    var(--admin-panel);
+}
+
+.pf-admin .pf-admin-student-hero__identity {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 14px;
+}
+
+.pf-admin .pf-admin-student-hero__avatar .pf-admin-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  font-size: 14px;
+}
+
+.pf-admin .pf-admin-student-hero__identity p,
+.pf-admin .pf-admin-student-hero__identity h2,
+.pf-admin .pf-admin-student-hero__identity span { margin: 0; }
+.pf-admin .pf-admin-student-hero__identity p { color: var(--admin-primary); font-size: 9px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; }
+.pf-admin .pf-admin-student-hero__identity h2 { margin-top: 3px; color: var(--admin-ink); font-size: clamp(18px, 1.7vw, 24px); font-weight: 730; letter-spacing: -0.03em; }
+.pf-admin .pf-admin-student-hero__identity div > span { display: block; margin-top: 4px; color: var(--admin-muted); font-size: 10.5px; }
+.pf-admin .pf-admin-student-hero__badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+
+.pf-admin .pf-admin-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 0.7fr);
+  align-items: start;
+  gap: clamp(12px, 1.5vw, 18px);
+}
+
+.pf-admin .pf-admin-detail-main,
+.pf-admin .pf-admin-detail-side { display: grid; min-width: 0; gap: clamp(12px, 1.5vw, 18px); }
+.pf-admin .pf-admin-detail-side { position: sticky; top: 76px; }
+
+.pf-admin .pf-admin-record-list,
+.pf-admin .pf-admin-session-list,
+.pf-admin .pf-admin-timeline {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.pf-admin .pf-admin-record-list > li,
+.pf-admin .pf-admin-session-list > li {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--admin-line);
+}
+
+.pf-admin .pf-admin-record-list > li:first-child,
+.pf-admin .pf-admin-session-list > li:first-child { padding-top: 0; }
+.pf-admin .pf-admin-record-list > li:last-child,
+.pf-admin .pf-admin-session-list > li:last-child { padding-bottom: 0; border-bottom: 0; }
+.pf-admin .pf-admin-record-list strong,
+.pf-admin .pf-admin-session-list strong { color: var(--admin-ink); font-size: 11.5px; font-weight: 720; }
+.pf-admin .pf-admin-record-list p,
+.pf-admin .pf-admin-session-list p { margin: 2px 0; color: var(--admin-muted); font-size: 9.5px; }
+.pf-admin .pf-admin-record-list small,
+.pf-admin .pf-admin-session-list small { color: var(--admin-muted-light); font-size: 8.5px; }
+
+.pf-admin .pf-admin-timeline > li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  padding: 0 0 14px;
+}
+
+.pf-admin .pf-admin-timeline > li:not(:last-child)::before {
+  position: absolute;
+  top: 26px;
+  bottom: 2px;
+  left: 14px;
+  width: 1px;
+  content: '';
+  background: var(--admin-line-strong);
+}
+
+.pf-admin .pf-admin-timeline > li > span {
+  z-index: 1;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: var(--admin-primary);
+  border: 1px solid var(--admin-line);
+  border-radius: 9px;
+  background: var(--admin-panel-solid);
+}
+.pf-admin .pf-admin-timeline strong { color: var(--admin-ink); font-size: 11.5px; font-weight: 720; }
+.pf-admin .pf-admin-timeline p { margin: 3px 0; color: var(--admin-muted); font-size: 10.5px; line-height: 1.45; }
+.pf-admin .pf-admin-timeline time { color: var(--admin-muted-light); font-size: 8.5px; }
+
+.pf-admin .pf-admin-action-list { display: grid; }
+.pf-admin .pf-admin-action-list button {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 9px;
+  min-height: 54px;
+  padding: 9px 14px;
+  color: var(--admin-primary);
+  border: 0;
+  border-bottom: 1px solid var(--admin-line);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: color 170ms ease, background-color 170ms ease;
+}
+.pf-admin .pf-admin-action-list button:last-child { border-bottom: 0; }
+.pf-admin .pf-admin-action-list button:hover { background: var(--admin-panel-soft); }
+.pf-admin .pf-admin-action-list button.is-danger { color: var(--admin-danger); }
+.pf-admin .pf-admin-action-list button:disabled { cursor: not-allowed; opacity: 0.48; }
+.pf-admin .pf-admin-action-list button > svg:first-child { padding: 7px; width: 32px; height: 32px; border-radius: 9px; background: currentColor; color: var(--admin-panel-solid); }
+.pf-admin .pf-admin-action-list button strong,
+.pf-admin .pf-admin-action-list button small { display: block; }
+.pf-admin .pf-admin-action-list button strong { color: var(--admin-ink); font-size: 11.5px; font-weight: 720; }
+.pf-admin .pf-admin-action-list button small { margin-top: 2px; color: var(--admin-muted); font-size: 9.5px; }
+
+.pf-admin .pf-admin-muted-copy { margin: 0; color: var(--admin-muted); font-size: 11px; }
+
+.pf-admin .pf-admin-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pf-admin .pf-admin-form-stack { display: grid; gap: 12px; }
+.pf-admin .pf-admin-field--wide { grid-column: 1 / -1; }
+
+.pf-admin .pf-admin-order-buyer { width: 100%; align-items: flex-start; flex-direction: column; gap: 0; }
+.pf-admin .pf-admin-product-list { display: grid; width: 100%; max-width: 100%; gap: 2px; font-size: 11px; }
+.pf-admin .pf-admin-product-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pf-admin .pf-admin-details-button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--admin-primary);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 720;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.pf-admin .pf-admin-details-button:hover,
+.pf-admin .pf-admin-details-button:focus-visible {
+  color: var(--admin-accent-ink);
+  border-color: var(--admin-line-strong);
+  background: var(--admin-accent-soft);
+  outline: none;
+}
+
+.pf-admin .pf-admin-no-receipt {
+  color: var(--admin-muted);
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+.pf-admin .pf-admin-orders-desktop,
+.pf-admin .pf-admin-orders-mobile {
+  transition: opacity 150ms ease;
+}
+
+.pf-admin .pf-admin-orders-desktop.is-updating,
+.pf-admin .pf-admin-orders-mobile.is-updating {
+  opacity: 0.58;
+}
+
+.pf-admin .pf-admin-orders-mobile {
+  display: none;
+}
+
+.pf-admin .pf-admin-order-details {
+  display: grid;
+  gap: 14px;
+}
+
+.pf-admin .pf-admin-order-details__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pf-admin .pf-admin-order-details__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  padding: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-line);
+}
+
+.pf-admin .pf-admin-order-details__grid > div {
+  min-width: 0;
+  padding: 11px 12px;
+  background: var(--admin-panel-solid);
+}
+
+.pf-admin .pf-admin-order-details__wide {
+  grid-column: 1 / -1;
+}
+
+.pf-admin .pf-admin-order-details dt {
+  color: var(--admin-muted);
+  font-size: 8.5px;
+  font-weight: 780;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.pf-admin .pf-admin-order-details dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--admin-ink);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.pf-admin .pf-admin-order-details dd a {
+  color: var(--admin-primary);
+}
+
+.pf-admin .pf-admin-order-details dd small {
+  display: block;
+  margin-top: 2px;
+  color: var(--admin-muted);
+  font-size: 9.5px;
+  font-weight: 540;
+}
+
+@media (max-width: 1399px) {
+  .pf-admin .pf-admin-content-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pf-admin .pf-admin-content-grid article { border-bottom: 1px solid var(--admin-line); }
+  .pf-admin .pf-admin-content-grid article:nth-child(3n) { border-right: 0; }
+  .pf-admin .pf-admin-content-grid article:nth-last-child(-n + 3) { border-bottom: 0; }
+  .pf-admin .pf-admin-order-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1199px) {
+  .pf-admin .pf-admin-detail-layout { grid-template-columns: minmax(0, 1fr); }
+  .pf-admin .pf-admin-detail-side { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 899px) {
+  .pf-admin .pf-admin-analytics-grid { grid-template-columns: minmax(0, 1fr); }
+  .pf-admin .pf-admin-content-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pf-admin .pf-admin-content-grid article:nth-child(3n) { border-right: 1px solid var(--admin-line); }
+  .pf-admin .pf-admin-content-grid article:nth-child(2n) { border-right: 0; }
+  .pf-admin .pf-admin-content-grid article:nth-last-child(-n + 3) { border-bottom: 1px solid var(--admin-line); }
+  .pf-admin .pf-admin-content-grid article:nth-last-child(-n + 2) { border-bottom: 0; }
+  .pf-admin .pf-admin-student-toolbar .pf-admin-search-field,
+  .pf-admin .pf-admin-order-toolbar .pf-admin-search-field { flex-basis: 100%; }
+  .pf-admin .pf-admin-detail-side { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 1100px) {
+  .pf-admin .pf-admin-orders-desktop { display: none; }
+  .pf-admin .pf-admin-orders-mobile { display: grid; }
+  .pf-admin .pf-admin-order-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pf-admin .pf-admin-order-toolbar .pf-admin-search-field { grid-column: 1 / -1; }
+}
+
+@media (max-width: 699px) {
+  .pf-admin .pf-admin-metric { min-height: 116px; }
+  .pf-admin .pf-admin-revenue-breakdown { grid-template-columns: minmax(0, 1fr); }
+  .pf-admin .pf-admin-donut { width: min(70vw, 178px); }
+  .pf-admin .pf-admin-health { min-height: 170px; }
+  .pf-admin .pf-admin-student-hero { align-items: flex-start; flex-direction: column; }
+  .pf-admin .pf-admin-student-hero__badges { justify-content: flex-start; }
+  .pf-admin .pf-admin-study-stats { grid-template-columns: minmax(0, 1fr); }
+  .pf-admin .pf-admin-order-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pf-admin .pf-admin-study-stats article,
+  .pf-admin .pf-admin-order-summary article { min-height: 64px; }
+  .pf-admin .pf-admin-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .pf-admin .pf-admin-field--wide { grid-column: auto; }
+  .pf-admin .pf-admin-record-list > li,
+  .pf-admin .pf-admin-session-list > li { grid-template-columns: 34px minmax(0, 1fr); align-items: start; }
+  .pf-admin .pf-admin-record-list .pf-admin-status,
+  .pf-admin .pf-admin-session-list .pf-admin-status { grid-column: 2; justify-self: start; }
+  .pf-admin .pf-admin-content-grid { grid-template-columns: minmax(0, 1fr); }
+  .pf-admin .pf-admin-content-grid article,
+  .pf-admin .pf-admin-content-grid article:nth-child(2n),
+  .pf-admin .pf-admin-content-grid article:nth-child(3n),
+  .pf-admin .pf-admin-content-grid article:nth-last-child(-n + 2) { border-right: 0; border-bottom: 1px solid var(--admin-line); }
+  .pf-admin .pf-admin-content-grid article:last-child { border-bottom: 0; }
+}
+
+@media (max-width: 479px) {
+  .pf-admin .pf-admin-metric.has-action > div:not(.pf-admin-metric__action) { padding-right: 72px; }
+  .pf-admin .pf-admin-overview-filter { width: 82px; }
+  .pf-admin .pf-admin-overview-filter select { padding-right: 4px; font-size: 8px; }
+  .pf-admin .pf-admin-student-hero__identity { align-items: flex-start; flex-direction: column; }
+  .pf-admin .pf-admin-student-hero__avatar .pf-admin-avatar { width: 44px; height: 44px; border-radius: 12px; }
+  .pf-admin .pf-admin-student-toolbar .pf-admin-field,
+  .pf-admin .pf-admin-order-toolbar .pf-admin-field { flex: 1 1 100%; }
+  .pf-admin .pf-admin-record-list__icon,
+  .pf-admin .pf-admin-session-list > li > span:first-child { width: 32px; height: 32px; }
+  .pf-admin .pf-admin-order-toolbar { grid-template-columns: minmax(0, 1fr); }
+  .pf-admin .pf-admin-order-toolbar .pf-admin-search-field { grid-column: auto; }
+  .pf-admin .pf-admin-order-summary { grid-template-columns: minmax(0, 1fr); }
+  .pf-admin .pf-admin-order-details__grid { grid-template-columns: minmax(0, 1fr); }
+  .pf-admin .pf-admin-order-details__wide { grid-column: auto; }
+}
+
+/* Mobile Responsive Card Views for Orders & Students */
+.pf-admin-desktop-only {
+  display: block;
+}
+.pf-admin-mobile-only {
+  display: none;
+}
+
+.pf-admin .pf-admin-orders-mobile-list,
+.pf-admin .pf-admin-students-mobile-list {
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.pf-admin .pf-admin-order-card,
+.pf-admin .pf-admin-student-card {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-panel-solid);
+  box-shadow: var(--admin-shadow-xs);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.pf-admin .pf-admin-order-card:hover,
+.pf-admin .pf-admin-student-card:hover {
+  border-color: var(--admin-line-strong);
+  box-shadow: var(--admin-shadow-sm);
+}
+
+.pf-admin .pf-admin-order-card__header,
+.pf-admin .pf-admin-student-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pf-admin .pf-admin-order-card__id {
+  display: block;
+  color: var(--admin-ink);
+  font-size: 11px;
+  font-weight: 740;
+}
+
+.pf-admin .pf-admin-order-card__header time {
+  display: block;
+  margin-top: 2px;
+  color: var(--admin-muted-light);
+  font-size: 8.5px;
+}
+
+.pf-admin .pf-admin-order-card__badges,
+.pf-admin .pf-admin-student-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.pf-admin .pf-admin-order-card__body {
+  display: grid;
+  gap: 6px;
+  padding: 7px 0;
+  border-top: 1px solid var(--admin-line);
+  border-bottom: 1px solid var(--admin-line);
+}
+
+.pf-admin .pf-admin-order-card__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pf-admin .pf-admin-order-card__item {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--admin-panel-soft);
+  color: var(--admin-ink-soft);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.pf-admin .pf-admin-order-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pf-admin .pf-admin-order-card__footer small {
+  display: block;
+  color: var(--admin-muted);
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pf-admin .pf-admin-order-card__footer strong {
+  color: var(--admin-ink);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.pf-admin .pf-admin-order-card__method {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent-ink);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.pf-admin .pf-admin-student-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding-top: 7px;
+  border-top: 1px solid var(--admin-line);
+}
+
+.pf-admin .pf-admin-student-card__grid div small {
+  display: block;
+  color: var(--admin-muted-light);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.pf-admin .pf-admin-student-card__grid div span,
+.pf-admin .pf-admin-student-card__grid div strong {
+  display: block;
+  margin-top: 1px;
+  color: var(--admin-ink-soft);
+  font-size: 10px;
+}
+
+@media (max-width: 680px) {
+  .pf-admin-desktop-only {
+    display: none !important;
+  }
+  .pf-admin-mobile-only {
+    display: grid !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+}
+.pf-admin-mutation-error {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 13px;
+}
+
+.pf-admin-mutation-error strong,
+.pf-admin-mutation-error span {
+  display: block;
+}
+
+.pf-admin-mutation-error ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}

@@ -1,0 +1,8 @@
+.pf-admin-course-selector { display: grid; min-width: min(100%, 220px); gap: 4px; }
+.pf-admin-course-selector > span { color: var(--admin-muted); font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.pf-admin-course-selector > div { position: relative; }
+.pf-admin-course-selector select { width: 100%; min-height: 36px; padding: 0 30px 0 10px; color: var(--admin-ink); border: 1px solid var(--admin-line); border-radius: 10px; outline: 0; appearance: none; background: var(--admin-panel-solid); font: inherit; font-size: 11px; font-weight: 700; }
+.pf-admin-course-selector svg { position: absolute; top: 50%; right: 10px; color: var(--admin-muted); pointer-events: none; transform: translateY(-50%); }
+.pf-course-editor { display: grid; gap: 12px; }.pf-course-editor__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }.pf-course-editor__actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }.pf-course-editor__error { margin: 0; color: var(--admin-danger); font-size: 11px; }.pf-course-table__description { display: block; max-width: 300px; margin-top: 3px; overflow: hidden; color: var(--admin-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.pf-course-actions { display: flex; align-items: center; gap: 6px; }.pf-admin-table code { color: var(--admin-accent-ink); font: inherit; font-size: 10.5px; font-weight: 800; letter-spacing: .06em; }
+@media (max-width: 559px) { .pf-course-editor__grid { grid-template-columns: 1fr; }.pf-course-editor__actions .pf-admin-button { flex: 1; }.pf-admin-course-selector { width: 100%; } }
+

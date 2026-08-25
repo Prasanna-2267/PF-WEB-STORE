@@ -1,5 +1,52 @@
 # Changelog
 
+## 2026-08-18 — Super Admin Questions workspace
+
+- Replaced the Questions placeholder with a complete responsive Question Bank and authoring workspace.
+- Added normal MCQ, case MCQ, case descriptive, and normal descriptive models with rich text, keyword highlighting, explanations, learner preview, and draft/published/archived lifecycles.
+- Added dynamic case sub-questions with add, duplicate, remove, drag reorder, entire-case classification, and per-sub-question classification.
+- Added Course → Subject → Chapter → Lesson → Topic taxonomy management and full hierarchy filtering without allowing ad-hoc taxonomy creation inside the editor.
+- Added CSV/XLSX upload, validation, preview, Case ID grouping, warnings/errors, lower-taxonomy creation safeguards, and a downloadable template.
+- Added pagination, sorting, search, duplicate, archive, trash, restore, permanent deletion, unsaved-change protection, browser-persistent mock repositories, responsive layouts, and reduced-motion-compatible transitions.
+- Kept the public website, Store, and unrelated Admin modules unchanged. TypeScript and the Vite production build pass.
+
+## 2026-08-17 — Super Admin Broadcast workspace
+
+- Replaced the Broadcast placeholder with a complete responsive communications workspace.
+- Added summary filters, advanced search/filter/sort controls, desktop and mobile result views, pagination, detail inspection, and status-specific action menus.
+- Added a seven-step editor for content, optional image and CTA, audience targeting, platform placement, priority, schedule/expiry, frequency, dismiss behavior, preview, review, and explicit confirmation.
+- Added browser-persistent mock lifecycle handling for drafts, scheduled and active broadcasts, expiration, disable/enable, schedule cancellation, duplication, archive/restore, and safe deletion.
+- Added unsaved-change protection, session refresh recovery, loading/empty/error/success feedback, responsive styling, keyboard focus support, and reduced-motion behavior.
+- Connected `/admin/broadcast` through the existing protected Admin shell without modifying public or Store routes. TypeScript and the production Vite build pass.
+
+## 2026-08-15 — Super Admin Packages catalogue
+
+- Replaced the Packages placeholder with a complete responsive catalogue-management module.
+- Added package creation and editing with title, INR price, description, draft/published/archived status, stable Content Library references, and browser-persistent mock data behind a replaceable repository contract.
+- Added a Drive-style content picker with full hierarchy browsing, breadcrumbs, back/forward navigation, global search with source paths, file/folder multi-selection, select-all, effective descendant counts, and automatic ancestor/child deduplication.
+- Added searchable package cards, metadata and status summaries, expandable included-content details, missing-source feedback, and safe package deletion that never removes underlying Content Library records.
+- Added responsive desktop/tablet/mobile layouts, loading/empty/error/success states, accessible dialogs, and reduced-motion-compatible transitions.
+- Kept the public website, Store, Admin shell, authentication, student/order workflows, and Content module behavior unchanged. TypeScript and the production Vite build pass.
+
+## 2026-08-15 — Super Admin Content library
+
+- Replaced the Content placeholder with a responsive Drive-style file and folder manager.
+- Added unlimited ID-based nesting, dynamic breadcrumbs, back/forward navigation, sorting, persisted grid/list views, and nested search with source paths.
+- Added folder creation, multi-file/folder uploads with progress, rename with extension preservation, safe move, deep copy, recursive delete warnings, drag/drop, multi-select and batch actions.
+- Added supported file previews, downloads, a metadata/details drawer with editable descriptions, responsive menus/dialogs, empty/loading/error states, and local mock persistence behind a replaceable repository contract.
+- Kept the existing Admin shell, authentication, Overview, Students, Student Details, Orders, and every public route unchanged. TypeScript and the production Vite build pass.
+
+## 2026-08-15 — Super Admin Console phase one
+
+- Added an isolated, role-protected `/admin/*` application shell with responsive sidebar navigation, theme support, route transitions, focus management, and logout feedback.
+- Added Overview metrics, 30-day trend visualizations, recent orders, and content inventory.
+- Added the searchable, filterable, sortable, paginated Students directory and canonical Student Details workflow.
+- Added audited demonstration actions for access grants, role changes, account enable/disable, and active-session revocation.
+- Added searchable, filterable, sortable, paginated Orders with receipt metadata and buyer-to-student navigation.
+- Added typed admin domain models, repository boundary, fictional fixtures, browser-persistent mock adapter, per-module request-race protection, loading/empty/error/success states, time-limited entitlement expiry, resilient post-action refreshes, and in-memory state clearing on logout.
+- Added frontend permission gating, admin noindex metadata/headers, and future-module placeholders without exposing the console in public navigation.
+- Verified TypeScript and the Vite production build. A trusted backend remains required before real administration.
+
 ## 2026-08-01 — About Parallax Flow chapter
 
 - Added an in-page About us destination between the hero and Connect with us.

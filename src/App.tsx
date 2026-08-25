@@ -2,6 +2,7 @@ import React from 'react';
 import { ThemeProvider } from '@/providers/ThemeProvider';
 import { LenisProvider } from '@/providers/LenisProvider';
 import { AppRouter } from '@/app/router/AppRouter';
+import { AuthBootstrap } from '@/components/auth/AuthBootstrap';
 
 export const App: React.FC = () => {
   return (
@@ -9,7 +10,9 @@ export const App: React.FC = () => {
       <LenisProvider>
         <div className="relative min-h-screen w-full">
           <div className="relative z-10 pointer-events-auto min-h-screen flex flex-col">
-            <AppRouter />
+            <AuthBootstrap>
+              <AppRouter />
+            </AuthBootstrap>
           </div>
         </div>
       </LenisProvider>

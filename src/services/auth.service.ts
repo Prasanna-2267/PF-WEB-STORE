@@ -1,4 +1,5 @@
-import { UserProfile } from '@/app/store/useAuthStore';
+import { apiRequest, ApiError } from '@/lib/api/client';
+import type { AuthResult, SessionResult } from '@/lib/api/contracts';
 
 export interface LoginCredentials {
   email: string;
@@ -12,71 +13,32 @@ export interface RegisterCredentials {
   password: string;
 }
 
-export interface AuthResponse {
-  token: string;
-  user: UserProfile;
-}
-
-// Mock API service layer for authentication
 export const authService = {
-  async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    await new Promise((res) => setTimeout(res, 700));
-    
-    if (credentials.email === 'error@parallaxflow.com') {
-      throw new Error('Invalid email credentials or account suspended.');
-    }
-
-    return {
-      token: `pf-jwt-${Math.random().toString(36).substr(2, 9)}`,
-      user: {
-        id: 'user-101',
-        email: credentials.email,
-        fullName: credentials.email.split('@')[0].toUpperCase().replace('.', ' '),
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-        androidAppConnected: true,
-        role: 'student',
-        purchasedNoteIds: ['financial-reporting-intermediate'],
-        enrolledCourse: {
-          id: 'course-ca-intermediate',
-          slug: 'ca-intermediate',
-          name: 'CA Intermediate',
-        },
-        subscription: 'Premium',
-      },
-    };
+  googleLogin(idToken: string): Promise<AuthResult> {
+    return apiRequest('/api/auth/google', { method: 'POST', auth: false, body: { idToken } });
   },
 
-  async register(credentials: RegisterCredentials): Promise<AuthResponse> {
-    await new Promise((res) => setTimeout(res, 800));
-
-    return {
-      token: `pf-jwt-reg-${Math.random().toString(36).substr(2, 9)}`,
-      user: {
-        id: `user-${Date.now()}`,
-        email: credentials.email,
-        fullName: credentials.fullName,
-        androidAppConnected: false,
-        role: 'student',
-        purchasedNoteIds: [],
-        enrolledCourse: {
-          id: 'course-ca-intermediate',
-          slug: 'ca-intermediate',
-          name: 'CA Intermediate',
-        },
-        subscription: 'Free',
-      },
-    };
+  login(credentials: LoginCredentials): Promise<AuthResult> {
+    return apiRequest('/api/auth/login', {
+      method: 'POST',
+      auth: false,
+      body: { email: credentials.email.trim(), password: credentials.password },
+    });
   },
 
-  async requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
-    await new Promise((res) => setTimeout(res, 600));
-    return {
-      success: true,
-      message: `Password reset instructions sent to ${email}`,
-    };
+  register(credentials: RegisterCredentials): Promise<AuthResult> {
+    return apiRequest('/api/auth/register', { method: 'POST', auth: false, body: credentials });
+  },
+
+  session(signal?: AbortSignal): Promise<SessionResult> {
+    return apiRequest('/api/auth/session', { method: 'GET', signal });
+  },
+
+  async requestPasswordReset(_email?: string): Promise<never> {
+    throw new ApiError('Password reset is not available from the server yet. Contact support for account recovery.', 501, 'FEATURE_NOT_AVAILABLE');
   },
 
   async logout(): Promise<void> {
-    await new Promise((res) => setTimeout(res, 200));
+    await apiRequest('/api/auth/logout', { method: 'POST', retryAfterRefresh: false });
   },
 };

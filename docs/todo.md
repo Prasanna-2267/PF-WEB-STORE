@@ -1,33 +1,54 @@
 # Todo
 
-## Before the next production deployment
+## Required before real Super Admin production use
 
-- Visually compare light and dark modes at desktop, tablet, and mobile widths.
-- Test keyboard navigation, focus visibility, form validation, modals, and the mobile menu.
-- Test reduced-motion behavior.
-- Confirm `/`, `/home`, `/contact`, `/login`, `/register`, and `/forgot-password` through the exact Cloudflare route rewrites.
-- Confirm a nonexistent `/assets/*.js` request returns 404 rather than `index.html`, and confirm entry HTML includes `no-store` and `no-transform`.
-- Confirm the custom-domain HTML is no longer modified by the automatic Cloudflare Web Analytics injection.
-- Run `npm run build`.
-- Repeat the full visual matrix in real Chrome, Edge, Firefox, Safari, Android Chrome, and Mobile Safari when browser/device access is available.
-- Monitor React Router releases for a version newer than 7.18.1 that resolves the RSC-mode advisory without reintroducing older client-side advisories.
+- Replace the mock authentication adapter with server-verified email/Google authentication and secure sessions.
+- Replace `mockAdminRepository` with a trusted API repository.
+- Enforce `SUPER_ADMIN` and per-action permissions server-side.
+- Connect orders and receipts to the payment authority.
+- Connect grants to the Android entitlement system with idempotency and reconciliation.
+- Implement immutable server audit logs and real session revocation.
+- Complete privacy, retention, rate-limit, abuse-control, and observability requirements.
 
-## Static QA findings awaiting an approved UI/behavior fix
+## Final device/browser verification
 
-- Login and registration submit buttons are wrapped in `.pf-auth-btn-wrap`, while their intended styling targets only a direct form child.
-- The auth header can clip at narrow phone widths because the brand, Back to Home link, and theme control remain on one row.
-- The initial hard-coded dark HTML class can cause a light-theme first-paint flash and mismatched native control color schemes.
-- On `/home`, leaving the contact section can leave the document title as `Contact | Parallax Flow`.
-- Coming-soon tooltips are hover-first, and modals do not yet include full dialog focus/Escape behavior.
+- Verify anonymous `/admin/*` redirect and preserved return destination.
+- Verify non-admin denial and authorized Super Admin routing.
+- Verify Overview, Students, Student Details, Orders, and both canonical student-detail entry paths.
+- Verify all student dialogs and success/error feedback.
+- Verify light/dark and reduced-motion modes.
+- Verify keyboard focus, mobile drawer, table scrolling, and 320/390/768/1024/1440/1920 widths.
+- Repeat in Chrome, Edge, Firefox, Safari, Android Chrome, and Mobile Safari.
 
-## Product integrations requiring approval
+## Content production integration
 
-- Replace mock authentication with a production identity service.
-- Connect password reset to an email workflow.
-- Connect the contact form to a protected delivery endpoint.
-- Decide the post-login destination and authorized experience.
-- Define destinations for the visible “Coming soon” navigation labels.
+- Replace the mock Content repository with authenticated APIs and private object storage.
+- Add server-side file signature validation, malware scanning, storage quotas, audit history, resumable upload, and signed preview/download URLs.
+- Re-run the Content interaction matrix in a connected browser: upload, preview, drag/drop, context menu, keyboard selection, deep copy, safe move, recursive delete, search, detail editing, and narrow-screen layouts.
 
-## Not a maintenance task
+## Packages production integration
 
-Do not introduce new sections, routes, providers, animation libraries, or deployment targets as part of routine cleanup.
+- Replace the browser-local Package repository with authenticated APIs and persistent Package/PackageItem records.
+- Validate package pricing, lifecycle status, Content references, ancestor/descendant deduplication, and delete semantics server-side.
+- Add audit history, cover-image and course associations, and Store publication rules before exposing packages for purchase.
+- Keep payments, student ownership, and Android content unlocking outside the Packages module until their authoritative services are connected.
+
+## Later admin phases
+
+- Coupons
+- Account
+- Settings
+
+## Questions production integration
+
+- Replace browser-local question and taxonomy repositories with authenticated, permission-enforced APIs and durable database storage.
+- Perform server-side HTML sanitization, validation, versioning, audit logging, publishing authorization, and referential-integrity checks.
+- Move spreadsheet parsing/import into an auditable job flow for large files, with antivirus scanning, row-level error exports, idempotency, and safe rollback.
+- Re-run the complete Question Bank matrix in connected browsers: four question types, both case classification modes, reorder/duplicate/delete, preview, publish/archive/trash/restore, hierarchy filters, CSV/XLSX import, keyboard access, dark mode, and narrow screens.
+
+## Broadcast production integration
+
+- Replace the browser-local Broadcast repository with authenticated API endpoints and an authoritative delivery service.
+- Enforce audience, platform, placement, priority, schedule, expiry, frequency, and lifecycle rules server-side.
+- Store uploaded banners in protected object storage and record immutable audit history for publish, schedule, disable, restore, archive, and delete actions.
+- Re-run the Broadcast interaction matrix in a connected browser across desktop, tablet, mobile, keyboard-only, dark mode, and reduced-motion settings.

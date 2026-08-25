@@ -6,13 +6,67 @@ import { useThemeStore } from '@/app/store/useThemeStore';
 import { useAuthStore } from '@/app/store/useAuthStore';
 import { useCartStore } from '@/app/store/useCartStore';
 import { buildStoreCategoryPath, ROUTES } from '@/config/routes';
-import { courseCategories, getProductBySlug } from './data/catalog';
+import { getProductBySlug } from './data/catalog';
 import { getStoreCartGuard } from './StoreCartActions';
+import { useStoreContextStore } from './data/useStoreContext';
+import { usePublicCatalog, usePublicCatalogUserCourses } from './data/publicCatalogApi';
 import './store.css';
+
+export const StoreHeaderCourseSelector: React.FC = () => {
+  const { selectedCourseSlug, setSelectedCourseSlug, initializeForStudent } = useStoreContextStore();
+  const user = useAuthStore((state) => state.user);
+  const catalogQuery = usePublicCatalog();
+  const userCoursesQuery = usePublicCatalogUserCourses(Boolean(user?.id));
+
+  const availableCourses = useMemo(() => {
+    const userEnrolled = userCoursesQuery.data?.courses || [];
+    if (user?.id && userEnrolled.length > 0) {
+      return userEnrolled.map((c) => ({
+        slug: c.slug || c.id,
+        name: c.name,
+      }));
+    }
+
+    const realDbCourses = catalogQuery.data?.courses || [];
+    if (realDbCourses.length > 0) {
+      return realDbCourses.map((c) => ({
+        slug: c.slug || c.id,
+        name: c.name,
+      }));
+    }
+
+    return [];
+  }, [user, userCoursesQuery.data, catalogQuery.data]);
+
+  useEffect(() => {
+    if (availableCourses.length > 0) {
+      const slugs = availableCourses.map((c) => c.slug);
+      initializeForStudent(slugs);
+    }
+  }, [availableCourses, initializeForStudent]);
+
+  return (
+    <div className="pf-store-nav-course-selector">
+      <select
+        value={selectedCourseSlug}
+        onChange={(e) => setSelectedCourseSlug(e.target.value as any)}
+        aria-label="Select active store course"
+      >
+        <option value="all">All Courses</option>
+        {availableCourses.map((c) => (
+          <option key={c.slug} value={c.slug}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+};
 
 const StoreLayout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const selectedCourseSlug = useStoreContextStore((state) => state.selectedCourseSlug);
   const { mode, toggleTheme } = useThemeStore();
   const { user, isAuthenticated } = useAuthStore();
   const itemIds = useCartStore((state) => state.itemIds);
@@ -22,9 +76,10 @@ const StoreLayout: React.FC = () => {
   const [cartPulse, setCartPulse] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const catalogQuery = usePublicCatalog();
   const activeCourse = useMemo(
-    () => courseCategories.find((course) => course.slug === user?.enrolledCourse?.slug),
-    [user?.enrolledCourse?.slug],
+    () => (catalogQuery.data?.courses || []).find((course) => course.slug === user?.enrolledCourse?.slug),
+    [catalogQuery.data, user?.enrolledCourse?.slug],
   );
 
   useEffect(() => {
@@ -157,7 +212,16 @@ const StoreLayout: React.FC = () => {
             </Link>
             {isAuthenticated ? (
               <Link className="pf-store-account" to={ROUTES.STORE_PROFILE} aria-label="Open Store profile">
-                <span>{user?.fullName?.charAt(0).toUpperCase() || 'P'}</span><small>{user?.fullName?.split(' ')[0]}</small>
+                {user?.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.fullName}
+                    style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover', display: 'inline-block' }}
+                  />
+                ) : (
+                  <span>{user?.fullName?.charAt(0).toUpperCase() || 'P'}</span>
+                )}
+                <small>{user?.fullName?.split(' ')[0]}</small>
               </Link>
             ) : (
               <Link className="pf-store-account pf-store-account--login" to={ROUTES.LOGIN} state={loginState}>
@@ -171,8 +235,17 @@ const StoreLayout: React.FC = () => {
         </div>
 
         <nav className="pf-store-header__nav" aria-label="Store navigation">
-          <Link to={ROUTES.STORE} className="pf-store-nav-title">Store</Link>
-          <div>{navigation.map((item) => <Link key={item.label} to={item.to} className={isTabActive(item.label) ? 'active' : ''}>{item.label}</Link>)}</div>
+          <div className="pf-store-nav-left">
+            <Link to={ROUTES.STORE} className="pf-store-nav-title">Store</Link>
+            <StoreHeaderCourseSelector />
+          </div>
+          <div className="pf-store-nav-center">
+            <Link to={ROUTES.STORE} className={isTabActive('Featured') ? 'active' : ''}>Featured</Link>
+            <Link to={buildStoreCategoryPath(selectedCourseSlug !== 'all' ? selectedCourseSlug : userCourseSlug)} className={isTabActive('Notes') ? 'active' : ''}>Notes</Link>
+            <Link to={`${ROUTES.STORE}?type=bundle`} className={isTabActive('Bundles') ? 'active' : ''}>Bundles</Link>
+            <Link to={`${ROUTES.STORE}?type=subscription`} className={isTabActive('Subscriptions') ? 'active' : ''}>Subscriptions</Link>
+            <Link to={ROUTES.STORE_PURCHASES} className={isTabActive('My Purchases') ? 'active' : ''}>My Purchases</Link>
+          </div>
           <Link to={ROUTES.HOME}>Marketing site <ArrowRight size={14} /></Link>
         </nav>
 
@@ -199,7 +272,6 @@ const StoreLayout: React.FC = () => {
         <div className="pf-store-course-bar">
           <span>Your Store</span>
           <strong>{activeCourse.name}</strong>
-          <Link to={buildStoreCategoryPath(activeCourse.slug)}>Browse your course <ArrowRight size={14} /></Link>
         </div>
       )}
 

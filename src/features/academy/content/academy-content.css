@@ -1,0 +1,14 @@
+.pf-academy-content-course { display: grid; min-width: min(410px, 42vw); gap: 6px; color: var(--admin-muted); font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.pf-academy-content-course select { min-height: 44px; color: var(--admin-ink); font-size: 13px; font-weight: 650; text-transform: none; }
+.pf-academy-content-heading-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; }
+.pf-academy-content-heading-row > input { width: 100%; min-width: 0; padding: 0; color: var(--admin-ink); border: 0; outline: 0; background: transparent; font-size: clamp(20px, 2.6vw, 32px); font-weight: 680; letter-spacing: -.04em; }
+.pf-academy-content-heading-row > span { display: inline-flex; min-height: 30px; align-items: center; gap: 5px; padding: 0 9px; border: 1px solid; border-radius: 9px; font-size: 9px; font-weight: 800; }
+.pf-academy-content-heading-row > span svg { width: 13px; height: 13px; }
+.pf-academy-content-heading-row .is-ready { color: var(--admin-success); border-color: rgba(18, 171, 114, .35); background: var(--admin-success-soft); }
+.pf-academy-content-heading-row .is-locked { color: var(--admin-danger); border-color: rgba(220, 38, 38, .35); background: var(--admin-danger-soft); }
+.pf-academy-content-lock-note { margin: 0; color: var(--admin-danger); font-size: 10px; font-weight: 650; }
+.pf-academy-content .pf-content-items article.is-archived { opacity: .58; }
+.pf-academy-content-progress { animation: pf-academy-upload-progress 1.2s ease-in-out infinite; }
+@keyframes pf-academy-upload-progress { 0% { transform: scaleX(.08); } 65% { transform: scaleX(.75); } 100% { transform: scaleX(.96); } }
+@media (max-width: 900px) { .pf-academy-content-course { min-width: min(100%, 360px); } .pf-academy-content-heading-row { grid-template-columns: 1fr auto; } .pf-academy-content-heading-row > input { grid-column: 1 / -1; } }
+@media (max-width: 680px) { .pf-academy-content-course { min-width: 100%; } .pf-academy-content-heading-row { grid-template-columns: 1fr; } .pf-content-toolbar { align-items: stretch; flex-direction: column; } .pf-content-view-actions { flex-wrap: wrap; } }

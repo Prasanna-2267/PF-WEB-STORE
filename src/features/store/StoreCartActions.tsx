@@ -33,7 +33,7 @@ export const getStoreCartGuard = (
     };
   }
 
-  if (user?.purchasedNoteIds.includes(product.id)) {
+  if (user?.purchasedNoteIds?.includes(product.id)) {
     return {
       kind: 'purchased',
       message: `${product.title} is already unlocked in your account.`,

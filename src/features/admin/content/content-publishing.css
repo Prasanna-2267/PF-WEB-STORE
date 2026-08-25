@@ -1,0 +1,515 @@
+.pf-admin-dialog--wide .pf-admin-dialog__body {
+  padding: 0;
+  overflow: hidden;
+}
+
+.pf-publish-workflow {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--admin-ink);
+  background:
+    radial-gradient(circle at 82% 2%, rgba(91, 140, 255, 0.1), transparent 24rem),
+    var(--admin-panel-solid);
+}
+
+.pf-publish-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  flex: 0 0 auto;
+  gap: 0;
+  margin: 0;
+  padding: 14px 22px;
+  list-style: none;
+  border-bottom: 1px solid var(--admin-line);
+  background: var(--admin-panel-soft);
+}
+
+.pf-publish-steps li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--admin-muted-light);
+  font-size: 11px;
+}
+
+.pf-publish-steps li:not(:last-child)::after {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  left: 76px;
+  height: 1px;
+  content: '';
+  background: var(--admin-line-strong);
+}
+
+.pf-publish-steps li > span {
+  z-index: 1;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border: 1px solid var(--admin-line-strong);
+  border-radius: 50%;
+  place-items: center;
+  background: var(--admin-panel-solid);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.pf-publish-steps svg { width: 13px; }
+.pf-publish-steps li.is-active,
+.pf-publish-steps li.is-complete { color: var(--admin-primary); }
+.pf-publish-steps li.is-active > span,
+.pf-publish-steps li.is-complete > span { color: #fff; border-color: var(--admin-primary); background: var(--admin-primary); }
+.pf-publish-steps li.is-complete::after { background: color-mix(in srgb, var(--admin-primary) 55%, transparent); }
+
+.pf-publish-select,
+.pf-publish-review,
+.pf-publish-progress {
+  min-height: 0;
+  padding: 20px 22px;
+  overflow: auto;
+}
+
+.pf-publish-dropzone {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border: 1px dashed var(--admin-line-strong);
+  border-radius: var(--admin-radius-lg);
+  background: var(--admin-panel-soft);
+}
+
+.pf-publish-dropzone > span,
+.pf-publish-progress > span {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  color: var(--admin-primary);
+  border: 1px solid var(--admin-line-strong);
+  border-radius: 15px;
+  place-items: center;
+  background: var(--admin-panel-solid);
+  box-shadow: var(--admin-shadow-sm);
+}
+
+.pf-publish-dropzone h3,
+.pf-publish-review h3,
+.pf-publish-progress h3 { margin: 0; font-size: 16px; letter-spacing: -0.02em; }
+.pf-publish-dropzone p,
+.pf-publish-review p,
+.pf-publish-progress p { margin: 4px 0 0; color: var(--admin-muted); font-size: 11px; line-height: 1.55; }
+.pf-publish-dropzone > div:last-of-type { display: flex; gap: 8px; }
+
+.pf-publish-session-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.pf-publish-session-summary > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius-md);
+  background: var(--admin-panel);
+}
+
+.pf-publish-session-summary svg { width: 20px; color: var(--admin-primary); }
+.pf-publish-session-summary span { display: grid; min-width: 0; }
+.pf-publish-session-summary strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.pf-publish-session-summary small { margin-top: 2px; color: var(--admin-muted); font-size: 9px; }
+
+.pf-publish-selection-list,
+.pf-publish-review-list {
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius-lg);
+  background: var(--admin-panel);
+}
+
+.pf-publish-selection-list > header,
+.pf-publish-review > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--admin-line);
+}
+
+.pf-publish-selection-list > header div { display: grid; }
+.pf-publish-selection-list > header strong { font-size: 12px; }
+.pf-publish-selection-list > header small,
+.pf-publish-selection-list > header > span { color: var(--admin-muted); font-size: 9px; }
+
+.pf-publish-selection-list > div {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--admin-line);
+}
+.pf-publish-selection-list > div:first-of-type { border-top: 0; }
+.pf-publish-selection-list > div > svg { width: 18px; color: var(--admin-primary); }
+.pf-publish-selection-list > div > span { display: grid; min-width: 0; }
+.pf-publish-selection-list > div strong,
+.pf-publish-selection-list > div small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-publish-selection-list > div strong { font-size: 11px; }
+.pf-publish-selection-list > div small { margin-top: 2px; color: var(--admin-muted); font-size: 9px; }
+.pf-publish-selection-list > div button { display: grid; width: 30px; height: 30px; padding: 0; color: var(--admin-muted); border: 0; border-radius: 8px; place-items: center; background: transparent; cursor: pointer; }
+.pf-publish-selection-list > div button:hover { color: var(--admin-danger); background: var(--admin-danger-soft); }
+.pf-publish-selection-list > div button svg { width: 15px; }
+
+.pf-publish-configure {
+  display: grid !important;
+  grid-template-columns: minmax(280px, 0.38fr) minmax(0, 0.62fr) !important;
+  width: 100% !important;
+  height: 100% !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.pf-publish-tree,
+.pf-publish-editor { min-width: 0; min-height: 0; height: 100%; }
+.pf-publish-tree { display: flex; flex-direction: column; border-right: 1px solid var(--admin-line); background: var(--admin-panel-soft); }
+.pf-publish-tree > header,
+.pf-publish-editor > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 58px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--admin-line);
+}
+.pf-publish-tree > header div,
+.pf-publish-editor > header > div > span { display: grid; min-width: 0; }
+.pf-publish-tree > header strong,
+.pf-publish-editor > header strong { font-size: 12px; }
+.pf-publish-tree > header small,
+.pf-publish-editor > header small { overflow: hidden; color: var(--admin-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.pf-publish-tree > header > button { display: flex; align-items: center; gap: 5px; padding: 7px 9px; color: var(--admin-primary); border: 1px solid var(--admin-line-strong); border-radius: 99px; background: var(--admin-panel-solid); font-size: 9px; font-weight: 750; cursor: pointer; }
+.pf-publish-tree > header > button svg { width: 14px; }
+.pf-publish-tree-scroll,
+.pf-publish-editor-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.pf-publish-tree-scroll { padding: 8px; }
+.pf-publish-editor { display: flex; flex-direction: column; background: var(--admin-panel-solid); }
+.pf-publish-editor > header > div { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.pf-publish-editor > header > div > svg { flex: 0 0 auto; width: 18px; color: var(--admin-primary); }
+.pf-publish-editor > header > i { padding: 5px 8px; border-radius: 999px; font-size: 8px; font-style: normal; font-weight: 800; text-transform: uppercase; }
+.pf-publish-editor > header > i.ready { color: var(--admin-success); background: var(--admin-success-soft); }
+.pf-publish-editor > header > i.needs-attention { color: var(--admin-danger); background: var(--admin-danger-soft); }
+.pf-publish-editor-scroll { padding: 16px; }
+
+.pf-publish-tree-folder,
+.pf-publish-tree-file {
+  margin-left: calc(var(--tree-depth, 0) * 14px);
+}
+.pf-publish-tree-folder { display: grid; grid-template-columns: 16px 18px minmax(0, 1fr) auto; align-items: center; gap: 5px; width: calc(100% - var(--tree-depth, 0) * 14px); min-height: 35px; padding: 4px 7px; color: var(--admin-ink-soft); border: 0; border-radius: 8px; background: transparent; font-size: 10px; text-align: left; cursor: pointer; }
+.pf-publish-tree-folder:hover { background: var(--admin-panel-solid); }
+.pf-publish-tree-folder svg { width: 14px; }
+.pf-publish-tree-folder small { color: var(--admin-muted); }
+.pf-publish-tree-file { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 3px; padding: 5px; border: 1px solid transparent; border-radius: 10px; }
+.pf-publish-tree-file.is-active { border-color: var(--admin-line-strong); background: var(--admin-panel-solid); box-shadow: var(--admin-shadow-sm); }
+.pf-publish-tree-file > label { display: grid; align-self: center; place-items: center; cursor: pointer; }
+.pf-publish-tree-file > label input { position: absolute; opacity: 0; }
+.pf-publish-tree-file > label span { width: 15px; height: 15px; border: 1px solid var(--admin-line-strong); border-radius: 4px; background: var(--admin-panel-solid); }
+.pf-publish-tree-file > label input:checked + span { border-color: var(--admin-primary); background: var(--admin-primary); box-shadow: inset 0 0 0 3px var(--admin-panel-solid); }
+.pf-publish-tree-file > button { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 0; color: inherit; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.pf-publish-tree-file > button > svg { flex: 0 0 auto; width: 15px; color: var(--admin-primary); }
+.pf-publish-tree-file > button span { display: grid; min-width: 0; }
+.pf-publish-tree-file > button strong,
+.pf-publish-tree-file > button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-publish-tree-file > button strong { font-size: 10px; }
+.pf-publish-tree-file > button small { color: var(--admin-muted); font-size: 8px; }
+.pf-publish-tree-file > i { grid-column: 2; display: flex; align-items: center; gap: 3px; color: var(--admin-muted); font-size: 7px; font-style: normal; font-weight: 800; text-transform: uppercase; }
+.pf-publish-tree-file > i svg { width: 10px; height: 10px; }
+.pf-publish-tree-file > i.ready { color: var(--admin-success); }
+.pf-publish-tree-file > i.needs-attention { color: var(--admin-danger); }
+
+.pf-publish-bulk { padding: 12px; border: 1px solid var(--admin-line-strong); border-radius: 12px; background: var(--admin-panel-solid); box-shadow: var(--admin-shadow-sm); }
+.pf-publish-bulk > label,
+.pf-publish-paid > label { display: grid; gap: 5px; margin-top: 9px; color: var(--admin-ink-soft); font-size: 9px; font-weight: 700; }
+.pf-publish-bulk input,
+.pf-publish-bulk select,
+.pf-publish-bulk textarea,
+.pf-publish-paid input,
+.pf-publish-paid textarea,
+.pf-publish-sections input,
+.pf-publish-sections textarea { width: 100%; padding: 9px 10px; color: var(--admin-ink); border: 1px solid var(--admin-line-strong); border-radius: 9px; outline: 0; background: var(--admin-panel-solid); font-size: 10px; resize: vertical; }
+.pf-publish-bulk input:focus,
+.pf-publish-bulk select:focus,
+.pf-publish-bulk textarea:focus,
+.pf-publish-paid input:focus,
+.pf-publish-paid textarea:focus,
+.pf-publish-sections input:focus,
+.pf-publish-sections textarea:focus { border-color: var(--admin-primary); box-shadow: 0 0 0 3px var(--admin-accent-soft); }
+.pf-publish-bulk > .pf-admin-button { width: 100%; margin-top: 10px; }
+.pf-publish-segmented { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: 9px; background: var(--admin-panel-soft); }
+.pf-publish-segmented button { padding: 7px; color: var(--admin-muted); border: 0; border-radius: 7px; background: transparent; font-size: 8px; font-weight: 750; cursor: pointer; }
+.pf-publish-segmented button.is-active { color: var(--admin-primary); background: var(--admin-panel-solid); box-shadow: var(--admin-shadow-sm); }
+
+.pf-publish-access { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; padding: 0; border: 0; }
+.pf-publish-access legend { grid-column: 1 / -1; margin-bottom: 7px; font-size: 10px; font-weight: 750; }
+.pf-publish-access label { position: relative; cursor: pointer; }
+.pf-publish-access input { position: absolute; opacity: 0; }
+.pf-publish-access label > span { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 2px 8px; min-height: 72px; padding: 10px; border: 1px solid var(--admin-line); border-radius: 12px; background: var(--admin-panel-soft); transition: border-color 160ms ease, transform 160ms ease, background 160ms ease; }
+.pf-publish-access label:hover > span { transform: translateY(-1px); }
+.pf-publish-access label.is-active > span { border-color: var(--admin-primary); background: var(--admin-accent-soft); }
+.pf-publish-access svg { grid-row: 1 / 3; width: 22px; color: var(--admin-primary); }
+.pf-publish-access strong { font-size: 11px; }
+.pf-publish-access small { color: var(--admin-muted); font-size: 8px; }
+.pf-publish-paid > label span { display: flex; justify-content: space-between; }
+.pf-publish-paid > label b { color: var(--admin-danger); font-size: 7px; text-transform: uppercase; }
+
+.pf-publish-location-card {
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--admin-line-strong);
+  border-radius: 12px;
+  background: var(--admin-panel-soft);
+}
+.pf-publish-location-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.pf-publish-location-card > header > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.pf-publish-location-card > header > div > svg {
+  flex: 0 0 auto;
+  width: 18px;
+  color: var(--admin-primary);
+}
+.pf-publish-location-card > header strong {
+  font-size: 11px;
+}
+.pf-publish-location-card > header small {
+  color: var(--admin-muted);
+  font-size: 9px;
+}
+.pf-publish-location-card > header > i {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.pf-publish-location-card > header > i.ready {
+  color: var(--admin-success);
+  background: var(--admin-success-soft);
+}
+.pf-publish-location-card > header > i.needs-attention {
+  color: var(--admin-danger);
+  background: var(--admin-danger-soft);
+}
+.pf-publish-location-card > label {
+  display: grid;
+  gap: 5px;
+  color: var(--admin-ink-soft);
+  font-size: 9px;
+  font-weight: 700;
+}
+.pf-publish-location-card > label b {
+  color: var(--admin-danger);
+  font-size: 7px;
+  text-transform: uppercase;
+}
+.pf-publish-location-card input {
+  width: 100%;
+  padding: 9px 10px;
+  color: var(--admin-ink);
+  border: 1px solid var(--admin-line-strong);
+  border-radius: 9px;
+  outline: 0;
+  background: var(--admin-panel-solid);
+  font-size: 11px;
+}
+.pf-publish-location-card input:focus {
+  border-color: var(--admin-primary);
+  box-shadow: 0 0 0 3px var(--admin-accent-soft);
+}
+.pf-publish-location-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--admin-danger);
+  font-size: 9px;
+  line-height: 1.4;
+}
+.pf-publish-location-warning svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.pf-publish-samples,
+.pf-publish-sections,
+.pf-publish-free-note,
+.pf-publish-validation-note { margin-top: 14px; padding: 12px; border: 1px solid var(--admin-line); border-radius: 12px; background: var(--admin-panel-soft); }
+.pf-publish-samples > header,
+.pf-publish-sections > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pf-publish-samples > header div,
+.pf-publish-sections > header div { display: grid; }
+.pf-publish-samples strong,
+.pf-publish-sections strong { font-size: 10px; }
+.pf-publish-samples small,
+.pf-publish-sections small { color: var(--admin-muted); font-size: 8px; }
+.pf-publish-samples > header label,
+.pf-publish-sections > header button { display: flex; align-items: center; gap: 5px; padding: 7px 9px; color: var(--admin-primary); border: 1px solid var(--admin-line-strong); border-radius: 8px; background: var(--admin-panel-solid); font-size: 8px; font-weight: 750; cursor: pointer; }
+.pf-publish-samples > header label.is-disabled { opacity: 0.45; cursor: not-allowed; }
+.pf-publish-samples > header svg,
+.pf-publish-sections > header svg { width: 13px; }
+.pf-publish-samples > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.pf-publish-samples article { overflow: hidden; border: 1px solid var(--admin-line); border-radius: 10px; background: var(--admin-panel-solid); }
+.pf-publish-samples img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.pf-publish-samples article > span { display: grid; gap: 5px; padding: 7px; }
+.pf-publish-samples article > span > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-publish-samples article > span > div { display: flex; gap: 8px; }
+.pf-publish-samples article label,
+.pf-publish-samples article button { padding: 0; color: var(--admin-primary); border: 0; background: transparent; font-size: 7px; font-weight: 750; cursor: pointer; }
+.pf-publish-samples article button { color: var(--admin-danger); }
+.pf-publish-inline-error { display: flex; align-items: center; gap: 5px; margin: 8px 0 0; color: var(--admin-danger); font-size: 8px; }
+.pf-publish-inline-error svg { width: 13px; }
+.pf-publish-limit-note { margin: 8px 0 0; color: var(--admin-muted); font-size: 8px; font-weight: 700; letter-spacing: 0.01em; }
+
+.pf-publish-sections article { margin-top: 10px; padding: 9px; border: 1px solid var(--admin-line); border-radius: 9px; background: var(--admin-panel-solid); }
+.pf-publish-sections article > div { display: flex; align-items: center; gap: 4px; margin-bottom: 7px; }
+.pf-publish-sections article > div span { margin-right: auto; color: var(--admin-muted); font-size: 8px; font-weight: 750; text-transform: uppercase; }
+.pf-publish-sections article > div button { display: grid; width: 24px; height: 24px; padding: 0; color: var(--admin-muted); border: 0; border-radius: 6px; place-items: center; background: transparent; cursor: pointer; }
+.pf-publish-sections article > div button:hover:not(:disabled) { color: var(--admin-primary); background: var(--admin-accent-soft); }
+.pf-publish-sections article > div button:last-child:hover:not(:disabled) { color: var(--admin-danger); background: var(--admin-danger-soft); }
+.pf-publish-sections article > div button:disabled { opacity: 0.3; }
+.pf-publish-sections article > div svg { width: 12px; }
+.pf-publish-sections article textarea { margin-top: 6px; }
+
+.pf-publish-free-note,
+.pf-publish-validation-note { display: flex; align-items: flex-start; gap: 9px; }
+.pf-publish-free-note > svg { width: 20px; color: var(--admin-success); }
+.pf-publish-validation-note { color: var(--admin-danger); border-color: color-mix(in srgb, var(--admin-danger) 25%, transparent); background: var(--admin-danger-soft); }
+.pf-publish-validation-note > svg { width: 20px; flex: 0 0 auto; }
+.pf-publish-free-note strong,
+.pf-publish-validation-note strong { font-size: 10px; }
+.pf-publish-free-note p,
+.pf-publish-validation-note p { margin: 3px 0 0; color: var(--admin-muted); font-size: 9px; line-height: 1.45; }
+.pf-publish-validation-note p { color: inherit; }
+.pf-publish-no-file { display: grid; flex: 1; color: var(--admin-muted); place-items: center; place-content: center; }
+
+.pf-publish-review > header { padding: 14px; border: 1px solid var(--admin-line); border-radius: var(--admin-radius-md); background: var(--admin-panel-soft); }
+.pf-publish-review > header > div { display: flex; align-items: center; gap: 10px; }
+.pf-publish-review > header > div > span { display: grid; width: 36px; height: 36px; flex: 0 0 auto; border-radius: 10px; place-items: center; }
+.pf-publish-review > header > div > span.is-ready { color: var(--admin-success); background: var(--admin-success-soft); }
+.pf-publish-review > header > div > span.has-issues { color: var(--admin-danger); background: var(--admin-danger-soft); }
+.pf-publish-review > header > strong { max-width: 35%; color: var(--admin-primary); font-size: 9px; text-align: right; }
+.pf-publish-review-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px; }
+.pf-publish-review-stats > div { display: grid; gap: 2px; padding: 10px; border: 1px solid var(--admin-line); border-radius: 10px; background: var(--admin-panel); }
+.pf-publish-review-stats strong { font-size: 13px; }
+.pf-publish-review-stats span { color: var(--admin-muted); font-size: 8px; }
+.pf-publish-review-list article { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto 26px; align-items: center; gap: 10px; min-height: 52px; padding: 8px 12px; border-top: 1px solid var(--admin-line); }
+.pf-publish-review-list article:first-child { border-top: 0; }
+.pf-publish-review-list article.has-issues { background: var(--admin-danger-soft); }
+.pf-publish-review-list article > svg { width: 17px; color: var(--admin-primary); }
+.pf-publish-review-list article > div { display: grid; min-width: 0; }
+.pf-publish-review-list article strong,
+.pf-publish-review-list article small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-publish-review-list article strong { font-size: 10px; }
+.pf-publish-review-list article small,
+.pf-publish-review-list article > span,
+.pf-publish-review-list article > i { color: var(--admin-muted); font-size: 8px; font-style: normal; }
+.pf-publish-review-list article > i { color: var(--admin-success); font-weight: 800; }
+.pf-publish-review-list article.has-issues > i { color: var(--admin-danger); }
+.pf-publish-review-list article > button { padding: 5px 7px; color: var(--admin-danger); border: 1px solid currentColor; border-radius: 7px; background: transparent; font-size: 8px; font-weight: 750; cursor: pointer; }
+.pf-publish-review-list article > svg:last-child { width: 16px; color: var(--admin-success); }
+.pf-publish-review-assurance { display: flex; align-items: center; gap: 6px; }
+.pf-publish-review-assurance svg { width: 14px; color: var(--admin-success); }
+
+.pf-publish-progress { display: grid; flex: 1; text-align: center; place-items: center; place-content: center; }
+.pf-publish-progress > span { margin-bottom: 12px; }
+.pf-publish-progress > div { display: flex; gap: 6px; width: min(280px, 70vw); margin-top: 18px; }
+.pf-publish-progress > div i { height: 3px; flex: 1; border-radius: 99px; background: var(--admin-line-strong); transition: background 180ms ease; }
+.pf-publish-progress > div i.is-active { background: var(--admin-primary); }
+.pf-publish-progress--completed > span { color: var(--admin-success); background: var(--admin-success-soft); }
+.pf-publish-progress--failed > span { color: var(--admin-danger); background: var(--admin-danger-soft); }
+.pf-publish-progress .is-spinning { animation: pf-publish-spin 800ms linear infinite; }
+@keyframes pf-publish-spin { to { transform: rotate(360deg); } }
+
+.pf-publish-discard { position: absolute; inset: 0; z-index: 5; display: grid; padding: 18px; place-items: center; background: rgba(8, 16, 29, 0.5); backdrop-filter: blur(7px); }
+.pf-publish-discard > div { width: min(100%, 390px); padding: 22px; text-align: center; border: 1px solid var(--admin-line-strong); border-radius: var(--admin-radius-lg); background: var(--admin-panel-solid); box-shadow: var(--admin-shadow-lg); }
+.pf-publish-discard > div > svg { width: 30px; color: var(--admin-warning); }
+.pf-publish-discard h3 { margin: 10px 0 0; font-size: 16px; }
+.pf-publish-discard p { margin: 7px 0 16px; color: var(--admin-muted); font-size: 10px; line-height: 1.55; }
+.pf-publish-discard > div > div { display: flex; justify-content: center; gap: 8px; }
+
+@media (max-width: 800px) {
+  .pf-admin-dialog--wide .pf-admin-dialog__header p { max-width: 72vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pf-publish-workflow { height: calc(100dvh - 172px); min-height: 0; overflow: auto; }
+  .pf-publish-steps { position: sticky; top: 0; z-index: 3; padding: 10px 14px; }
+  .pf-publish-steps li { justify-content: center; }
+  .pf-publish-steps li strong { display: none; }
+  .pf-publish-steps li:not(:last-child)::after { right: -24%; left: 64%; }
+  .pf-publish-dropzone { grid-template-columns: 42px minmax(0, 1fr); padding: 14px; }
+  .pf-publish-dropzone > span { width: 42px; height: 42px; }
+  .pf-publish-dropzone > div:last-of-type { grid-column: 1 / -1; }
+  .pf-publish-dropzone > div:last-of-type .pf-admin-button { flex: 1; }
+  .pf-publish-session-summary { grid-template-columns: 1fr 1fr; }
+  .pf-publish-configure { display: block; overflow: auto; }
+  .pf-publish-tree { min-height: 260px; max-height: 42dvh; border-right: 0; border-bottom: 1px solid var(--admin-line); }
+  .pf-publish-editor { min-height: 480px; }
+  .pf-publish-editor-scroll { overflow: visible; }
+  .pf-publish-review-stats { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 520px) {
+  .pf-publish-select,
+  .pf-publish-review { padding: 13px; }
+  .pf-publish-dropzone { grid-template-columns: 1fr; text-align: center; }
+  .pf-publish-dropzone > span { margin-inline: auto; }
+  .pf-publish-dropzone > div:last-of-type { display: grid; }
+  .pf-publish-session-summary { grid-template-columns: 1fr; }
+  .pf-publish-selection-list > header { align-items: flex-start; flex-direction: column; }
+  .pf-publish-selection-list > header > span { color: var(--admin-success); }
+  .pf-publish-access { grid-template-columns: 1fr; }
+  .pf-publish-samples > div { grid-template-columns: 1fr; }
+  .pf-publish-review > header { align-items: flex-start; flex-direction: column; }
+  .pf-publish-review > header > strong { max-width: 100%; text-align: left; }
+  .pf-publish-review-stats { grid-template-columns: 1fr 1fr; }
+  .pf-publish-review-list article { grid-template-columns: 22px minmax(0, 1fr) auto; }
+  .pf-publish-review-list article > span { grid-column: 2; }
+  .pf-publish-review-list article > i,
+  .pf-publish-review-list article > button,
+  .pf-publish-review-list article > svg:last-child { grid-column: 3; grid-row: 1 / 3; }
+  .pf-publish-discard > div > div { flex-direction: column-reverse; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-publish-workflow *,
+  .pf-publish-workflow *::before,
+  .pf-publish-workflow *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

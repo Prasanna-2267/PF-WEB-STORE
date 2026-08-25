@@ -3,48 +3,50 @@
 ## Runtime composition
 
 ```text
-main.tsx
-└─ App
-   └─ ThemeProvider
-      └─ LenisProvider
-         └─ AppRouter
-            ├─ PublicLayout
-            │  └─ HomePage
-            └─ PublicOnlyRoute
-               └─ AuthLayout
-                  ├─ LoginPage
-                  ├─ RegisterPage
-                  └─ ForgotPasswordPage
+AppRouter
+|- PublicExperienceRoute
+|  |- PublicLayout -> HomePage
+|  `- StoreLayout -> Store pages
+|- PublicOnlyRoute -> AuthLayout -> Auth pages
+`- RequireSuperAdmin
+   `- AdminLayout
+      |- Overview
+      |- Students -> Student Details
+      |- Orders -> Student Details
+      |- Content
+      |- Packages
+      |- Questions
+      `- Future-module placeholders
 ```
 
-`App` keeps the same neutral layout wrappers previously used by production, but it does not create a canvas or background render loop.
+## State and adapters
 
-## State
+- `useThemeStore` owns the shared light/dark preference.
+- `useAuthStore` owns the local UI session and typed role/permission claims.
+- `useAdminStore` owns admin request state, queries, selected records, mutations, feedback, and stale-request protection.
+- `useContentStore` owns folder navigation history, sorting/view preferences, uploads, content mutations, and stale-request protection.
+- `usePackageStore` owns package catalogue request state and create, update, and delete mutations.
+- `useBroadcastStore` owns Broadcast list state and the complete draft, scheduling, publication, disable/enable, archive/restore, duplicate, and delete lifecycle.
+- `useQuestionStore` owns the Question Bank, editor lifecycle, taxonomy hierarchy, trash, and spreadsheet import state through replaceable local repositories.
+- `AdminRepository` defines the data boundary.
+- `mockAdminRepository` is the current browser-persistent fictional adapter.
+- `ContentRepository` defines a separate content/storage boundary. `mockContentRepository` persists the ID-based hierarchy and metadata locally while holding uploaded binary sources only for the active browser runtime.
+- `PackageRepository` defines the package catalogue boundary. `mockPackageRepository` persists package metadata and stable Content item references without duplicating files or folders.
+- `BroadcastRepository` defines the communications boundary. `mockBroadcastRepository` persists audience, presentation, scheduling, behavior, and lifecycle state locally for interface development.
+- `QuestionRepository` and `TaxonomyRepository` define the backend-ready boundaries for question lifecycle, import publishing, and Course -> Subject -> Chapter -> Lesson -> Topic taxonomy persistence.
 
-`useThemeStore` persists `light` or `dark` under `pf_theme_mode` and mirrors the mode to the root HTML class.
+The admin stores can be constructed against different repository adapters, allowing the browser-persistent mocks to be replaced by HTTP adapters without rewriting page components.
 
-`useAuthStore` persists the local user/token state under `pf_auth_token`. It is a UI session store, not a server-validated security boundary.
+## Admin isolation
 
-## Presentation
+The Admin Console has its own shell, CSS namespace, navigation, route transitions, loading states, dialogs, feedback, and responsive behavior. Admin chunks are lazy-loaded. The admin root uses `data-lenis-prevent` so the public smooth-scroll provider does not control admin tables, drawers, or dialogs.
 
-The active CSS is intentionally separated by responsibility:
+`RequireSuperAdmin` is a client presentation guard, not the authoritative security layer. Production APIs must independently validate the session, role, and permission for every read and mutation.
 
-- `theme.css`
-- `navbar.css`
-- `hero.css`
-- `contact.css`
-- `footer.css`
-- `login.css`
-- `src/styles/index.css`
+## Motion and accessibility
 
-Responsive rules are co-located at the end of their owning stylesheets. This is intentional: a shared responsive stylesheet was imported before later desktop rules by Vite's module graph, causing desktop navbar/contact declarations to override active mobile breakpoints.
+Admin motion is limited to opacity and transforms with a centralized natural ease. Reduced-motion preferences remove spatial movement. The shell provides a skip link, route focus management, an accessible responsive navigation dialog, focus-trapped action dialogs, live feedback, visible focus states, and horizontally scrollable data tables on narrow screens.
 
-The landing-page navbar and footer live in `HomePage.tsx`. The auth layout contains its own matching header/footer composition.
+## Deployment and indexing
 
-## SEO
-
-`index.html` supplies crawlable defaults. `SeoHead` updates the title, description, canonical URL, Open Graph, Twitter, and JSON-LD values for the landing page, contact route, login, registration, and forgot-password screens.
-
-## Deployment
-
-Vite 6 builds static assets to `dist`. Cloudflare Pages rewrites only registered routes through `public/_redirects`, serves unknown direct requests through `public/404.html`, and applies the rules in `public/_headers`. Entry HTML is no-store and no-transform; hashed assets remain immutable. There is no Vercel deployment configuration.
+Vite builds static assets to `dist`. Cloudflare Pages serves the SPA. Admin routes receive no-store/noindex response headers and route-level robots metadata.

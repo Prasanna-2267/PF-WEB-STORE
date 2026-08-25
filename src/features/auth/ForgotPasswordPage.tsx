@@ -7,15 +7,19 @@ import { SeoHead } from '@/seo/SeoHead';
 export const ForgotPasswordPage: React.FC = () => {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
+    setError('');
     const data = new FormData(event.currentTarget);
 
     try {
       await authService.requestPasswordReset(String(data.get('email')));
       setSent(true);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Password recovery is unavailable.');
     } finally {
       setLoading(false);
     }
@@ -45,6 +49,7 @@ export const ForgotPasswordPage: React.FC = () => {
               Email address
               <input name="email" type="email" required placeholder="you@example.com" />
             </label>
+            {error && <p className="pf-auth-error">{error}</p>}
             <button disabled={loading}>
               {loading ? 'Sending…' : 'Send reset link'} <span>→</span>
             </button>

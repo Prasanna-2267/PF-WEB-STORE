@@ -408,7 +408,7 @@ a.pf-store-button--dark svg {
   min-height: 48px;
   padding: 0 22px;
   display: grid;
-  grid-template-columns: 150px 1fr auto;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   border-top: 1px solid var(--store-line);
   color: var(--store-muted);
@@ -418,11 +418,47 @@ a.pf-store-button--dark svg {
 }
 
 .pf-store-header__nav a { text-decoration: none; }
-.pf-store-header__nav > div { display: flex; align-items: center; justify-content: center; gap: clamp(22px, 3vw, 48px); }
-.pf-store-header__nav > div a { min-height: 48px; display: inline-flex; align-items: center; border-bottom: 2px solid transparent; }
-.pf-store-header__nav > div a.active { border-color: var(--store-accent); color: var(--store-ink); }
+.pf-store-nav-left { display: flex; align-items: center; gap: 14px; }
+.pf-store-nav-center { display: flex; align-items: center; justify-content: center; gap: clamp(20px, 3vw, 44px); }
+.pf-store-nav-center a { min-height: 48px; display: inline-flex; align-items: center; border-bottom: 2px solid transparent; color: var(--store-muted); }
+.pf-store-nav-center a.active { border-color: var(--store-accent); color: var(--store-ink); }
 .pf-store-header__nav > a:last-child { display: inline-flex; align-items: center; gap: 7px; }
-.pf-store-nav-title { color: var(--store-ink); font-size: 12px; }
+.pf-store-nav-title { color: var(--store-ink); font-size: 12px; font-weight: 700; }
+
+.pf-store-nav-course-selector {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 4px;
+}
+
+.pf-store-nav-course-selector select {
+  appearance: none;
+  background: var(--store-paper);
+  border: 1px solid var(--store-line);
+  border-radius: 999px;
+  padding: 4px 26px 4px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--store-ink);
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%230284c7' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.dark .pf-store-nav-course-selector select {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #f8fafc;
+}
+
+.pf-store-nav-course-selector select:hover,
+.pf-store-nav-course-selector select:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
 
 .pf-store-mobile-menu {
   position: absolute;

@@ -27,6 +27,7 @@ import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } 
 import { useAuthStore } from '@/app/store/useAuthStore';
 import { useCartStore } from '@/app/store/useCartStore';
 import { buildStoreCategoryPath, buildStoreProductPath, ROUTES } from '@/config/routes';
+import { apiRequest } from '@/lib/api/client';
 import { SeoHead } from '@/seo/SeoHead';
 import {
   generateBreadcrumbListJsonLd,
@@ -40,6 +41,16 @@ import {
   getProductsByCourse,
   storeProducts,
 } from './data/catalog';
+import {
+  usePublicCatalog,
+  usePublicCatalogPackage,
+  usePublicCatalogContent,
+  usePublicCatalogCollection,
+  usePublicCatalogUserCourses,
+  adaptCatalogPackageToProduct,
+  adaptCatalogItemToProduct,
+} from './data/publicCatalogApi';
+import { useStoreContextStore } from './data/useStoreContext';
 import type { CourseCategory, StoreProduct, StoreProductType } from './types/catalog';
 import {
   getProductTypeLabel,
@@ -155,23 +166,68 @@ const FeaturedCollectionRail: React.FC<{
     </div>
   );
 };
+const MerchandisingCollectionRail: React.FC<{
+  collectionKey: 'best-sellers' | 'new-releases' | 'most-popular' | 'recommended';
+  courseSlug: string;
+  userId?: string;
+  fallbackProducts: StoreProduct[];
+}> = ({ collectionKey, courseSlug, userId, fallbackProducts }) => {
+  const collectionQuery = usePublicCatalogCollection(collectionKey, courseSlug, userId);
+  const liveItems = (collectionQuery.data?.products || []).map((p: any) =>
+    p.type === 'bundle' ? adaptCatalogPackageToProduct(p) : adaptCatalogItemToProduct(p)
+  );
+  const displayProducts = liveItems.length ? liveItems : fallbackProducts;
+
+  if (!displayProducts.length) return null;
+  return <FeaturedCollectionRail collection={collectionKey} products={displayProducts} />;
+};
 
 export const StoreHomePage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const user = useAuthStore((state) => state.user);
-  const activeCourse = enrolledCourseFor(user?.enrolledCourse?.slug);
+  const selectedCourseSlug = useStoreContextStore((state) => state.selectedCourseSlug);
   const query = searchParams.get('query')?.trim().toLowerCase() || '';
   const type = searchParams.get('type');
 
+  const catalogQuery = usePublicCatalog({ search: query || undefined });
+  const liveProducts = useMemo(() => {
+    const pkgs = (catalogQuery.data?.packages || []).map(adaptCatalogPackageToProduct);
+    const items = (catalogQuery.data?.paidItems || []).map(adaptCatalogItemToProduct);
+    return [...pkgs, ...items];
+  }, [catalogQuery.data]);
+
   const visibleProducts = useMemo(() => {
-    let products = storeProducts.filter((product) => product.isActive && (!activeCourse || product.course === activeCourse.slug));
-    if (type === 'notes') products = products.filter((product) => noteTypes.includes(product.productType));
-    if (type === 'bundle' || type === 'subscription') products = products.filter((product) => product.productType === type);
+    const pool = liveProducts.length ? liveProducts : storeProducts;
+    const realDbCourses = catalogQuery.data?.courses || [];
+    const matchedCourse = realDbCourses.find((c) => c.slug === selectedCourseSlug || c.id === selectedCourseSlug);
+
+    let products = pool.filter(
+      (product) =>
+        product.isActive &&
+        (selectedCourseSlug === 'all' ||
+          product.course === selectedCourseSlug ||
+          product.courseId === selectedCourseSlug ||
+          (matchedCourse && (product.course === matchedCourse.slug || product.courseId === matchedCourse.id)))
+    );
+
+    if (type === 'notes') {
+      products = products.filter((product) => product.productType !== 'bundle' && product.productType !== 'subscription');
+    } else if (type === 'bundle') {
+      products = products.filter((product) => product.productType === 'bundle');
+    } else if (type === 'subscription') {
+      products = products.filter((product) => product.productType === 'subscription');
+    }
+
     if (query) {
-      products = products.filter((product) => [product.title, product.subject, product.faculty, product.shortDescription, ...product.tags, ...product.chapters].join(' ').toLowerCase().includes(query));
+      products = products.filter((product) =>
+        [product.title, product.subject, product.faculty, product.shortDescription, ...product.tags, ...product.chapters]
+          .join(' ')
+          .toLowerCase()
+          .includes(query)
+      );
     }
     return products;
-  }, [activeCourse, query, type]);
+  }, [liveProducts, query, selectedCourseSlug, type, catalogQuery.data?.courses]);
 
   const location = useLocation();
   const isBrowsing = Boolean(query || type);
@@ -202,7 +258,7 @@ export const StoreHomePage: React.FC = () => {
                 <h1>Learning.<br /><em>Beautifully Crafted.</em></h1>
                 <p>Discover visual notes, revision resources, question banks, and learning tools designed to make every concept easier to understand and revisit.</p>
                 <div className="pf-store-hero__actions">
-                  <Link className="pf-store-button pf-store-button--dark" to={buildStoreCategoryPath(activeCourse ? activeCourse.slug : 'ca-intermediate')}>Browse Resources <ArrowRight size={17} /></Link>
+                  <Link className="pf-store-button pf-store-button--dark" to={buildStoreCategoryPath(selectedCourseSlug !== 'all' ? selectedCourseSlug : 'ca-intermediate')}>Browse Resources <ArrowRight size={17} /></Link>
                   <Link className="pf-store-button" to={ROUTES.STORE_PURCHASES}>My library</Link>
                 </div>
                 <ul className="pf-store-trust-list">
@@ -227,33 +283,47 @@ export const StoreHomePage: React.FC = () => {
               <article><span>03</span><strong>Learn Without Delay</strong><p>Your resources are ready in your library immediately after purchase.</p></article>
             </section>
 
-            {!activeCourse && (
-              <section className="pf-store-section" id="courses">
-                <StoreSectionHeading eyebrow="Public catalogue" title="Choose your learning path." copy="Browsing is open. Sign in is only required when you decide to purchase." />
-                <div className="pf-store-course-grid">
-                  {courseCategories.map((course, index) => (
-                    <motion.div key={course.slug} initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * .05 }}>
-                      <Link to={buildStoreCategoryPath(course.slug)} className="pf-store-course-card" data-family={course.family.toLowerCase()}>
-                        <span>{course.family}</span><h3>{course.name}</h3><p>{course.description}</p><small>{course.subjects.length} subjects <ArrowRight size={14} /></small>
+            <section className="pf-store-section" id="courses">
+              <StoreSectionHeading eyebrow="Public catalogue" title="Choose your learning path." copy="Browsing is open. Sign in is only required when you decide to purchase." />
+              <div className="pf-store-course-grid">
+                {(catalogQuery.data?.courses || []).map((course, index) => {
+                  const packageCount = course._count?.packages ?? 0;
+                  const subjectCount = course._count?.subjects ?? 0;
+                  const countLabel = `${packageCount} package${packageCount === 1 ? '' : 's'} · ${subjectCount} subject${subjectCount === 1 ? '' : 's'}`;
+
+                  return (
+                    <motion.div key={course.id} initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * .05 }}>
+                      <Link to={buildStoreCategoryPath(course.slug || course.id)} className="pf-store-course-card" data-family={(course.code || 'Course').toLowerCase()}>
+                        <span>{course.code || 'COURSE'}</span>
+                        <h3>{course.name}</h3>
+                        <p>{course.description || 'Visual learning resources for your course curriculum.'}</p>
+                        <small>{countLabel} <ArrowRight size={14} /></small>
                       </Link>
                     </motion.div>
-                  ))}
-                </div>
-              </section>
-            )}
+                  );
+                })}
+              </div>
+            </section>
           </>
         )}
 
         <section className="pf-store-section" id="featured" style={isBrowsing ? { paddingTop: 40 } : undefined}>
-          <StoreSectionHeading eyebrow={activeCourse ? activeCourse.name : 'Curated collections'} title={isBrowsing ? (query ? `Results for “${query}”` : type === 'bundle' ? 'Learning bundles.' : type === 'subscription' ? 'Subscriptions.' : 'Premium notes.') : 'A better shelf for better preparation.'} copy={isBrowsing ? `${visibleProducts.length} resource${visibleProducts.length === 1 ? '' : 's'} available.` : 'Organised around how students actually prepare—not around a retail catalogue.'} />
+          <StoreSectionHeading eyebrow={selectedCourseSlug !== 'all' ? ((catalogQuery.data?.courses || []).find(c => c.slug === selectedCourseSlug || c.id === selectedCourseSlug)?.name || 'Course Scoped') : 'Curated collections'} title={isBrowsing ? (query ? `Results for “${query}”` : type === 'bundle' ? 'Learning bundles.' : type === 'subscription' ? 'Subscriptions.' : 'Premium notes.') : 'A better shelf for better preparation.'} copy={isBrowsing ? `${visibleProducts.length} resource${visibleProducts.length === 1 ? '' : 's'} available.` : 'Organised around how students actually prepare—not around a retail catalogue.'} />
           {isBrowsing ? (
             <StoreProductGrid products={[...visibleProducts]} compact />
           ) : (
             <div className="pf-store-collection-list">
               {(['best-sellers', 'new-releases', 'most-popular', 'recommended'] as const).map((collection) => {
-                const products = visibleProducts.filter((product) => product.collections.includes(collection)).slice(0, 8);
-                if (!products.length) return null;
-                return <FeaturedCollectionRail key={collection} collection={collection} products={products} />;
+                const fallbackProducts = visibleProducts.filter((product) => product.collections.includes(collection)).slice(0, 8);
+                return (
+                  <MerchandisingCollectionRail
+                    key={collection}
+                    collectionKey={collection}
+                    courseSlug={selectedCourseSlug}
+                    userId={user?.id}
+                    fallbackProducts={fallbackProducts}
+                  />
+                );
               })}
             </div>
           )}
@@ -281,24 +351,77 @@ const CategoryFilters: React.FC<CategoryFiltersProps> = ({ subjects, subject, se
 
 export const StoreCategoryPage: React.FC = () => {
   const { categorySlug = '' } = useParams();
-  const user = useAuthStore((state) => state.user);
-  const requestedCourse = courseCategories.find((course) => course.slug === categorySlug);
-  const activeCourse = enrolledCourseFor(user?.enrolledCourse?.slug);
+  const navigate = useNavigate();
+  const selectedCourseSlug = useStoreContextStore((state) => state.selectedCourseSlug);
+  const catalogQuery = usePublicCatalog({ page: 1, limit: 100 });
+
+  const realDbCourses = catalogQuery.data?.courses || [];
+
+  const effectiveSlug = useMemo(() => {
+    if (selectedCourseSlug && selectedCourseSlug !== 'all') {
+      return selectedCourseSlug;
+    }
+    return categorySlug || (realDbCourses[0]?.slug || 'ca-intermediate');
+  }, [selectedCourseSlug, categorySlug, realDbCourses]);
+
+  const requestedCourse = useMemo(() => {
+    const found = realDbCourses.find((c: any) => c.slug === effectiveSlug || c.id === effectiveSlug);
+    if (found) {
+      return {
+        id: found.id,
+        slug: found.slug || found.id,
+        name: found.name,
+        description: found.description || `Visual learning resources for ${found.name}.`,
+        family: found.code || 'Course',
+      };
+    }
+    const cat = courseCategories.find((c) => c.slug === effectiveSlug);
+    if (cat) return cat;
+    return {
+      id: 'course-id',
+      slug: effectiveSlug,
+      name: effectiveSlug.replace(/-/g, ' ').toUpperCase(),
+      description: 'Visual learning resources for your course curriculum.',
+      family: 'Learning',
+    };
+  }, [realDbCourses, effectiveSlug]);
+
   const [subject, setSubject] = useState('');
   const [productType, setProductType] = useState('');
   const [sort, setSort] = useState('featured');
 
-  if (activeCourse && requestedCourse && requestedCourse.slug !== activeCourse.slug) {
-    return <Navigate to={buildStoreCategoryPath(activeCourse.slug)} replace state={{ storeNotice: `Your account is enrolled in ${activeCourse.name}.` }} />;
-  }
-  if (!requestedCourse) return <StoreNotFoundPage />;
+  useEffect(() => {
+    if (requestedCourse.slug && categorySlug !== requestedCourse.slug) {
+      navigate(buildStoreCategoryPath(requestedCourse.slug), { replace: true });
+    }
+  }, [requestedCourse.slug, categorySlug, navigate]);
 
-  const products = getProductsByCourse(requestedCourse.slug)
-    .filter((product) => product.isActive)
+  const liveProducts = useMemo(() => {
+    const pkgs = (catalogQuery.data?.packages || []).map(adaptCatalogPackageToProduct);
+    const items = (catalogQuery.data?.paidItems || []).map(adaptCatalogItemToProduct);
+    return [...pkgs, ...items];
+  }, [catalogQuery.data]);
+
+  const courseProducts = useMemo(() => {
+    const pool = liveProducts.length ? liveProducts : storeProducts;
+    return pool.filter(
+      (product) =>
+        product.isActive &&
+        product.productType !== 'bundle' &&
+        product.productType !== 'subscription' &&
+        (selectedCourseSlug === 'all' ||
+          product.course === requestedCourse.slug ||
+          product.courseId === requestedCourse.id ||
+          product.course === requestedCourse.id ||
+          product.courseId === requestedCourse.slug)
+    );
+  }, [liveProducts, requestedCourse, selectedCourseSlug]);
+
+  const products = courseProducts
     .filter((product) => !subject || product.subject === subject)
     .filter((product) => !productType || product.productType === productType)
     .sort((a, b) => sort === 'price-low' ? a.price - b.price : sort === 'price-high' ? b.price - a.price : sort === 'newest' ? b.releaseDate.localeCompare(a.releaseDate) : b.rating - a.rating);
-  const subjects = [...new Set(getProductsByCourse(requestedCourse.slug).map((product) => product.subject))].sort();
+  const subjects = [...new Set(courseProducts.map((product) => product.subject))].sort();
   const canonicalPath = buildStoreCategoryPath(requestedCourse.slug);
   const jsonLd = [
     generateBreadcrumbListJsonLd([{ name: 'Store', url: ROUTES.STORE }, { name: requestedCourse.name, url: canonicalPath }]),
@@ -331,63 +454,205 @@ const ProductPreview: React.FC<{ product: StoreProduct; previewIndex: number }> 
   const preview = product.previewImages[previewIndex];
   return (
     <motion.div key={preview?.id || 'cover'} className="pf-store-product-preview" initial={{ opacity: 0, scale: .985 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .42 }}>
-      {preview?.kind === 'sample-page' ? (
-        <div className="pf-store-sample-preview"><span>Sample page</span><p>{product.subject}</p><h3>{product.learningOutcomes[0]}</h3><div>{product.tags.slice(0, 4).map((tag) => <i key={tag}>{tag}</i>)}</div><small>Real preview media will be published from the catalogue.</small></div>
-      ) : preview?.kind === 'contents' ? (
-        <div className="pf-store-contents-preview"><span>Inside this publication</span><h3>Contents</h3><ol>{product.chapters.slice(0, 6).map((chapter, index) => <li key={chapter}><b>{String(index + 1).padStart(2, '0')}</b>{chapter}</li>)}</ol></div>
-      ) : <StoreProductCover product={product} size="large" />}
+      {preview?.src ? (
+        <div className="pf-store-sample-preview" style={{ padding: 0, overflow: 'hidden', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img src={preview.src} alt={preview.alt || product.title} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+        </div>
+      ) : (
+        <StoreProductCover product={product} size="large" />
+      )}
     </motion.div>
   );
 };
 
 export const StoreProductPage: React.FC = () => {
   const { productSlug = '' } = useParams();
-  const product = getProductBySlug(productSlug);
-  const user = useAuthStore((state) => state.user);
-  const activeCourse = enrolledCourseFor(user?.enrolledCourse?.slug);
   const [previewIndex, setPreviewIndex] = useState(0);
 
-  if (!product || !product.isActive) return <StoreNotFoundPage />;
-  if (activeCourse && product.course !== activeCourse.slug) return <Navigate to={buildStoreCategoryPath(activeCourse.slug)} replace state={{ storeNotice: `${product.title} is outside your enrolled course.` }} />;
+  // Fetch the full catalog list to resolve the product
+  const catalogQuery = usePublicCatalog({ page: 1, limit: 100 });
+  const liveProducts = useMemo(() => {
+    const pkgs = (catalogQuery.data?.packages || []).map(adaptCatalogPackageToProduct);
+    const items = (catalogQuery.data?.paidItems || []).map(adaptCatalogItemToProduct);
+    return [...pkgs, ...items];
+  }, [catalogQuery.data]);
 
-  const course = courseCategories.find((item) => item.slug === product.course)!;
+  // Find the base product from list
+  const baseProduct = useMemo(() => {
+    const found = liveProducts.find((p) => p.slug === productSlug || p.id === productSlug);
+    if (found) return found;
+    return getProductBySlug(productSlug);
+  }, [liveProducts, productSlug]);
+
+  // Determine if this is a content item or package
+  const isContentItem = baseProduct?.productType !== 'bundle' && baseProduct?.productType !== 'subscription';
+  const isPackage = baseProduct?.productType === 'bundle' || baseProduct?.productType === 'subscription';
+
+  // Fetch full detail with signed image URLs
+  const contentDetailQuery = usePublicCatalogContent(isContentItem ? baseProduct?.id : undefined);
+  const packageDetailQuery = usePublicCatalogPackage(isPackage ? baseProduct?.id : undefined);
+
+  // Build the enriched product with signed preview images from detail API
+  const product = useMemo(() => {
+    if (!baseProduct) return null;
+
+    if (isContentItem && contentDetailQuery.data) {
+      const detail = contentDetailQuery.data;
+      return adaptCatalogItemToProduct({
+        ...detail,
+        courseId: detail.courseId || baseProduct.courseId || baseProduct.id,
+      } as any);
+    }
+
+    if (isPackage && packageDetailQuery.data) {
+      return adaptCatalogPackageToProduct(packageDetailQuery.data);
+    }
+
+    return baseProduct;
+  }, [baseProduct, isContentItem, isPackage, contentDetailQuery.data, packageDetailQuery.data]);
+
+  const catalogCourses = catalogQuery.data?.courses || [];
+  const course = useMemo(() => {
+    if (!product) return { id: '', name: 'Course', shortName: 'Course', slug: 'all' };
+    const found = catalogCourses.find((c) => c.slug === product.course || c.id === product.courseId);
+    if (found) return { id: found.id, name: found.name, shortName: found.code || found.name, slug: found.slug || found.id };
+    const cat = courseCategories.find((item) => item.slug === product.course);
+    if (cat) return { id: '', ...cat };
+    return { id: '', name: 'Course', shortName: 'Course', slug: 'all' };
+  }, [catalogCourses, product]);
+
+  const isLoading = catalogQuery.isLoading || (isContentItem && contentDetailQuery.isLoading) || (isPackage && packageDetailQuery.isLoading);
+
+  if (!product || !product.isActive) {
+    if (isLoading) {
+      return (
+        <PageReveal className="pf-store-product-page">
+          <div style={{ padding: '80px 20px', textAlign: 'center', color: 'var(--store-muted)' }}>
+            Loading product details...
+          </div>
+        </PageReveal>
+      );
+    }
+    return <StoreNotFoundPage />;
+  }
+
   const canonicalPath = buildStoreProductPath(product.slug);
   const jsonLd = [
-    generateStoreProductJsonLd({ name: product.title, description: product.description, image: '/logo.png', url: canonicalPath, sku: product.id, productId: product.id, category: `${course.name} / ${product.subject}`, offer: { price: product.price, availability: 'OnlineOnly' } }),
+    generateStoreProductJsonLd({ name: product.title, description: product.description || product.shortDescription, image: '/logo.png', url: canonicalPath, sku: product.id, productId: product.id, category: `${course.name} / ${product.subject}`, offer: { price: product.price, availability: 'OnlineOnly' } }),
     generateBreadcrumbListJsonLd([{ name: 'Store', url: ROUTES.STORE }, { name: course.name, url: buildStoreCategoryPath(course.slug) }, { name: product.title, url: canonicalPath }]),
   ];
 
+  // Only show sections that have real admin-entered data
+  const realSections = product.storeSections?.filter((s) => Boolean(s.heading?.trim() || s.content?.trim())) || [];
+  const realDescription = product.description?.trim();
+  const realChapters = product.chapters?.filter((c) => c?.trim()) || [];
+  const realAudience = product.audience?.filter((a) => a?.trim()) || [];
+  const realIncluded = product.included?.filter((i) => i?.trim()) || [];
+  const hasPreviewImages = product.previewImages.some((img) => img.src);
+
+  const previewList = hasPreviewImages
+    ? product.previewImages.slice(0, 4)
+    : [{ id: 'cover', kind: 'cover' as const, src: '', alt: product.title }];
+
   return (
     <>
-      <SeoHead title={`${product.title} | Parallax Flow Store`} description={product.shortDescription} canonicalPath={canonicalPath} image="/logo.png" ogType="product" jsonLd={jsonLd} />
+      <SeoHead title={`${product.title} | Parallax Flow Store`} description={product.shortDescription || product.title} canonicalPath={canonicalPath} image="/logo.png" ogType="product" jsonLd={jsonLd} />
       <PageReveal className="pf-store-product-page">
         <StoreBreadcrumbs items={[{ label: 'Store', to: ROUTES.STORE }, { label: course.shortName, to: buildStoreCategoryPath(course.slug) }, { label: product.title }]} />
         <div className="pf-store-product-intro">
           <section className="pf-store-product-gallery" aria-label="Product previews">
             <ProductPreview product={product} previewIndex={previewIndex} />
-            <div className="pf-store-product-thumbnails">
-              {(product.previewImages.length ? product.previewImages : [{ id: 'cover', kind: 'cover' as const }]).map((preview, index) => <button key={preview.id} className={previewIndex === index ? 'is-active' : ''} onClick={() => setPreviewIndex(index)}><span>{String(index + 1).padStart(2, '0')}</span>{preview.kind.replace('-', ' ')}</button>)}
-            </div>
+            {previewList.length > 1 && (
+              <div className="pf-store-product-thumbnails">
+                {previewList.map((preview, index) => (
+                  <button key={preview.id} className={previewIndex === index ? 'is-active' : ''} onClick={() => setPreviewIndex(index)}>
+                    <span>{String(index + 1).padStart(2, '0')}</span>
+                    {index === 0 ? 'Cover' : `Preview ${index}`}
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
           <aside className="pf-store-purchase-panel">
             <p className="pf-store-kicker">{product.subject} · {getProductTypeLabel(product.productType)}</p>
             <h1>{product.title}</h1>
-            <p className="pf-store-purchase-panel__description">{product.shortDescription}</p>
-            <div className="pf-store-purchase-panel__facts"><span>{product.language}</span><span>{product.difficulty.replace('-', ' ')}</span><span>{product.version}</span></div>
-            <div className="pf-store-purchase-panel__price"><strong>{formatPrice(product.price)}</strong>{product.discount && <><del>{formatPrice(product.discount.originalPrice)}</del><span>{product.discount.percentage}% off</span></>}</div>
+            {product.shortDescription && (
+              <p className="pf-store-purchase-panel__description">{product.shortDescription}</p>
+            )}
+            <div className="pf-store-purchase-panel__price">
+              <strong>{formatPrice(product.price)}</strong>
+              {product.discount && (
+                <>
+                  <del>{formatPrice(product.discount.originalPrice)}</del>
+                  <span>{product.discount.percentage}% off</span>
+                </>
+              )}
+            </div>
             <Link className="pf-store-button pf-store-button--dark pf-store-button--wide" to={`${ROUTES.STORE_CHECKOUT}?product=${encodeURIComponent(product.slug)}`}>Buy now <ArrowRight size={17} /></Link>
             <StoreAddToCartButton product={product} variant="wide" className="pf-store-button pf-store-button--dark pf-store-button--wide" />
-            <ul><li><Check size={15} /> Preview before purchase</li><li><Check size={15} /> Linked to your Parallax account</li><li><Check size={15} /> Unlocks in the Android app after verified payment</li></ul>
+            <ul>
+              <li><Check size={15} /> Preview before purchase</li>
+              <li><Check size={15} /> Linked to your Parallax account</li>
+              <li><Check size={15} /> Unlocks in the Android app after verified payment</li>
+            </ul>
           </aside>
         </div>
-        <div className="pf-store-product-story">
-          <section><p className="pf-store-kicker">About this publication</p><h2>Designed for understanding,<br /><em>not accumulation.</em></h2><p>{product.description}</p></section>
-          <section><h3>What you will learn</h3><ul>{product.learningOutcomes.map((item) => <li key={item}><CheckCircle2 size={17} />{item}</li>)}</ul></section>
-          <section><h3>What is included</h3><ul>{product.included.map((item) => <li key={item}><PackageCheck size={17} />{item}</li>)}</ul></section>
-          <section><h3>Topics covered</h3><div className="pf-store-topic-list">{product.chapters.map((item, index) => <span key={item}><b>{String(index + 1).padStart(2, '0')}</b>{item}</span>)}</div></section>
-          <section><h3>Who is this for?</h3><ul>{product.audience.map((item) => <li key={item}><CircleUserRound size={17} />{item}</li>)}</ul></section>
-          <section className="pf-store-faq"><h3>Before you purchase</h3><details><summary>Where do I read this resource?<ChevronRight size={16} /></summary><p>Inside the Parallax Flow Android app. The website handles discovery and purchase only.</p></details><details><summary>When will it unlock?<ChevronRight size={16} /></summary><p>After the payment provider and Parallax Flow server verify the order and grant the entitlement.</p></details><details><summary>Can I preview it first?<ChevronRight size={16} /></summary><p>Yes. The gallery above is reserved for real preview pages supplied by the catalogue.</p></details></section>
-        </div>
+
+        {/* Only render the story section if at least one of description / sections / chapters is real */}
+        {(realSections.length > 0 || realChapters.length > 0 || realIncluded.length > 0 || realAudience.length > 0) && (
+          <div className="pf-store-product-story">
+
+            {realSections.length > 0 && (
+              <section>
+                <h3>Highlights</h3>
+                <ul>
+                  {realSections.map((section) => (
+                    <li key={section.id}>
+                      <CheckCircle2 size={17} />
+                      <span>
+                        {section.heading?.trim() ? <strong>{section.heading}</strong> : null}
+                        {section.heading?.trim() && section.content?.trim() ? ' — ' : null}
+                        {section.content?.trim() ? section.content : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {realIncluded.length > 0 && (
+              <section>
+                <h3>What is included</h3>
+                <ul>{realIncluded.map((item) => <li key={item}><PackageCheck size={17} />{item}</li>)}</ul>
+              </section>
+            )}
+
+            {realChapters.length > 0 && (
+              <section>
+                <h3>Topics covered</h3>
+                <div className="pf-store-topic-list">
+                  {realChapters.map((item, index) => (
+                    <span key={item}><b>{String(index + 1).padStart(2, '0')}</b>{item}</span>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {realAudience.length > 0 && (
+              <section>
+                <h3>Who is this for?</h3>
+                <ul>{realAudience.map((item) => <li key={item}><CircleUserRound size={17} />{item}</li>)}</ul>
+              </section>
+            )}
+
+            <section className="pf-store-faq">
+              <h3>Before you purchase</h3>
+              <details><summary>Where do I read this resource?<ChevronRight size={16} /></summary><p>Inside the Parallax Flow Android app. The website handles discovery and purchase only.</p></details>
+              <details><summary>When will it unlock?<ChevronRight size={16} /></summary><p>After the payment provider and Parallax Flow server verify the order and grant the entitlement.</p></details>
+              <details><summary>Can I preview it first?<ChevronRight size={16} /></summary><p>Yes. The gallery above is reserved for real preview pages supplied by the catalogue.</p></details>
+            </section>
+          </div>
+        )}
       </PageReveal>
     </>
   );
@@ -406,7 +671,7 @@ export const StoreCartPage: React.FC = () => {
     const product = getProductBySlug(addSlug);
     if (!product) setNotice('That learning resource is no longer available.');
     else if (user?.enrolledCourse && product.course !== user.enrolledCourse.slug) setNotice(`This resource is not available for ${user.enrolledCourse.name}.`);
-    else if (user?.purchasedNoteIds.includes(product.id)) setNotice('This resource is already unlocked in your account.');
+    else if (user?.purchasedNoteIds?.includes(product.id)) setNotice('This resource is already unlocked in your account.');
     else { addItem(product.id); setNotice(`${product.title} was added to your cart.`); }
     navigate(ROUTES.STORE_CART, { replace: true });
   }, [addSlug, addItem, navigate, user]);
@@ -440,17 +705,39 @@ export const StoreCartPage: React.FC = () => {
 
 export const StoreCheckoutPage: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const itemIds = useCartStore((state) => state.itemIds);
+  const clearCart = useCartStore((state) => state.clearCart);
   const [integrationMessage, setIntegrationMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const directProduct = getProductBySlug(searchParams.get('product') || '');
   const products = directProduct ? [directProduct] : itemIds.map((id) => storeProducts.find((product) => product.id === id)).filter((product): product is StoreProduct => Boolean(product));
   const validProducts = products.filter((product) => !user?.enrolledCourse || product.course === user.enrolledCourse.slug);
   const total = validProducts.reduce((sum, product) => sum + product.price, 0);
 
-  const submitCheckout = (event: FormEvent<HTMLFormElement>) => {
+  const submitCheckout = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setIntegrationMessage('Secure payment is not connected yet. No charge was made and no app entitlement was changed.');
+    setSubmitting(true);
+    setIntegrationMessage('');
+    try {
+      const packageIds = validProducts.filter((p) => p.productType === 'bundle').map((p) => p.id);
+      const response = await apiRequest<{ orderId: string; orderNumber: string; status: string }>('/api/commerce/checkout', {
+        method: 'POST',
+        headers: { 'idempotency-key': `chk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}` },
+        body: { packageIds },
+      });
+      clearCart();
+      if (response && response.orderId) {
+        navigate(`${ROUTES.STORE}/success/${response.orderId}`);
+      } else {
+        setIntegrationMessage('Order created successfully.');
+      }
+    } catch (err) {
+      setIntegrationMessage(err instanceof Error ? err.message : 'Checkout failed. Please verify items and try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -464,7 +751,7 @@ export const StoreCheckoutPage: React.FC = () => {
             <form onSubmit={submitCheckout} className="pf-store-checkout-form">
               <section><span className="pf-store-checkout-step">01</span><div><h2>Account</h2><p>Purchases are attached to the same identity used in the Android app.</p><div className="pf-store-identity"><span>{user?.fullName?.charAt(0) || 'P'}</span><p><strong>{user?.fullName}</strong><small>{user?.email}</small></p><CheckCircle2 size={18} /></div></div></section>
               <section><span className="pf-store-checkout-step">02</span><div><h2>Billing details <small>Optional</small></h2><p>Add details only if you require them on a future invoice.</p><div className="pf-store-form-grid"><label>Full legal name<input name="legalName" autoComplete="name" /></label><label>Business or institution<input name="business" autoComplete="organization" /></label><label className="is-wide">Billing address<textarea name="address" rows={3} autoComplete="billing street-address" /></label></div></div></section>
-              <section><span className="pf-store-checkout-step">03</span><div><h2>Payment</h2><p>The live payment provider must create and verify the order server-side.</p><div className="pf-store-payment-placeholder"><CreditCard size={22} /><p><strong>Secure payment gateway</strong><span>Provider integration required before transactions can be accepted.</span></p><ShieldCheck size={20} /></div>{integrationMessage && <div className="pf-store-integration-message" role="alert">{integrationMessage}</div>}<button className="pf-store-button pf-store-button--dark pf-store-button--wide" type="submit">Continue to secure payment <ArrowRight size={16} /></button></div></section>
+              <section><span className="pf-store-checkout-step">03</span><div><h2>Payment</h2><p>The live payment provider must create and verify the order server-side.</p><div className="pf-store-payment-placeholder"><CreditCard size={22} /><p><strong>Secure payment gateway</strong><span>Provider integration required before transactions can be accepted.</span></p><ShieldCheck size={20} /></div>{integrationMessage && <div className="pf-store-integration-message" role="alert">{integrationMessage}</div>}<button className="pf-store-button pf-store-button--dark pf-store-button--wide" type="submit" disabled={submitting}>{submitting ? 'Processing order…' : 'Continue to secure payment'} <ArrowRight size={16} /></button></div></section>
             </form>
             <aside className="pf-store-checkout-summary"><p>Purchase summary</p>{validProducts.map((product) => <article key={product.id}><StoreProductCover product={product} size="mini" /><div><strong>{product.title}</strong><span>{product.subject}</span></div><b>{formatPrice(product.price)}</b></article>)}<hr /><div><span>Total</span><strong>{formatPrice(total)}</strong></div><small>No payment will be simulated. Unlocking requires a verified server webhook.</small></aside>
           </div>
@@ -476,7 +763,7 @@ export const StoreCheckoutPage: React.FC = () => {
 
 export const StorePurchasesPage: React.FC = () => {
   const user = useAuthStore((state) => state.user);
-  const products = storeProducts.filter((product) => user?.purchasedNoteIds.includes(product.id));
+  const products = storeProducts.filter((product) => user?.purchasedNoteIds?.includes(product.id));
   return (
     <>
       <SeoHead title="My Purchases | Parallax Flow Store" description="View learning resources unlocked for your Parallax Flow account." canonicalPath={ROUTES.STORE_PURCHASES} robots="noindex, nofollow" />
@@ -492,7 +779,7 @@ export const StoreProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const course = enrolledCourseFor(user?.enrolledCourse?.slug);
-  const logoutFromStore = () => { logout(); navigate(ROUTES.STORE, { replace: true }); };
+  const logoutFromStore = () => { void logout().then(() => navigate(ROUTES.STORE, { replace: true })); };
   return (
     <>
       <SeoHead title="Store Profile | Parallax Flow" description="Manage your Parallax Flow Store identity and view course information." canonicalPath={ROUTES.STORE_PROFILE} robots="noindex, nofollow" />
@@ -501,7 +788,7 @@ export const StoreProfilePage: React.FC = () => {
         <div className="pf-store-profile-grid">
           <section className="pf-store-profile-card pf-store-profile-card--identity"><span>{user?.fullName?.charAt(0) || 'P'}</span><div><p>Student account</p><h2>{user?.fullName}</h2><a href={`mailto:${user?.email}`}>{user?.email}</a></div></section>
           <section className="pf-store-profile-card"><p>Enrolled course</p><h2>{course?.name || 'Not assigned'}</h2><span>Course changes require an administrator.</span></section>
-          <section className="pf-store-profile-card"><p>Purchased</p><h2>{user?.purchasedNoteIds.length || 0} resources</h2><Link to={ROUTES.STORE_PURCHASES}>View purchases <ArrowRight size={14} /></Link></section>
+          <section className="pf-store-profile-card"><p>Purchased</p><h2>{user?.purchasedNoteIds?.length || 0} resources</h2><Link to={ROUTES.STORE_PURCHASES}>View purchases <ArrowRight size={14} /></Link></section>
           <section className="pf-store-profile-card"><p>Subscription</p><h2>{user?.subscription || 'Free'}</h2><span>Billing integration is not connected.</span></section>
         </div>
         <button className="pf-store-logout" onClick={logoutFromStore}><LogOut size={17} /> Log out</button>
@@ -515,7 +802,7 @@ export const StoreSuccessPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const user = useAuthStore((state) => state.user);
   const product = getProductBySlug(searchParams.get('product') || '');
-  const verified = Boolean(product && user?.purchasedNoteIds.includes(product.id));
+  const verified = Boolean(product && user?.purchasedNoteIds?.includes(product.id));
   return (
     <>
       <SeoHead title="Order Status | Parallax Flow Store" description="Review your Parallax Flow Store order and app access status." canonicalPath={`/store/checkout/success/${encodeURIComponent(orderId)}`} robots="noindex, nofollow" />

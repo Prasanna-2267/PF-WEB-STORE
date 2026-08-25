@@ -642,7 +642,7 @@ export const HomePage: React.FC = () => {
             <Link to={ROUTES.STORE} onClick={() => setMenuOpen(false)}>Store ↗</Link>
             <a href="#contact" onClick={handleContactClick}>Connect with us</a>
             {isAuthenticated ? (
-              <button className="pf-nav__action" type="button" onClick={() => { setMenuOpen(false); logout(); }}>
+              <button className="pf-nav__action" type="button" onClick={() => { setMenuOpen(false); void logout(); }}>
                 Sign Out
               </button>
             ) : (
