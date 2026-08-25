@@ -18,7 +18,11 @@ const contentSelect = {
   createdAt: true, updatedAt: true, deletedAt: true,
 } satisfies Prisma.ContentItemSelect;
 
-const apiContent = (item: Record<string, unknown>) => ({ ...item, size: Number(item.size ?? 0), price: item.price == null ? null : Number(item.price) });
+const apiContent = <T extends { size?: unknown; price?: unknown }>(item: T) => ({
+  ...item,
+  size: Number(item.size ?? 0),
+  price: item.price == null ? null : Number(item.price),
+});
 const normalizeFileName = (name: string) => {
   const normalized = name.normalize("NFKC").replace(/[\\/\u0000-\u001f\u007f]/g, "-").replace(/\s+/g, " ").trim();
   if (!normalized || normalized === "." || normalized === "..") throw badRequest("INVALID_FILE_NAME", "A safe file name is required.");

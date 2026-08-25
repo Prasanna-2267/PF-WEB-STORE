@@ -138,7 +138,7 @@
 
 .pf-admin-shell {
   display: grid;
-  grid-template-columns: 238px minmax(0, 1fr);
+  grid-template-columns: 208px minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -159,7 +159,7 @@
   height: 100vh;
   height: 100dvh;
   min-width: 0;
-  padding: 14px 12px 12px;
+  padding: 10px 8px 8px;
   overflow: hidden;
   background: var(--admin-sidebar);
   border-right: 1px solid var(--admin-line);
@@ -183,36 +183,36 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 44px;
-  gap: 10px;
-  padding: 0 4px 10px;
+  min-height: 38px;
+  gap: 8px;
+  padding: 0 4px 6px;
 }
 
 .pf-admin-brand {
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  gap: 9px;
-  border-radius: 10px;
+  gap: 8px;
+  border-radius: 8px;
 }
 
 .pf-admin-brand__mark {
   display: grid;
-  flex: 0 0 36px;
-  width: 36px;
-  height: 36px;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   overflow: hidden;
   border: 1px solid var(--admin-line);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--admin-panel-solid);
   box-shadow: var(--admin-shadow-sm);
 }
 
 .pf-admin-brand__mark img {
   display: block;
-  width: 26px;
-  height: 26px;
+  width: 20px;
+  height: 20px;
   object-fit: contain;
 }
 
@@ -225,7 +225,7 @@
 .pf-admin-brand__copy strong {
   overflow: hidden;
   color: var(--admin-ink);
-  font-size: 13px;
+  font-size: 11.5px;
   font-weight: 750;
   letter-spacing: -0.015em;
   text-overflow: ellipsis;
@@ -234,7 +234,7 @@
 
 .pf-admin-brand__copy small {
   color: var(--admin-muted);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -262,9 +262,9 @@
 }
 
 .pf-admin-nav__label {
-  margin: 0 8px 5px;
+  margin: 0 6px 3px;
   color: var(--admin-muted-light);
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 750;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -273,15 +273,15 @@
 .pf-admin-nav__link {
   position: relative;
   display: grid;
-  grid-template-columns: 19px minmax(0, 1fr) 14px;
+  grid-template-columns: 16px minmax(0, 1fr) 12px;
   align-items: center;
-  min-height: 38px;
-  gap: 9px;
-  padding: 0 10px;
+  min-height: 33px;
+  gap: 7px;
+  padding: 0 8px;
   overflow: hidden;
   color: var(--admin-muted);
-  border-radius: 10px;
-  font-size: 12px;
+  border-radius: 8px;
+  font-size: 11px;
   font-weight: 650;
   transition: color 180ms ease, transform 180ms ease;
   -webkit-tap-highlight-color: transparent;
@@ -323,23 +323,23 @@
 
 .pf-admin-sidebar__footer {
   flex: 0 0 auto;
-  padding-top: 10px;
+  padding-top: 8px;
   border-top: 1px solid var(--admin-line);
 }
 
 .pf-admin-nav--account {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .pf-admin-account-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-columns: minmax(0, 1fr) 30px;
   align-items: center;
-  min-height: 50px;
-  gap: 6px;
-  padding: 6px;
+  min-height: 44px;
+  gap: 5px;
+  padding: 4px;
   border: 1px solid var(--admin-line);
-  border-radius: 13px;
+  border-radius: 10px;
   background: var(--admin-panel);
   box-shadow: var(--admin-shadow-sm);
 }
@@ -380,14 +380,14 @@
 
 .pf-admin-account-card__avatar {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   place-items: center;
   overflow: hidden;
   color: #fff;
-  border-radius: 10px;
+  border-radius: 8px;
   background: linear-gradient(145deg, #315bce, #75a0ff);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
 }
 
@@ -412,24 +412,24 @@
 
 .pf-admin-account-card__copy strong {
   color: var(--admin-ink);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 750;
 }
 
 .pf-admin-account-card__copy small {
   color: var(--admin-muted);
-  font-size: 9px;
+  font-size: 8.5px;
 }
 
 .pf-admin-account-card__logout {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   place-items: center;
   color: var(--admin-muted);
   border: 0;
-  border-radius: 9px;
+  border-radius: 8px;
   background: transparent;
   cursor: pointer;
   transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
@@ -463,9 +463,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 58px;
-  gap: 14px;
-  padding: 8px clamp(14px, 2.4vw, 36px);
+  min-height: 46px;
+  gap: 12px;
+  padding: 6px clamp(12px, 1.8vw, 24px);
   border-bottom: 1px solid var(--admin-line);
   background: rgba(243, 247, 253, 0.78);
   backdrop-filter: blur(22px) saturate(140%);
@@ -484,7 +484,7 @@
 
 .pf-admin-topbar__section {
   min-width: 0;
-  gap: 10px;
+  gap: 8px;
 }
 
 .pf-admin-topbar__section > div {
@@ -495,7 +495,7 @@
 
 .pf-admin-topbar__section small {
   color: var(--admin-muted);
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -504,7 +504,7 @@
 .pf-admin-topbar__section strong {
   overflow: hidden;
   color: var(--admin-ink);
-  font-size: 14.5px;
+  font-size: 12.5px;
   font-weight: 740;
   letter-spacing: -0.015em;
   text-overflow: ellipsis;
@@ -513,7 +513,7 @@
 
 .pf-admin-topbar__actions {
   flex: 0 0 auto;
-  gap: 10px;
+  gap: 8px;
 }
 
 .pf-admin-topbar__menu {
@@ -527,16 +527,16 @@
 .pf-admin-system-status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   color: var(--admin-muted);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 650;
   white-space: nowrap;
 }
 
 .pf-admin-system-status i {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: #20b486;
   box-shadow: 0 0 0 3px rgba(32, 180, 134, 0.12);
@@ -544,14 +544,14 @@
 
 .pf-admin-icon-button {
   display: inline-grid;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
   padding: 0;
   place-items: center;
   color: var(--admin-ink-soft);
   border: 1px solid var(--admin-line);
-  border-radius: 11px;
+  border-radius: 9px;
   background: var(--admin-panel);
   box-shadow: var(--admin-shadow-sm);
   cursor: pointer;
@@ -573,9 +573,9 @@
 .pf-admin-theme-toggle {
   position: relative;
   display: grid;
-  grid-template-columns: 26px 26px;
-  width: 56px;
-  height: 32px;
+  grid-template-columns: 22px 22px;
+  width: 48px;
+  height: 26px;
   padding: 2px;
   color: var(--admin-muted);
   border: 1px solid var(--admin-line);
@@ -591,8 +591,8 @@
   z-index: 2;
   align-self: center;
   justify-self: center;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   opacity: 0.55;
   transition: color 180ms ease, opacity 180ms ease;
 }
@@ -604,11 +604,11 @@
 
 .pf-admin-theme-toggle__thumb {
   position: absolute;
-  top: 3px;
-  left: 3px;
+  top: 2px;
+  left: 2px;
   z-index: 1;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border: 1px solid var(--admin-line);
   border-radius: 50%;
   background: var(--admin-panel-solid);
@@ -620,7 +620,7 @@
   width: 100%;
   min-height: 0;
   min-width: 0;
-  padding: clamp(16px, 2.2vw, 32px);
+  padding: clamp(12px, 1.6vw, 24px);
   overflow-y: auto;
   overscroll-behavior: contain;
   outline: none;
@@ -635,7 +635,7 @@
 .pf-admin-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: clamp(14px, 1.8vw, 24px);
+  gap: clamp(10px, 1.3vw, 18px);
   min-width: 0;
 }
 
@@ -644,7 +644,7 @@
   align-items: flex-end;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: 10px;
 }
 
 .pf-admin-page-header__copy {
@@ -654,9 +654,9 @@
 
 .pf-admin-eyebrow,
 .pf-admin-page-header__copy > .pf-admin-eyebrow {
-  margin: 0 0 6px;
+  margin: 0 0 3px;
   color: var(--admin-primary);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -665,19 +665,19 @@
 .pf-admin-page-header h1 {
   margin: 0;
   color: var(--admin-ink);
-  font-size: clamp(22px, 2.2vw, 32px);
+  font-size: clamp(18px, 1.8vw, 24px);
   font-weight: 690;
-  letter-spacing: -0.04em;
-  line-height: 1.12;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
   text-wrap: balance;
 }
 
 .pf-admin-page-header__description {
   max-width: 620px;
-  margin: 6px 0 0;
+  margin: 3px 0 0;
   color: var(--admin-muted);
-  font-size: clamp(11.5px, 1vw, 13px);
-  line-height: 1.55;
+  font-size: clamp(10.5px, 0.9vw, 11.5px);
+  line-height: 1.48;
 }
 
 .pf-admin-page-header__actions {
@@ -763,9 +763,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 52px;
-  gap: 12px;
-  padding: 11px clamp(14px, 1.6vw, 20px);
+  min-height: 44px;
+  gap: 10px;
+  padding: 8px clamp(10px, 1.4vw, 16px);
   border-bottom: 1px solid var(--admin-line);
 }
 
@@ -773,35 +773,35 @@
 .pf-admin-table-card__header h2 {
   margin: 0;
   color: var(--admin-ink);
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 720;
   letter-spacing: -0.02em;
 }
 
 .pf-admin-section__header p,
 .pf-admin-table-card__header p {
-  margin: 2px 0 0;
+  margin: 1px 0 0;
   color: var(--admin-muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .pf-admin-section__body {
-  padding: clamp(14px, 1.6vw, 20px);
+  padding: clamp(10px, 1.4vw, 16px);
 }
 
 .pf-admin-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
-  gap: 7px;
-  padding: 0 14px;
+  min-height: 33px;
+  gap: 6px;
+  padding: 0 12px;
   color: #fff;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--admin-primary);
-  box-shadow: 0 6px 16px rgba(49, 91, 206, 0.16);
-  font-size: 11.5px;
+  box-shadow: 0 5px 14px rgba(49, 91, 206, 0.14);
+  font-size: 11px;
   font-weight: 720;
   line-height: 1;
   cursor: pointer;
@@ -985,7 +985,7 @@
   min-width: 0;
   color: var(--admin-ink);
   border: 1px solid var(--admin-line);
-  border-radius: 10px;
+  border-radius: 8px;
   outline: 0;
   background: var(--admin-panel-solid);
   transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
@@ -993,15 +993,15 @@
 
 .pf-admin-input,
 .pf-admin-select {
-  min-height: 36px;
-  padding: 0 11px;
-  font-size: 11.5px;
+  min-height: 33px;
+  padding: 0 10px;
+  font-size: 11px;
 }
 
 .pf-admin-textarea {
-  min-height: 88px;
-  padding: 9px 11px;
-  font-size: 11.5px;
+  min-height: 72px;
+  padding: 7px 10px;
+  font-size: 11px;
   resize: vertical;
 }
 
@@ -1020,17 +1020,17 @@
   position: relative;
   display: flex;
   align-items: center;
-  flex: 1 1 210px;
-  min-width: min(210px, 100%);
+  flex: 1 1 190px;
+  min-width: min(190px, 100%);
 }
 
 .pf-admin-search-field > svg {
   position: absolute;
   top: 50%;
-  left: 11px;
+  left: 10px;
   z-index: 2;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   color: var(--admin-muted);
   pointer-events: none;
   transform: translateY(-50%);
@@ -1040,7 +1040,7 @@
 .pf-admin-search-field input,
 .pf-admin .pf-admin-search-field .pf-admin-input,
 .pf-admin .pf-admin-search-field input {
-  padding-left: 36px !important;
+  padding-left: 32px !important;
 }
 
 .pf-admin-table-scroll {
@@ -1062,7 +1062,7 @@
 
 .pf-admin-table th,
 .pf-admin-table td {
-  padding: 10px 14px;
+  padding: 7px 11px;
   border-bottom: 1px solid var(--admin-line);
   text-align: left;
   vertical-align: middle;
@@ -1071,16 +1071,16 @@
 .pf-admin-table th {
   color: var(--admin-muted);
   background: var(--admin-panel-soft);
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .pf-admin-table td {
   color: var(--admin-ink-soft);
-  font-size: 11px;
+  font-size: 10.5px;
 }
 
 .pf-admin-table tbody tr {
@@ -1659,12 +1659,12 @@
   }
 
   .pf-admin-topbar {
-    min-height: 70px;
-    padding-inline: clamp(14px, 3vw, 28px);
+    min-height: 48px;
+    padding-inline: clamp(12px, 2vw, 20px);
   }
 
   .pf-admin-main {
-    padding: clamp(22px, 4vw, 38px);
+    padding: clamp(12px, 2vw, 22px);
   }
 
   .pf-admin-card-grid,
@@ -1675,7 +1675,7 @@
 
 @media (max-width: 767px) {
   .pf-admin-topbar {
-    gap: 12px;
+    gap: 10px;
   }
 
   .pf-admin-system-status {
@@ -1683,21 +1683,21 @@
   }
 
   .pf-admin-main {
-    padding: 22px 16px 32px;
+    padding: 14px 12px 24px;
   }
 
   .pf-admin-page {
-    gap: 20px;
+    gap: 14px;
   }
 
   .pf-admin-page-header {
     align-items: flex-start;
     flex-direction: column;
-    gap: 16px;
+    gap: 10px;
   }
 
   .pf-admin-page-header h1 {
-    font-size: clamp(28px, 8vw, 38px);
+    font-size: clamp(20px, 5vw, 26px);
   }
 
   .pf-admin-page-header__actions {

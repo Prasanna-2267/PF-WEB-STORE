@@ -1,26 +1,26 @@
-.pf-admin .pf-broadcast-page { gap: 14px; }
-.pf-admin .pf-broadcast-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
-.pf-admin .pf-broadcast-summary button { display:grid; grid-template-columns:36px 1fr; grid-template-rows:auto auto; align-items:center; min-height:78px; gap:2px 10px; padding:13px; color:var(--admin-muted); border:1px solid var(--admin-line); border-radius:14px; background:var(--admin-panel); box-shadow:var(--admin-shadow-sm); text-align:left; cursor:pointer; transition:border-color .16s ease,transform .16s ease,background-color .16s ease; }
+.pf-admin .pf-broadcast-page { gap: 12px; }
+.pf-admin .pf-broadcast-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:9px; }
+.pf-admin .pf-broadcast-summary button { display:grid; grid-template-columns:32px 1fr; grid-template-rows:auto auto; align-items:center; min-height:56px; gap:2px 8px; padding:8px 10px; color:var(--admin-muted); border:1px solid var(--admin-line); border-radius:10px; background:var(--admin-panel); box-shadow:var(--admin-shadow-sm); text-align:left; cursor:pointer; transition:border-color .16s ease,transform .16s ease,background-color .16s ease; }
 .pf-admin .pf-broadcast-summary button:hover { transform:translate3d(0,-1px,0); border-color:var(--admin-line-strong); }
 .pf-admin .pf-broadcast-summary button.is-active { border-color:var(--admin-primary); background:var(--admin-accent-soft); }
-.pf-admin .pf-broadcast-summary button > span { display:grid; grid-row:1/3; width:36px; height:36px; place-items:center; color:var(--admin-primary); border-radius:10px; background:var(--admin-accent-soft); }
-.pf-admin .pf-broadcast-summary small { font-size:8.5px; font-weight:720; letter-spacing:.04em; text-transform:uppercase; }
-.pf-admin .pf-broadcast-summary strong { color:var(--admin-ink); font-size:18px; line-height:1; }
-.pf-admin .pf-broadcast-library { overflow:visible; border:1px solid var(--admin-line); border-radius:15px; background:var(--admin-panel); box-shadow:var(--admin-shadow-sm); }
-.pf-admin .pf-broadcast-toolbar { display:grid; grid-template-columns:minmax(220px,2fr) repeat(6,minmax(100px,1fr)); align-items:end; gap:8px; padding:11px; border-bottom:1px solid var(--admin-line); }
-.pf-admin .pf-broadcast-toolbar > label:not(.pf-admin-search-field) { display:grid; gap:5px; min-width:0; }
+.pf-admin .pf-broadcast-summary button > span { display:grid; grid-row:1/3; width:32px; height:32px; place-items:center; color:var(--admin-primary); border-radius:8px; background:var(--admin-accent-soft); }
+.pf-admin .pf-broadcast-summary small { font-size:8px; font-weight:720; letter-spacing:.04em; text-transform:uppercase; }
+.pf-admin .pf-broadcast-summary strong { color:var(--admin-ink); font-size:16px; line-height:1; }
+.pf-admin .pf-broadcast-library { overflow:visible; border:1px solid var(--admin-line); border-radius:12px; background:var(--admin-panel); box-shadow:var(--admin-shadow-sm); }
+.pf-admin .pf-broadcast-toolbar { display:grid; grid-template-columns:minmax(220px,2fr) repeat(6,minmax(100px,1fr)); align-items:end; gap:7px; padding:9px; border-bottom:1px solid var(--admin-line); }
+.pf-admin .pf-broadcast-toolbar > label:not(.pf-admin-search-field) { display:grid; gap:4px; min-width:0; }
 .pf-admin .pf-broadcast-toolbar > label > span { color:var(--admin-muted); font-size:8px; font-weight:750; }
 .pf-admin .pf-broadcast-table-wrap { overflow-x:auto; }
 .pf-admin .pf-broadcast-table { width:100%; min-width:1040px; border-collapse:collapse; table-layout:fixed; }
-.pf-admin .pf-broadcast-table th { padding:9px 10px; color:var(--admin-muted); border-bottom:1px solid var(--admin-line); background:var(--admin-panel-soft); font-size:8px; font-weight:760; letter-spacing:.04em; text-align:left; text-transform:uppercase; }
+.pf-admin .pf-broadcast-table th { padding:7px 10px; color:var(--admin-muted); border-bottom:1px solid var(--admin-line); background:var(--admin-panel-soft); font-size:8px; font-weight:760; letter-spacing:.04em; text-align:left; text-transform:uppercase; }
 .pf-admin .pf-broadcast-table th:nth-child(1){width:19%}.pf-admin .pf-broadcast-table th:nth-child(2){width:10%}.pf-admin .pf-broadcast-table th:nth-child(3){width:14%}.pf-admin .pf-broadcast-table th:nth-child(4){width:9%}.pf-admin .pf-broadcast-table th:nth-child(5){width:17%}.pf-admin .pf-broadcast-table th:nth-child(6){width:9%}.pf-admin .pf-broadcast-table th:nth-child(7){width:16%}.pf-admin .pf-broadcast-table th:nth-child(8){width:42px}
-.pf-admin .pf-broadcast-table td { position:relative; overflow:visible; padding:11px 10px; color:var(--admin-ink-soft); border-bottom:1px solid var(--admin-line); font-size:9px; vertical-align:middle; }
+.pf-admin .pf-broadcast-table td { position:relative; overflow:visible; padding:8px 10px; color:var(--admin-ink-soft); border-bottom:1px solid var(--admin-line); font-size:10px; vertical-align:middle; }
 .pf-admin .pf-broadcast-table tbody tr:last-child td { border-bottom:0; }
 .pf-admin .pf-broadcast-table tbody tr { transition:background-color .16s ease; }
 .pf-admin .pf-broadcast-table tbody tr:hover { background:var(--admin-panel-soft); }
 .pf-admin .pf-broadcast-table td > span:not(.pf-admin-status-badge):not(.pf-broadcast-priority),.pf-admin .pf-broadcast-table td > strong,.pf-admin .pf-broadcast-table td > small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.pf-admin .pf-broadcast-table td > small,.pf-admin .pf-broadcast-table td small { margin-top:3px; color:var(--admin-muted); font-size:8px; }
-.pf-admin .pf-broadcast-title-button { display:grid; width:100%; min-width:0; gap:3px; padding:0; color:var(--admin-ink); border:0; background:transparent; text-align:left; cursor:pointer; }
+.pf-admin .pf-broadcast-table td > small,.pf-admin .pf-broadcast-table td small { margin-top:2px; color:var(--admin-muted); font-size:8px; }
+.pf-admin .pf-broadcast-title-button { display:grid; width:100%; min-width:0; gap:2px; padding:0; color:var(--admin-ink); border:0; background:transparent; text-align:left; cursor:pointer; }
 .pf-admin .pf-broadcast-title-button strong,.pf-admin .pf-broadcast-title-button small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .pf-admin .pf-broadcast-title-button strong { font-size:10px; }.pf-admin .pf-broadcast-title-button small { color:var(--admin-muted); font-size:8px; }
 .pf-admin .pf-broadcast-priority { display:inline-flex; padding:4px 7px; border-radius:999px; font-size:7.5px; font-weight:780; letter-spacing:.04em; }

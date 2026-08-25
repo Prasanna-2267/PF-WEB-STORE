@@ -278,76 +278,76 @@ export const StoreManagementPage: React.FC = () => {
       )}
 
       {/* KPI OVERVIEW GRID */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 32 }}>
-        <article style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#64748b', fontSize: 13, marginBottom: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 16 }}>
+        <article style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#64748b', fontSize: 11, marginBottom: 4 }}>
             <span>Total Store Revenue</span>
-            <TrendingUp size={18} color="#16a34a" />
+            <TrendingUp size={15} color="#16a34a" />
           </div>
-          <strong style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>
+          <strong style={{ fontSize: 18, fontWeight: 800, color: '#0f172a' }}>
             ₹{kpis.totalRevenue.toLocaleString('en-IN')}
           </strong>
         </article>
 
-        <article style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#64748b', fontSize: 13, marginBottom: 8 }}>
+        <article style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#64748b', fontSize: 11, marginBottom: 4 }}>
             <span>Total Verified Orders</span>
-            <ShoppingBag size={18} color="#0284c7" />
+            <ShoppingBag size={15} color="#0284c7" />
           </div>
-          <strong style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>
+          <strong style={{ fontSize: 18, fontWeight: 800, color: '#0f172a' }}>
             {kpis.totalOrders}
           </strong>
         </article>
 
-        <article style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#64748b', fontSize: 13, marginBottom: 8 }}>
+        <article style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#64748b', fontSize: 11, marginBottom: 4 }}>
             <span>Active Packages</span>
-            <Package size={18} color="#8b5cf6" />
+            <Package size={15} color="#8b5cf6" />
           </div>
-          <strong style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>
+          <strong style={{ fontSize: 18, fontWeight: 800, color: '#0f172a' }}>
             {kpis.activePackages}
           </strong>
         </article>
 
-        <article style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#64748b', fontSize: 13, marginBottom: 8 }}>
+        <article style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#64748b', fontSize: 11, marginBottom: 4 }}>
             <span>Published Paid Notes</span>
-            <FileText size={18} color="#f59e0b" />
+            <FileText size={15} color="#f59e0b" />
           </div>
-          <strong style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>
+          <strong style={{ fontSize: 18, fontWeight: 800, color: '#0f172a' }}>
             {kpis.publishedPaidItems}
           </strong>
         </article>
       </div>
 
       {/* MERCHANDISING SECTIONS */}
-      <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>
+      <h2 style={{ fontSize: 14, fontWeight: 750, color: '#0f172a', marginBottom: 10 }}>
         Featured Store Sections & Algorithms
       </h2>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
         {sections.map((sec) => (
-          <article key={sec.key} style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <article key={sec.key} style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                 <div>
-                  <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b' }}>
+                  <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b' }}>
                     KEY: {sec.key}
                   </span>
-                  <h3 style={{ margin: '2px 0 0', fontSize: 17, fontWeight: 700, color: '#0f172a' }}>
+                  <h3 style={{ margin: '1px 0 0', fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
                     {sec.title}
                   </h3>
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: sec.mode === 'AUTO' ? '#eff6ff' : sec.mode === 'HYBRID' ? '#f0fdf4' : '#fef3c7', color: sec.mode === 'AUTO' ? '#1d4ed8' : sec.mode === 'HYBRID' ? '#15803d' : '#b45309' }}>
+                <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: sec.mode === 'AUTO' ? '#eff6ff' : sec.mode === 'HYBRID' ? '#f0fdf4' : '#fef3c7', color: sec.mode === 'AUTO' ? '#1d4ed8' : sec.mode === 'HYBRID' ? '#15803d' : '#b45309' }}>
                   {sec.mode} MODE
                 </span>
               </div>
 
-              <p style={{ margin: '0 0 16px', fontSize: 13, color: '#64748b' }}>
+              <p style={{ margin: '0 0 10px', fontSize: 11, color: '#64748b', lineHeight: 1.4 }}>
                 {sec.subtitle || 'No description provided.'}
               </p>
 
-              <div style={{ display: 'flex', gap: 12, fontSize: 12, color: '#475569', background: '#f8fafc', padding: '8px 12px', borderRadius: 6, marginBottom: 14 }}>
+              <div style={{ display: 'flex', gap: 10, fontSize: 10.5, color: '#475569', background: '#f8fafc', padding: '6px 10px', borderRadius: 6, marginBottom: 10 }}>
                 <span><strong>Limit:</strong> {sec.limit} products</span>
                 {sec.dateWindowDays && <span><strong>Window:</strong> {sec.dateWindowDays} days</span>}
                 <span><strong>Pins:</strong> {sec.pinnedItemIds.length}</span>
@@ -359,9 +359,9 @@ export const StoreManagementPage: React.FC = () => {
               type="button"
               onClick={() => startEdit(sec)}
               className="pf-admin-button pf-admin-button--quiet"
-              style={{ width: '100%', justifyContent: 'center' }}
+              style={{ width: '100%', justifyContent: 'center', minHeight: 30, fontSize: 11 }}
             >
-              <SlidersHorizontal size={14} /> Configure section rules
+              <SlidersHorizontal size={13} /> Configure section rules
             </button>
           </article>
         ))}

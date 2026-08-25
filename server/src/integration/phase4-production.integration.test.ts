@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { test } from "node:test";
 import { createApp } from "../app/create-app.js";
@@ -397,6 +397,7 @@ test("content/storage lifecycle verifies metadata, ownership, hierarchy, copies,
     async statObject(key) { const value = objects.get(key); if (!value) throw new Error("OBJECT_MISSING"); return value; },
     async deleteObject(key) { objects.delete(key); },
     async copyObject(source, destination) { const value = objects.get(source); if (!value) throw new Error("OBJECT_MISSING"); objects.set(destination, value); },
+    async putObject(key, body, mimeType, checksumSha256) { objects.set(key, { sizeBytes: body.byteLength, mimeType, checksumSha256 }); },
   };
   providerTestHooks.setStorage(storage);
   try {
@@ -420,6 +421,32 @@ test("content/storage lifecycle verifies metadata, ownership, hierarchy, copies,
     const mismatch = await content.createUploadIntent({ academyId: academyAId, actorId: adminAId }, { courseId: courseAId, fileName: "mismatch.pdf", mimeType: "application/pdf", sizeBytes: 10, checksumSha256: "b".repeat(64) });
     objects.set(mismatch.objectKey, { sizeBytes: 11, mimeType: "application/pdf", checksumSha256: "b".repeat(64) });
     await expectCode(() => content.finalizeUpload({ academyId: academyAId, actorId: adminAId }, mismatch.uploadId, {}), "UPLOAD_VERIFICATION_FAILED");
+
+    const proxyBytes = Buffer.from("verified Academy proxy upload");
+    const proxyChecksum = createHash("sha256").update(proxyBytes).digest("hex");
+    const proxyIntent = await content.createUploadIntent({ academyId: academyAId, actorId: adminAId }, {
+      courseId: courseAId,
+      fileName: "proxy-verified.txt",
+      mimeType: "text/plain",
+      sizeBytes: proxyBytes.byteLength,
+      checksumSha256: proxyChecksum,
+    });
+    await expectCode(
+      () => content.uploadProxy({ academyId: academyAId, actorId: adminAId }, proxyIntent.uploadId, Buffer.from("wrong size")),
+      "UPLOAD_SIZE_MISMATCH",
+    );
+    const wrongChecksum = Buffer.alloc(proxyBytes.byteLength, 1);
+    await expectCode(
+      () => content.uploadProxy({ academyId: academyAId, actorId: adminAId }, proxyIntent.uploadId, wrongChecksum),
+      "UPLOAD_CHECKSUM_MISMATCH",
+    );
+    await expectCode(
+      () => content.uploadProxy({ academyId: academyBId, actorId: adminAId }, proxyIntent.uploadId, proxyBytes),
+      "UPLOAD_NOT_FOUND",
+    );
+    await content.uploadProxy({ academyId: academyAId, actorId: adminAId }, proxyIntent.uploadId, proxyBytes);
+    const proxyItem = await content.finalizeUpload({ academyId: academyAId, actorId: adminAId }, proxyIntent.uploadId, {});
+    assert.equal(proxyItem.name, "proxy-verified.txt");
   } finally { providerTestHooks.reset(); }
 });
 

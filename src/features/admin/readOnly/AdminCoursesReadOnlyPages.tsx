@@ -76,38 +76,35 @@ export function AdminCoursesPage() {
       />
 
       {/* TOP METRIC SUMMARY CARDS */}
-      <section className="pf-admin-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
-        <div style={{ padding: 16, backgroundColor: '#ffffff', borderRadius: 12, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ padding: 12, borderRadius: 10, backgroundColor: '#eff6ff', color: '#2563eb' }}><BookMarked size={22} /></div>
+      <section className="pf-admin-order-summary pf-admin-course-summary" aria-label="Course summary">
+        <article className="pf-admin-card">
+          <BookMarked size={18} aria-hidden="true" />
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Courses</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginTop: 2 }}>{summary?.totalCourses ?? meta.total ?? 0}</div>
+            <strong>{summary?.totalCourses ?? meta.total ?? 0}</strong>
+            <p>Total Courses</p>
           </div>
-        </div>
-
-        <div style={{ padding: 16, backgroundColor: '#ffffff', borderRadius: 12, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ padding: 12, borderRadius: 10, backgroundColor: '#f0fdf4', color: '#16a34a' }}><Layers size={22} /></div>
+        </article>
+        <article className="pf-admin-card">
+          <Layers size={18} aria-hidden="true" />
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active Courses</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginTop: 2 }}>{summary?.activeCourses ?? 0}</div>
+            <strong>{summary?.activeCourses ?? 0}</strong>
+            <p>Active Courses</p>
           </div>
-        </div>
-
-        <div style={{ padding: 16, backgroundColor: '#ffffff', borderRadius: 12, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ padding: 12, borderRadius: 10, backgroundColor: '#faf5ff', color: '#9333ea' }}><UsersRound size={22} /></div>
+        </article>
+        <article className="pf-admin-card">
+          <UsersRound size={18} aria-hidden="true" />
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Enrolled Students</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginTop: 2 }}>{summary?.totalEnrolledStudents ?? 0}</div>
+            <strong>{summary?.totalEnrolledStudents ?? 0}</strong>
+            <p>Enrolled Students</p>
           </div>
-        </div>
-
-        <div style={{ padding: 16, backgroundColor: '#ffffff', borderRadius: 12, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ padding: 12, borderRadius: 10, backgroundColor: '#fff7ed', color: '#ea580c' }}><PackageIcon size={22} /></div>
+        </article>
+        <article className="pf-admin-card">
+          <PackageIcon size={18} aria-hidden="true" />
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Packages</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginTop: 2 }}>{summary?.totalPackages ?? 0}</div>
+            <strong>{summary?.totalPackages ?? 0}</strong>
+            <p>Total Packages</p>
           </div>
-        </div>
+        </article>
       </section>
 
       {/* TABLE & SEARCH CARD */}

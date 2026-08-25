@@ -19,6 +19,7 @@ import {
   type ContentRepository,
 } from './contentRepository';
 import { apiRequest } from '@/lib/api/client';
+import { retryUploadStep } from '@/lib/api/uploadRetry';
 
 const STORAGE_KEY = 'pf_admin_content_v1';
 const ROOT_NAME = 'My Flow';
@@ -545,16 +546,16 @@ export class MockContentRepository implements ContentRepository {
 
         if (intent?.uploadId) {
           // Upload binary payload directly via server proxy to eliminate browser CORS errors
-          await apiRequest<{ uploadId: string }>(`/api/admin/content/uploads/${encodeURIComponent(intent.uploadId)}/binary`, {
+          await retryUploadStep(() => apiRequest<{ uploadId: string }>(`/api/admin/content/uploads/${encodeURIComponent(intent.uploadId)}/binary`, {
             method: 'POST',
             headers: {
               'Content-Type': fileEntry.mimeType || 'application/octet-stream',
             },
             body: filePayload,
             timeoutMs: 600_000,
-          });
+          }));
 
-          const dto = await apiRequest<BackendContentDto>(`/api/admin/content/uploads/${encodeURIComponent(intent.uploadId)}/finalize`, {
+          const dto = await retryUploadStep(() => apiRequest<BackendContentDto>(`/api/admin/content/uploads/${encodeURIComponent(intent.uploadId)}/finalize`, {
             method: 'POST',
             body: {
               parentId: parentId || undefined,
@@ -563,7 +564,7 @@ export class MockContentRepository implements ContentRepository {
               price: fileEntry.price ?? undefined,
             },
             timeoutMs: 300_000,
-          });
+          }));
 
           if (dto && dto.id) {
             createdItem = adaptBackendContent(dto);

@@ -1,4 +1,5 @@
 import { apiRequest } from '@/lib/api/client';
+import { retryUploadStep } from '@/lib/api/uploadRetry';
 
 export interface PageResult<T> {
   data: T[];
@@ -145,17 +146,17 @@ export const academyContentApi = {
       body: { courseId, parentId, fileName: file.name, mimeType: file.type || 'application/octet-stream', sizeBytes: file.size, checksumSha256 },
       timeoutMs: 300_000,
     });
-    await apiRequest(`/api/academy/content/uploads/${encodeURIComponent(intent.uploadId)}/binary`, {
+    await retryUploadStep(() => apiRequest(`/api/academy/content/uploads/${encodeURIComponent(intent.uploadId)}/binary`, {
       method: 'POST',
       headers: { 'content-type': file.type || 'application/octet-stream' },
       body: file,
       timeoutMs: 600_000,
-    });
-    return apiRequest<AcademyContentItem>(`/api/academy/content/uploads/${encodeURIComponent(intent.uploadId)}/finalize`, {
+    }));
+    return retryUploadStep(() => apiRequest<AcademyContentItem>(`/api/academy/content/uploads/${encodeURIComponent(intent.uploadId)}/finalize`, {
       method: 'POST',
       body: { parentId, entityType: metadata.entityType ?? 'STUDY_MATERIAL', description: metadata.description, displayOrder: metadata.displayOrder },
       timeoutMs: 300_000,
-    });
+    }));
   },
 };
 

@@ -1,7 +1,7 @@
 .pf-academies-page,
 .pf-academy-detail {
   display: grid;
-  gap: 20px;
+  gap: 14px;
 }
 
 .pf-academies-page .pf-admin-page-header {
@@ -9,24 +9,24 @@
 }
 
 .pf-academies-page .pf-admin-page-header h1 {
-  font-size: clamp(26px, 2vw, 30px);
+  font-size: clamp(18px, 1.8vw, 24px);
 }
 
 .pf-academies-page .pf-admin-page-header__description {
-  margin-top: 7px;
-  font-size: 14px;
+  margin-top: 3px;
+  font-size: 11px;
 }
 
 .pf-academy-detail .pf-admin-page-header {
   align-items: flex-end;
-  gap: 16px;
+  gap: 10px;
   padding-block: 2px;
 }
 
 .pf-academy-detail .pf-admin-page-header__copy { max-width: 760px; }
-.pf-academy-detail .pf-admin-page-header h1 { font-size: clamp(28px, 2.35vw, 34px); }
-.pf-academy-detail .pf-admin-page-header__description { margin-top: 5px; font-size: 13px; }
-.pf-academy-detail .pf-admin-page-header__actions .pf-admin-button { min-height: 42px; }
+.pf-academy-detail .pf-admin-page-header h1 { font-size: clamp(20px, 2vw, 26px); }
+.pf-academy-detail .pf-admin-page-header__description { margin-top: 3px; font-size: 11px; }
+.pf-academy-detail .pf-admin-page-header__actions .pf-admin-button { min-height: 33px; }
 
 .pf-academy-list-card,
 .pf-academy-panel,
@@ -41,15 +41,15 @@
 .pf-academy-list-card {
   min-width: 0;
   overflow: visible;
-  border-radius: 18px;
+  border-radius: 12px;
 }
 
 .pf-academy-toolbar {
   display: grid;
-  grid-template-columns: minmax(300px, 1fr) minmax(160px, 205px) minmax(170px, 205px) auto;
-  gap: 12px;
+  grid-template-columns: minmax(260px, 1fr) minmax(140px, 180px) minmax(150px, 180px) auto;
+  gap: 8px;
   align-items: center;
-  padding: 20px 22px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--admin-line);
 }
 
@@ -58,49 +58,49 @@
 }
 
 .pf-academy-toolbar .pf-admin-search-field .pf-admin-input {
-  padding-left: 42px;
+  padding-left: 32px;
 }
 
 .pf-academy-toolbar .pf-admin-input,
 .pf-academy-toolbar .pf-admin-select,
 .pf-academy-toolbar__add {
-  min-height: 44px;
-  border-radius: 11px;
-  font-size: 13px;
+  min-height: 33px;
+  border-radius: 8px;
+  font-size: 11px;
 }
 
 .pf-academy-toolbar__add {
-  min-width: 142px;
-  padding-inline: 18px;
+  min-width: 110px;
+  padding-inline: 12px;
 }
 
 .pf-academy-table-wrap {
   width: 100%;
   min-width: 0;
-  padding: 0 12px 4px;
+  padding: 0 10px 4px;
 }
 
 .pf-academy-table {
   width: 100%;
   border-collapse: separate;
-  border-spacing: 0 10px;
+  border-spacing: 0 4px;
   table-layout: fixed;
 }
 
 .pf-academy-table th,
 .pf-academy-table td {
-  padding: 14px 12px;
+  padding: 6px 10px;
   color: var(--admin-ink-soft);
   text-align: left;
   vertical-align: middle;
 }
 
 .pf-academy-table th {
-  padding-top: 13px;
-  padding-bottom: 5px;
+  padding-top: 8px;
+  padding-bottom: 4px;
   color: var(--admin-muted);
   background: transparent;
-  font-size: 10px;
+  font-size: 8.5px;
   font-weight: 800;
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -113,7 +113,7 @@
 .pf-academy-table th:nth-child(4) { width: 11%; }
 .pf-academy-table th:nth-child(5) { width: 12%; }
 .pf-academy-table th:nth-child(6) { width: 11%; }
-.pf-academy-table th:last-child { width: 64px; text-align: right; }
+.pf-academy-table th:last-child { width: 48px; text-align: right; }
 
 .pf-academy-table tbody tr {
   --academy-row-accent: var(--admin-accent);
@@ -128,7 +128,7 @@
 .pf-academy-table tbody tr:hover { transform: translateY(-1px); filter: brightness(.995); }
 
 .pf-academy-table tbody td {
-  height: 92px;
+  height: 52px;
   border-top: 1px solid var(--admin-line);
   border-bottom: 1px solid var(--admin-line);
   background: var(--admin-panel-solid);
@@ -136,12 +136,12 @@
 
 .pf-academy-table tbody td:first-child {
   border-left: 1px solid var(--admin-line);
-  border-radius: 16px 0 0 16px;
+  border-radius: 10px 0 0 10px;
 }
 
 .pf-academy-table tbody td:last-child {
   border-right: 1px solid var(--admin-line);
-  border-radius: 0 16px 16px 0;
+  border-radius: 0 10px 10px 0;
 }
 
 .pf-academy-table tbody tr:last-child td { border-bottom: 1px solid var(--admin-line); }
@@ -160,21 +160,21 @@
 .pf-academy-table td strong,
 .pf-academy-table td a {
   color: var(--admin-ink);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .pf-academy-table td small {
-  margin-top: 4px;
+  margin-top: 1px;
   color: var(--admin-muted);
-  font-size: 11.5px;
+  font-size: 10px;
   font-weight: 500;
-  line-height: 1.4;
+  line-height: 1.3;
 }
 
 .pf-academy-table td:first-child a {
   display: flex;
-  gap: 11px;
+  gap: 8px;
   align-items: center;
   min-width: 0;
   text-decoration: none;
@@ -182,15 +182,16 @@
 
 .pf-academy-mark {
   display: grid;
-  flex: 0 0 42px;
-  width: 42px;
-  height: 42px;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--academy-row-accent) 30%, transparent);
-  border-radius: 12px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--academy-row-accent) 9%, var(--admin-panel-solid));
   color: var(--academy-row-accent);
   font-weight: 800;
+  font-size: 11px;
 }
 
 .pf-academy-identity__text,
@@ -215,27 +216,28 @@
 
 .pf-academy-stat-pill {
   display: grid;
-  width: min(100%, 82px);
-  min-height: 56px;
+  width: min(100%, 72px);
+  min-height: 36px;
   place-content: center;
-  border-radius: 12px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--academy-row-accent) 8%, var(--admin-panel-soft));
   color: var(--academy-row-accent);
   text-align: center;
+  padding: 3px 6px;
 }
 
 .pf-academy-stat-pill > span {
   display: flex;
-  gap: 7px;
+  gap: 5px;
   align-items: center;
   justify-content: center;
 }
 
-.pf-academy-stat-pill strong { font-size: 14px; }
-.pf-academy-stat-pill small { margin-top: 3px; font-size: 10px; }
+.pf-academy-stat-pill strong { font-size: 12px; }
+.pf-academy-stat-pill small { margin-top: 1px; font-size: 9px; }
 
-.pf-academy-created strong { font-size: 12px; font-weight: 650; }
-.pf-academy-created small { font-size: 10.5px; }
+.pf-academy-created strong { font-size: 11px; font-weight: 650; }
+.pf-academy-created small { font-size: 9.5px; }
 
 .pf-academy-table__actions {
   overflow: visible;
@@ -249,11 +251,11 @@
 
 .pf-academy-actions summary {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   place-items: center;
   border: 1px solid var(--admin-line);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--admin-panel-solid);
   color: var(--admin-ink-soft);
   cursor: pointer;

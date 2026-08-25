@@ -52,10 +52,10 @@
 .pf-admin .pf-admin-metric {
   position: relative;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
-  gap: 11px;
-  min-height: 126px;
+  gap: 9px;
+  min-height: 80px;
   overflow: hidden;
 }
 
@@ -64,49 +64,49 @@
 }
 
 .pf-admin .pf-admin-metric.has-action > div:not(.pf-admin-metric__action) {
-  padding-right: 68px;
+  padding-right: 56px;
 }
 
 .pf-admin .pf-admin-metric__action {
   position: absolute;
   z-index: 3;
-  top: 12px;
-  right: 12px;
+  top: 10px;
+  right: 10px;
   padding: 0;
 }
 
 .pf-admin .pf-admin-overview-filter {
   position: relative;
   display: inline-flex;
-  width: 108px;
-  min-height: 30px;
+  width: 100px;
+  min-height: 28px;
   align-items: center;
   color: var(--admin-ink-soft);
   border: 1px solid var(--admin-line-strong);
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--admin-surface-strong);
-  box-shadow: 0 5px 14px rgba(28, 49, 91, 0.08);
+  box-shadow: 0 4px 12px rgba(28, 49, 91, 0.08);
 }
 
 .pf-admin .pf-admin-overview-filter svg {
   position: absolute;
   z-index: 1;
-  left: 8px;
+  left: 7px;
   pointer-events: none;
 }
 
 .pf-admin .pf-admin-overview-filter select {
   width: 100%;
-  min-height: 30px;
+  min-height: 28px;
   overflow: hidden;
-  padding: 0 7px 0 27px;
+  padding: 0 6px 0 24px;
   color: inherit;
   border: 0;
   outline: 0;
   background: transparent;
   cursor: pointer;
   font: inherit;
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 720;
   text-overflow: ellipsis;
 }
@@ -118,10 +118,10 @@
 
 .pf-admin .pf-admin-metric::after {
   position: absolute;
-  top: -50px;
-  right: -50px;
-  width: 120px;
-  height: 120px;
+  top: -40px;
+  right: -40px;
+  width: 100px;
+  height: 100px;
   content: '';
   border-radius: 50%;
   background: radial-gradient(circle, rgba(91, 140, 255, 0.14), transparent 68%);
@@ -135,12 +135,12 @@
 .pf-admin .pf-admin-record-list__icon,
 .pf-admin .pf-admin-session-list > li > span:first-child {
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   place-items: center;
   color: var(--admin-primary);
   border: 1px solid rgba(91, 140, 255, 0.2);
-  border-radius: 11px;
+  border-radius: 9px;
   background: var(--admin-accent-soft);
 }
 
@@ -150,17 +150,19 @@
 .pf-admin .pf-admin-content-grid p {
   margin: 0;
   color: var(--admin-muted);
-  font-size: 10px;
-  font-weight: 640;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .pf-admin .pf-admin-metric > div strong {
   display: block;
-  margin-top: 3px;
+  margin-top: 2px;
   color: var(--admin-ink);
-  font-size: clamp(20px, 1.8vw, 26px);
+  font-size: clamp(16px, 1.4vw, 20px);
   font-weight: 730;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
 }
 
 .pf-admin .pf-admin-metric footer {
