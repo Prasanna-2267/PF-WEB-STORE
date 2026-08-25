@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../db/prisma.js";
-import { badRequest, conflict, notFound } from "../errors/api-error.js";
+import { ApiError, badRequest, conflict, notFound } from "../errors/api-error.js";
 import { getStorageProvider } from "../integrations/provider-registry.js";
 import { sanitizeRichText } from "../utils/sanitize-html.js";
 import { assertFileNameMatchesMime } from "../utils/upload-validation.js";
@@ -118,6 +118,9 @@ export async function createUploadIntent(scope: ContentScope, payload: { courseI
   if (!/^[a-f0-9]{64}$/i.test(payload.checksumSha256)) throw badRequest("INVALID_CHECKSUM", "checksumSha256 must be a 64-character hexadecimal SHA-256 digest.");
   const fileName = normalizeFileName(payload.fileName);
   assertFileNameMatchesMime(fileName, payload.mimeType);
+  if (await prisma.contentItem.findFirst({ where: { courseId: payload.courseId, parentId: payload.parentId ?? null, name: { equals: fileName, mode: "insensitive" }, deletedAt: null }, select: { id: true } })) {
+    throw conflict("CONTENT_NAME_CONFLICT", "An item with this name already exists in the folder.");
+  }
 
   // Deterministic Object Key: courses/{courseId}/pages/{pageId}/folders/{folderId}/{safeFileName} or .../root/{safeFileName}
   const pageId = pageSettingId;
@@ -158,6 +161,13 @@ export async function uploadProxy(scope: ContentScope, uploadId: string, fileBuf
   const upload = await prisma.storageUpload.findFirst({ where: { id: uploadId, createdById: scope.actorId, ...(scope.academyId !== undefined ? { academyId: scope.academyId } : {}) } });
   if (!upload) throw notFound("UPLOAD_NOT_FOUND", "The upload session was not found in the current scope.");
   if (upload.status !== "PENDING" || upload.expiresAt <= new Date()) throw conflict("UPLOAD_NOT_FINALIZABLE", "The upload session is expired or no longer pending.");
+  if (fileBuffer.byteLength !== Number(upload.sizeBytes)) {
+    throw conflict("UPLOAD_SIZE_MISMATCH", "The uploaded file size does not match the upload intent.");
+  }
+  const actualChecksum = createHash("sha256").update(fileBuffer).digest("hex");
+  if (actualChecksum !== upload.checksumSha256.toLowerCase()) {
+    throw conflict("UPLOAD_CHECKSUM_MISMATCH", "The uploaded file checksum does not match the upload intent.");
+  }
 
   const provider = getStorageProvider();
   if (provider.putObject) {
@@ -210,8 +220,12 @@ export async function finalizeUpload(scope: ContentScope, uploadId: string, payl
     }
     return finalized;
   } catch (error) {
-    // Best-effort cleanup of orphaned R2 object if DB persistence fails
-    try { await getStorageProvider().deleteObject(upload.objectKey); } catch {}
+    // A deterministic name conflict cannot succeed on retry, so its new object
+    // is safe to remove. Transient DB failures keep the object and PENDING
+    // upload session intact so the same finalize request remains retryable.
+    if (error instanceof ApiError && error.code === "CONTENT_NAME_CONFLICT") {
+      try { await getStorageProvider().deleteObject(upload.objectKey); } catch {}
+    }
     throw error;
   }
 }

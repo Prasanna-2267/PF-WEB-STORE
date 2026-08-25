@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import type { StorageProvider, UploadIntent } from "./storage-provider.js";
+import { StorageProviderError, type StorageProvider, type UploadIntent } from "./storage-provider.js";
 
 interface S3Config {
   endpoint: string;
@@ -73,12 +73,41 @@ export class S3StorageProvider implements StorageProvider {
     return { ...allHeaders, authorization: `AWS4-HMAC-SHA256 Credential=${this.#config.accessKeyId}/${scope}, SignedHeaders=${headerNames.join(";")}, Signature=${signature}` };
   }
 
+  async #providerError(operation: string, response: Response) {
+    let providerCode: string | undefined;
+    try {
+      const body = await response.text();
+      providerCode = /<Code>([^<]{1,80})<\/Code>/i.exec(body)?.[1];
+    } catch {
+      // Some providers omit response bodies for HEAD and authorization failures.
+    }
+    return new StorageProviderError(operation, response.status, providerCode);
+  }
+
+  async #fetch(operation: string, url: URL, init: RequestInit) {
+    const retryDelays = [0, 125, 350];
+    let lastError: unknown;
+    for (const delayMs of retryDelays) {
+      if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+      try {
+        const response = await fetch(url, init);
+        if (response.ok) return response;
+        const error = await this.#providerError(operation, response);
+        if (response.status !== 429 && response.status < 500) throw error;
+        lastError = error;
+      } catch (error) {
+        if (error instanceof StorageProviderError && error.statusCode !== 429 && (error.statusCode ?? 0) < 500) throw error;
+        lastError = error;
+      }
+    }
+    if (lastError instanceof StorageProviderError) throw lastError;
+    throw new StorageProviderError(operation, undefined, undefined, { cause: lastError });
+  }
+
   async #request(method: string, objectKey: string, headers: Record<string, string> = {}) {
     const url = this.#objectUrl(objectKey);
     const signed = this.#authorization(method, url, headers, sha256(""));
-    const response = await fetch(url, { method, headers: signed });
-    if (!response.ok) throw new Error(`Storage provider ${method} failed with HTTP ${response.status}.`);
-    return response;
+    return this.#fetch(method, url, { method, headers: signed });
   }
 
   async createUploadUrl(intent: UploadIntent) {
@@ -111,7 +140,6 @@ export class S3StorageProvider implements StorageProvider {
     const headers = { "content-type": mimeType, "x-amz-meta-sha256": checksumSha256 };
     const signed = this.#authorization("PUT", url, headers, payloadHash);
     const payload = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer;
-    const response = await fetch(url, { method: "PUT", headers: signed, body: payload });
-    if (!response.ok) throw new Error(`Storage provider PUT failed with HTTP ${response.status}.`);
+    await this.#fetch("PUT", url, { method: "PUT", headers: signed, body: payload });
   }
 }

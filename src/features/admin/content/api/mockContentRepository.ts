@@ -24,6 +24,22 @@ const STORAGE_KEY = 'pf_admin_content_v1';
 const ROOT_NAME = 'My Flow';
 const fileSources = new Map<string, File>();
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+const allowOfflineFixtures = import.meta.env.MODE === 'test';
+
+function repositoryFailure(error: unknown, fallbackMessage: string): ContentRepositoryError {
+  if (error instanceof ContentRepositoryError) return error;
+  const response = error && typeof error === 'object'
+    ? error as { status?: number; code?: string; message?: string }
+    : undefined;
+  const code = response?.status === 409 ? 'CONFLICT'
+    : response?.status === 400 || response?.status === 422 ? 'VALIDATION_ERROR'
+      : 'STORAGE_ERROR';
+  return new ContentRepositoryError(code, response?.message || fallbackMessage);
+}
+
+function requireBackend(error: unknown, fallbackMessage: string): void {
+  if (!allowOfflineFixtures) throw repositoryFailure(error, fallbackMessage);
+}
 
 interface LocalItemMetadata {
   description?: string;
@@ -121,8 +137,8 @@ export class MockContentRepository implements ContentRepository {
       if (response && Array.isArray(response.data)) {
         return clone(response.data.map(adaptBackendContent));
       }
-    } catch {
-      // Offline fallback
+    } catch (error) {
+      requireBackend(error, 'Content could not be loaded from the server.');
     }
     const localForCourse = items.filter((item) => !item.courseId || item.courseId === targetCourse);
     return clone(localForCourse);
@@ -152,8 +168,8 @@ export class MockContentRepository implements ContentRepository {
         const remoteItems = response.data.map(adaptBackendContent);
         return clone(sortWithOrder(remoteItems));
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      requireBackend(error, 'This content folder could not be loaded from the server.');
     }
     const all = items.filter((item) => (!item.courseId || item.courseId === targetCourse) && (item.parentId ?? null) === parentId);
     return clone(sortWithOrder(all));
@@ -165,8 +181,8 @@ export class MockContentRepository implements ContentRepository {
       if (dto && dto.id) {
         return adaptBackendContent(dto);
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      requireBackend(error, 'The content item could not be loaded from the server.');
     }
     const found = items.find((i) => i.id === itemId);
     if (found) return clone(found);
@@ -255,7 +271,8 @@ export class MockContentRepository implements ContentRepository {
       if (res && res.pageHeading) {
         pageHeading = res.pageHeading;
       }
-    } catch {
+    } catch (error) {
+      requireBackend(error, 'The page heading could not be loaded from the server.');
       const existing = this.locationSettingsMap.get(key);
       if (existing) {
         pageHeading = existing.pageHeading;
@@ -296,16 +313,8 @@ export class MockContentRepository implements ContentRepository {
       if (res && res.pageHeading) {
         updatedHeading = res.pageHeading;
       }
-    } catch (err) {
-      if (err instanceof ContentRepositoryError) throw err;
-      // If server returned a 400 Bad Request error via ApiError, rethrow as ContentRepositoryError
-      if (err && typeof err === 'object' && 'status' in err) {
-        const status = (err as { status: number }).status;
-        if (status >= 400 && status !== 401 && status !== 403) {
-          throw new ContentRepositoryError('STORAGE_ERROR', (err as { message?: string }).message || 'Failed to update page heading on server.');
-        }
-      }
-      // Offline / unauthenticated fallback in unit test environment
+    } catch (error) {
+      requireBackend(error, 'Failed to update the page heading on the server.');
     }
 
     const existing = this.locationSettingsMap.get(key);
@@ -333,8 +342,8 @@ export class MockContentRepository implements ContentRepository {
           itemIds: childOrder,
         },
       });
-    } catch {
-      // Fallback
+    } catch (error) {
+      requireBackend(error, 'The content order could not be saved on the server.');
     }
 
     // Update displayOrder in local items
@@ -385,8 +394,8 @@ export class MockContentRepository implements ContentRepository {
         items.push(item);
         return item;
       }
-    } catch {
-      // Fallback in-memory folder creation
+    } catch (error) {
+      requireBackend(error, 'The folder could not be created on the server.');
     }
     const folder: ContentItem = {
       id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -467,8 +476,8 @@ export class MockContentRepository implements ContentRepository {
         if (createdFolderDto && createdFolderDto.id) {
           createdItem = adaptBackendContent(createdFolderDto);
         }
-      } catch {
-        // Fallback to local memory folder creation
+      } catch (error) {
+        requireBackend(error, `The folder "${folderEntry.name}" could not be created.`);
       }
 
       if (!createdItem) {
@@ -516,6 +525,9 @@ export class MockContentRepository implements ContentRepository {
 
       let createdItem: ContentItem | null = null;
       try {
+        if (!fileEntry.sourceFile && !allowOfflineFixtures) {
+          throw new ContentRepositoryError('VALIDATION_ERROR', `The source file for "${fileEntry.name}" is no longer available. Please select it again.`);
+        }
         const filePayload = fileEntry.sourceFile || new Blob(['Parallax Flow content file binary'], { type: fileEntry.mimeType || 'application/pdf' });
         const checksumSha256 = await calculateSha256(filePayload);
         const intent = await apiRequest<{ uploadId: string; uploadUrl: string; headers: Record<string, string>; objectKey: string }>('/api/admin/content/upload-intents', {
@@ -557,13 +569,8 @@ export class MockContentRepository implements ContentRepository {
             createdItem = adaptBackendContent(dto);
           }
         }
-      } catch (err) {
-        if (err && typeof err === 'object' && 'status' in err) {
-          const status = (err as { status: number }).status;
-          if (status >= 400 && status !== 401 && status !== 403) {
-            throw new ContentRepositoryError('STORAGE_ERROR', (err as { message?: string }).message || 'Failed to publish file to R2.');
-          }
-        }
+      } catch (error) {
+        requireBackend(error, `The file "${fileEntry.name}" could not be published. Please try again.`);
       }
 
       if (!createdItem) {

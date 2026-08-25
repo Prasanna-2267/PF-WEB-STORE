@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { Prisma } from "../../generated/prisma/client.js";
 import { ApiError, type FieldErrors } from "../errors/api-error.js";
 import { logger } from "../observability/logger.js";
+import { StorageProviderError } from "../integrations/storage-provider.js";
 
 const zodFieldErrors = (error: ZodError): FieldErrors => {
   const fields: FieldErrors = {};
@@ -17,6 +18,13 @@ const mapError = (error: unknown): ApiError => {
   if (error instanceof ApiError) return error;
   if (error instanceof ZodError) {
     return new ApiError(422, "VALIDATION_FAILED", "The request contains invalid fields.", zodFieldErrors(error));
+  }
+  if (error instanceof StorageProviderError) {
+    return new ApiError(
+      503,
+      "STORAGE_PROVIDER_UNAVAILABLE",
+      "Object storage could not complete the request. Please try again shortly.",
+    );
   }
   if (error instanceof SyntaxError && "body" in error) {
     return new ApiError(400, "MALFORMED_JSON", "The request body contains malformed JSON.");
