@@ -3,6 +3,16 @@
   overflow: hidden;
 }
 
+.pf-publish-dialog-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.pf-publish-dialog-body > .pf-publish-workflow {
+  flex: 1 1 0;
+  height: 100%;
+}
+
 .pf-publish-workflow {
   position: relative;
   display: flex;
@@ -182,7 +192,8 @@
   display: grid !important;
   grid-template-columns: minmax(280px, 0.38fr) minmax(0, 0.62fr) !important;
   width: 100% !important;
-  height: 100% !important;
+  height: auto !important;
+  align-self: stretch;
   flex: 1 1 0% !important;
   min-height: 0 !important;
   overflow: hidden !important;

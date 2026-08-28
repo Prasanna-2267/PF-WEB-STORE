@@ -3,6 +3,7 @@ import { z } from "zod";
 import { asyncRoute } from "../middleware/async-route.js";
 import * as notificationService from "../services/academyNotificationService.js";
 import * as templateService from "../services/notificationTemplateService.js";
+import * as learnerNotifications from "../services/learnerNotificationService.js";
 
 export const academyNotificationRouter = Router();
 const notificationType = z.enum(["ANNOUNCEMENT", "ACADEMIC_UPDATE", "EVENT", "REMINDER", "ALERT"]);
@@ -50,6 +51,28 @@ academyNotificationRouter.delete("/:notificationId", asyncRoute(async (req, res)
 }));
 
 export const studentNotificationRouter = Router();
+studentNotificationRouter.post("/push-tokens", asyncRoute(async (req, res) => {
+  const body = z.object({ token: z.string().trim().min(20).max(220), platform: z.enum(["ANDROID", "IOS"]), installationId: z.string().trim().min(8).max(160), deviceName: z.string().trim().max(160).optional(), appVersion: z.string().trim().max(40).optional() }).strict().parse(req.body);
+  res.status(201).json(await learnerNotifications.registerPushToken(req.auth!.userId, body));
+}));
+studentNotificationRouter.delete("/push-tokens/:installationId", asyncRoute(async (req, res) => {
+  res.json(await learnerNotifications.revokePushToken(req.auth!.userId, z.string().trim().min(8).max(160).parse(req.params.installationId)));
+}));
+studentNotificationRouter.get("/preferences", asyncRoute(async (req, res) => {
+  res.json(await learnerNotifications.getNotificationPreferences(req.auth!.userId));
+}));
+studentNotificationRouter.patch("/preferences", asyncRoute(async (req, res) => {
+  const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+  const body = z.object({ pushEnabled: z.boolean().optional(), broadcastEnabled: z.boolean().optional(), dailyPlanEnabled: z.boolean().optional(), revisionDueEnabled: z.boolean().optional(), resourceExpiryEnabled: z.boolean().optional(), streakRiskEnabled: z.boolean().optional(), securityEnabled: z.boolean().optional(), accountEnabled: z.boolean().optional(), quietHoursEnabled: z.boolean().optional(), quietHoursStart: time.optional(), quietHoursEnd: time.optional() }).strict().refine((value) => Object.keys(value).length > 0).parse(req.body);
+  res.json(await learnerNotifications.patchNotificationPreferences(req.auth!.userId, body));
+}));
+studentNotificationRouter.get("/feed", asyncRoute(async (req, res) => {
+  const query = z.object({ page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(50).default(20), unreadOnly: z.enum(["true", "false"]).default("false").transform((value) => value === "true") }).parse(req.query);
+  res.json(await learnerNotifications.listLearnerNotifications(req.auth!.userId, query));
+}));
+studentNotificationRouter.patch("/feed/:notificationId/read", asyncRoute(async (req, res) => {
+  res.json(await learnerNotifications.markLearnerNotificationRead(req.auth!.userId, z.string().uuid().parse(req.params.notificationId)));
+}));
 studentNotificationRouter.get("/", asyncRoute(async (req, res) => {
   const query = z.object({ page: z.coerce.number().int().min(1).optional(), limit: z.coerce.number().int().min(1).max(50).optional(), unreadOnly: z.enum(["true", "false"]).optional() }).parse(req.query);
   res.json(await notificationService.getStudentNotifications(req.auth!.userId, query));

@@ -11,6 +11,7 @@ import type {
   ContentSampleImage,
   ContentSearchResult,
   ContentStoreSection,
+  ContentValidityMode,
   ContentUploadInput,
   CreateContentFolderInput,
 } from '../types/content';
@@ -83,6 +84,8 @@ interface BackendContentDto {
   entityType?: string;
   accessType?: string;
   price?: number | null;
+  validityMode?: ContentValidityMode;
+  validityOffsetDays?: number | null;
   status?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -109,6 +112,8 @@ function adaptBackendContent(dto: BackendContentDto): ContentItem {
     entityType: isFolder ? null : 'study-material',
     accessType: (dto.accessType || 'FREE') as any,
     price: dto.price ?? null,
+    validityMode: dto.validityMode ?? 'PERMANENT',
+    validityOffsetDays: dto.validityOffsetDays ?? null,
     sampleImages: (dto as any).sampleImages ?? meta?.sampleImages ?? localItem?.sampleImages ?? [],
     storeSections: (dto as any).storeSections ?? meta?.storeSections ?? localItem?.storeSections ?? [],
     displayOrder: 0,
@@ -562,6 +567,8 @@ export class MockContentRepository implements ContentRepository {
               description: fileEntry.description,
               accessType: fileEntry.accessType,
               price: fileEntry.price ?? undefined,
+              validityMode: fileEntry.validityMode,
+              validityOffsetDays: fileEntry.validityOffsetDays,
             },
             timeoutMs: 300_000,
           }));
@@ -592,6 +599,8 @@ export class MockContentRepository implements ContentRepository {
           entityType: fileEntry.entityType || 'study-material',
           accessType: fileEntry.accessType,
           price: fileEntry.price,
+          validityMode: fileEntry.validityMode,
+          validityOffsetDays: fileEntry.validityOffsetDays,
           sampleImages: fileEntry.sampleImages,
           storeSections: fileEntry.storeSections,
           displayOrder: fileEntry.displayOrder,
@@ -707,7 +716,9 @@ export class MockContentRepository implements ContentRepository {
     applyToChildren = false,
     description?: string,
     sampleImages?: ContentSampleImage[],
-    storeSections?: ContentStoreSection[]
+    storeSections?: ContentStoreSection[],
+    validityMode: ContentValidityMode = 'PERMANENT',
+    validityOffsetDays: number | null = null
   ): Promise<ContentItem> {
     saveItemMetadata(itemId, {
       description: description ?? '',
@@ -721,6 +732,8 @@ export class MockContentRepository implements ContentRepository {
           accessType,
           price: accessType === 'FREE' ? null : (price ?? undefined),
           applyToChildren,
+          validityMode: accessType === 'FREE' ? 'PERMANENT' : validityMode,
+          validityOffsetDays: accessType === 'PAID' && validityMode === 'EXAM_DATE_OFFSET' ? validityOffsetDays : null,
           ...(description !== undefined ? { description } : {}),
           ...(storeSections !== undefined ? { storeSections: storeSections.map((s, idx) => ({ heading: s.heading, content: s.content, displayOrder: idx })) } : {}),
         },
@@ -732,6 +745,8 @@ export class MockContentRepository implements ContentRepository {
           ...item,
           accessType,
           price: accessType === 'FREE' ? null : price ?? null,
+          validityMode: accessType === 'FREE' ? 'PERMANENT' : validityMode,
+          validityOffsetDays: accessType === 'PAID' && validityMode === 'EXAM_DATE_OFFSET' ? validityOffsetDays : null,
           ...(description !== undefined ? { description } : {}),
           ...(sampleImages ? { sampleImages } : {}),
           ...(storeSections ? { storeSections } : {}),

@@ -1,7 +1,66 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../db/prisma.js";
 import { badRequest, forbidden, notFound } from "../errors/api-error.js";
-import { getStorageProvider } from "../integrations/provider-registry.js";
+import { getRewardWallet } from "./rewardService.js";
+import { resolveResourceExpiry } from "./resourceValidityService.js";
+import { createLearnerNotification } from "./learnerNotificationService.js";
+
+export async function getBootstrap(userId: string, sessionId: string) {
+  const now = new Date();
+  const [user, session, memberships, activeAcademy, activeEntitlementCount, preference, rewardWallet] = await Promise.all([
+    prisma.user.findFirst({
+      where: { id: userId, status: "ACTIVE", deletedAt: null },
+      select: { id: true, email: true, fullName: true, phone: true, avatarStoragePath: true, role: { select: { key: true } } },
+    }),
+    prisma.userSession.findFirst({
+      where: { id: sessionId, userId, revokedAt: null, expiresAt: { gt: now } },
+      select: { id: true, platform: true, expiresAt: true },
+    }),
+    prisma.academyMembership.findMany({
+      where: { userId, role: "ACADEMY_STUDENT", status: "ACTIVE", academy: { status: "ACTIVE", deletedAt: null } },
+      orderBy: [{ joinedAt: "asc" }, { id: "asc" }],
+      take: 200,
+      select: { academyId: true, joinedAt: true, academy: { select: { id: true, name: true, slug: true, logoUrl: true } } },
+    }),
+    getActiveAcademy(userId),
+    prisma.entitlement.count({
+      where: { userId, status: "ACTIVE", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+    }),
+    prisma.learnerPreference.findUnique({
+      where: { userId },
+      include: { selectedCourse: { select: { id: true, code: true, name: true, slug: true } } },
+    }),
+    getRewardWallet(userId),
+  ]);
+
+  if (!user) throw notFound("USER_NOT_FOUND", "The current user was not found.");
+  if (!session) throw forbidden("SESSION_NOT_ACTIVE", "The current session is no longer active.");
+
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      phone: user.phone,
+      avatarStoragePath: user.avatarStoragePath,
+      role: "student" as const,
+    },
+    session,
+    activeAcademy: activeAcademy?.academy ?? null,
+    memberships: memberships.map((membership) => ({
+      academyId: membership.academyId,
+      joinedAt: membership.joinedAt,
+      academy: membership.academy,
+    })),
+    accessSummary: {
+      planLabel: activeEntitlementCount > 0 ? "PAID" as const : "FREE" as const,
+      activeEntitlementCount,
+    },
+    rewardWallet,
+    preference,
+    serverTime: now,
+  };
+}
 
 export async function getProfile(userId: string) {
   const user = await prisma.user.findFirst({ where: { id: userId, deletedAt: null }, select: { id: true, email: true, fullName: true, phone: true, avatarStoragePath: true, status: true, createdAt: true, updatedAt: true, role: { select: { key: true, name: true } }, activeAcademyPreference: { include: { academy: { select: { id: true, name: true, slug: true } } } } } });
@@ -9,7 +68,9 @@ export async function getProfile(userId: string) {
   return user;
 }
 export async function updateProfile(userId: string, input: { fullName?: string; phone?: string | null }) {
-  return prisma.user.update({ where: { id: userId }, data: { ...(input.fullName !== undefined ? { fullName: input.fullName.trim() } : {}), ...(input.phone !== undefined ? { phone: input.phone?.trim() ?? null } : {}) }, select: { id: true, email: true, fullName: true, phone: true, updatedAt: true } });
+  const updated = await prisma.user.update({ where: { id: userId }, data: { ...(input.fullName !== undefined ? { fullName: input.fullName.trim() } : {}), ...(input.phone !== undefined ? { phone: input.phone?.trim() ?? null } : {}) }, select: { id: true, email: true, fullName: true, phone: true, updatedAt: true } });
+  void createLearnerNotification({ userId, category: "ACCOUNT", title: "Profile updated", body: "Your Parallax Flow account details were changed.", sourceKey: `account-profile:${updated.updatedAt.toISOString()}`, data: { url: "/(student)/account" } }).catch(() => undefined);
+  return updated;
 }
 export async function getMemberships(userId: string) {
   const data = await prisma.academyMembership.findMany({ where: { userId, role: "ACADEMY_STUDENT", status: "ACTIVE", academy: { status: "ACTIVE", deletedAt: null } }, orderBy: [{ joinedAt: "asc" }, { id: "asc" }], take: 200, include: { academy: { select: { id: true, name: true, slug: true, description: true, logoUrl: true, city: true, state: true } } } });
@@ -54,22 +115,14 @@ export async function getCourse(userId: string, courseId: string) {
 }
 export async function listCourseContent(userId: string, courseId: string, parentId?: string | null) {
   await getCourse(userId, courseId);
-  const entitlements = await prisma.entitlement.findMany({ where: { userId, status: "ACTIVE", AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }, { OR: [{ courseId }, { package: { courseId } }, { contentItem: { courseId } }] }] }, take: 5_000, select: { contentItemId: true, package: { select: { items: { take: 5_000, select: { contentItemId: true } } } }, courseId: true } });
+  const [entitlements, preference] = await Promise.all([
+    prisma.entitlement.findMany({ where: { userId, status: "ACTIVE", AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }, { OR: [{ courseId }, { package: { courseId } }, { contentItem: { courseId } }] }] }, take: 5_000, select: { contentItemId: true, package: { select: { items: { take: 5_000, select: { contentItemId: true } } } }, courseId: true } }),
+    prisma.learnerPreference.findUnique({ where: { userId }, select: { examDate: true } }),
+  ]);
   const entitled = new Set(entitlements.flatMap((entry) => [...(entry.contentItemId ? [entry.contentItemId] : []), ...(entry.package?.items.map((item) => item.contentItemId) ?? [])]));
   const courseAccess = entitlements.some((entry) => entry.courseId === courseId);
-  const rows = await prisma.contentItem.findMany({ where: { courseId, parentId: parentId ?? null, status: "PUBLISHED", deletedAt: null }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }], take: 500, select: { id: true, parentId: true, kind: true, name: true, description: true, entityType: true, accessType: true, price: true, mimeType: true, size: true, _count: { select: { children: true } } } });
-  return { data: rows.map((item) => ({ ...item, size: Number(item.size), price: item.price ? Number(item.price) : null, accessible: item.kind === "FOLDER" || item.accessType === "FREE" || courseAccess || entitled.has(item.id) })) };
-}
-export async function getContentAccess(userId: string, contentId: string) {
-  const item = await prisma.contentItem.findFirst({ where: { id: contentId, kind: "FILE", status: "PUBLISHED", deletedAt: null, storagePath: { not: null }, course: { status: "ACTIVE", deletedAt: null } }, include: { course: true } });
-  if (!item?.storagePath) throw notFound("CONTENT_NOT_FOUND", "The published file was not found.");
-  const enrollment = await prisma.academyCourseEnrollment.findFirst({ where: { studentId: userId, courseId: item.courseId, status: "ACTIVE" } });
-  if (!enrollment) throw forbidden("COURSE_ENROLLMENT_REQUIRED", "An active course enrollment is required.");
-  if (item.accessType === "PAID") {
-    const entitlement = await prisma.entitlement.findFirst({ where: { userId, status: "ACTIVE", AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }, { OR: [{ contentItemId: item.id }, { courseId: item.courseId }, { package: { items: { some: { contentItemId: item.id } } } }] }] } });
-    if (!entitlement) throw forbidden("CONTENT_ENTITLEMENT_REQUIRED", "An active entitlement is required for this content.");
-  }
-  return { contentId, fileName: item.name, mimeType: item.mimeType, url: await getStorageProvider().createDownloadUrl(item.storagePath, 300), expiresIn: 300 };
+  const rows = await prisma.contentItem.findMany({ where: { courseId, parentId: parentId ?? null, status: "PUBLISHED", deletedAt: null }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }], take: 500, select: { id: true, parentId: true, kind: true, name: true, description: true, entityType: true, accessType: true, price: true, validityMode: true, validityOffsetDays: true, mimeType: true, size: true, _count: { select: { children: true } } } });
+  return { data: rows.map((item) => { const expiresAt = resolveResourceExpiry(item, preference?.examDate); const entitledAccess = courseAccess || entitled.has(item.id); return { ...item, size: Number(item.size), price: item.price ? Number(item.price) : null, validity: { mode: item.validityMode, offsetDays: item.validityOffsetDays }, accessible: item.kind === "FOLDER" || item.accessType === "FREE" || (entitledAccess && expiresAt !== undefined && (!expiresAt || expiresAt > new Date())), expiresAt: expiresAt ?? null }; }) };
 }
 export async function listOrders(userId: string, page: number, limit: number) {
   const where = { userId } satisfies Prisma.OrderWhereInput;

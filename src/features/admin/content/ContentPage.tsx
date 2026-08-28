@@ -626,6 +626,8 @@ export const ContentPage: React.FC = () => {
 
   const [accessTypeDraft, setAccessTypeDraft] = useState<'FREE' | 'PAID'>('FREE');
   const [accessPriceDraft, setAccessPriceDraft] = useState<string>('499');
+  const [accessValidityModeDraft, setAccessValidityModeDraft] = useState<'PERMANENT' | 'EXAM_DATE_OFFSET'>('PERMANENT');
+  const [accessValidityOffsetDraft, setAccessValidityOffsetDraft] = useState<string>('0');
   const [accessDescriptionDraft, setAccessDescriptionDraft] = useState<string>('');
   const [accessSampleImages, setAccessSampleImages] = useState<ContentSampleImage[]>([]);
   const [accessStoreSections, setAccessStoreSections] = useState<ContentStoreSection[]>([
@@ -663,6 +665,8 @@ export const ContentPage: React.FC = () => {
     setTarget(item);
     setAccessTypeDraft(item.accessType || 'FREE');
     setAccessPriceDraft(item.price ? String(item.price) : '499');
+    setAccessValidityModeDraft(item.validityMode ?? 'PERMANENT');
+    setAccessValidityOffsetDraft(String(item.validityOffsetDays ?? 0));
     setAccessDescriptionDraft(item.description || '');
     setAccessSampleImages(item.sampleImages?.length ? item.sampleImages : []);
     const initialSections = item.storeSections?.length ? item.storeSections : [
@@ -706,6 +710,11 @@ export const ContentPage: React.FC = () => {
         notify('Valid price required', 'Paid content requires a positive price.', 'error');
         return;
       }
+      const validityDays = Number(accessValidityOffsetDraft);
+      if (accessValidityModeDraft === 'EXAM_DATE_OFFSET' && (!Number.isInteger(validityDays) || validityDays < 0 || validityDays > 3650)) {
+        notify('Valid expiry required', 'Enter a whole number from 0 to 3650 days after the learner’s exam date.', 'error');
+        return;
+      }
     }
     setSubmittingAccess(true);
     try {
@@ -716,7 +725,9 @@ export const ContentPage: React.FC = () => {
         applyToChildren,
         accessTypeDraft === 'PAID' ? accessDescriptionDraft.trim() : undefined,
         accessTypeDraft === 'PAID' ? accessSampleImages : [],
-        accessTypeDraft === 'PAID' ? accessStoreSections : []
+        accessTypeDraft === 'PAID' ? accessStoreSections : [],
+        accessTypeDraft === 'PAID' ? accessValidityModeDraft : 'PERMANENT',
+        accessTypeDraft === 'PAID' && accessValidityModeDraft === 'EXAM_DATE_OFFSET' ? Number(accessValidityOffsetDraft) : null
       );
       if (details && details.id === target.id) {
         setDetails(updated);
@@ -1169,10 +1180,10 @@ export const ContentPage: React.FC = () => {
             {details.kind === 'folder' ? <>
               <div><dt>Folders</dt><dd>{detailsSummary?.folders ?? '—'}</dd></div>
               <div><dt>Files</dt><dd>{detailsSummary?.files ?? '—'}</dd></div>
-              <div><dt>Access</dt><dd style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span>{details.accessType === 'PAID' ? `Paid (₹${details.price?.toLocaleString('en-IN') ?? '0'})` : 'Free'}</span><button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={() => openAccessDialog(details)} style={{ padding: '2px 8px', fontSize: 11 }}><ShoppingBag size={12} /> Edit</button></dd></div>
+              <div><dt>Access</dt><dd style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span>{details.accessType === 'PAID' ? `Paid (₹${details.price?.toLocaleString('en-IN') ?? '0'}) · ${details.validityMode === 'EXAM_DATE_OFFSET' ? `Exam +${details.validityOffsetDays ?? 0}d` : 'Permanent'}` : 'Free'}</span><button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={() => openAccessDialog(details)} style={{ padding: '2px 8px', fontSize: 11 }}><ShoppingBag size={12} /> Edit</button></dd></div>
             </> : <>
               <div><dt>Storage used</dt><dd>{formatBytes(details.size)}</dd></div>
-              <div><dt>Access</dt><dd style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span>{details.accessType === 'PAID' ? `Paid (₹${details.price?.toLocaleString('en-IN') ?? '0'})` : 'Free'}</span><button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={() => openAccessDialog(details)} style={{ padding: '2px 8px', fontSize: 11 }}><ShoppingBag size={12} /> Edit</button></dd></div>
+              <div><dt>Access</dt><dd style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span>{details.accessType === 'PAID' ? `Paid (₹${details.price?.toLocaleString('en-IN') ?? '0'}) · ${details.validityMode === 'EXAM_DATE_OFFSET' ? `Exam +${details.validityOffsetDays ?? 0}d` : 'Permanent'}` : 'Free'}</span><button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={() => openAccessDialog(details)} style={{ padding: '2px 8px', fontSize: 11 }}><ShoppingBag size={12} /> Edit</button></dd></div>
               {details.accessType === 'PAID' ? <>
                 <div><dt>Sample images</dt><dd>{details.sampleImages.length}</dd></div>
                 <div><dt>Store sections</dt><dd>{details.storeSections.length}</dd></div>
@@ -1224,7 +1235,7 @@ export const ContentPage: React.FC = () => {
           <div style={{ display: 'flex', gap: 12 }}>
             <button
               type="button"
-              onClick={() => setAccessTypeDraft('FREE')}
+              onClick={() => { setAccessTypeDraft('FREE'); setAccessValidityModeDraft('PERMANENT'); setAccessValidityOffsetDraft('0'); }}
               style={{
                 flex: 1, padding: '12px 14px', borderRadius: 8, border: accessTypeDraft === 'FREE' ? '2px solid #2563eb' : '1px solid #cbd5e1',
                 backgroundColor: accessTypeDraft === 'FREE' ? '#eff6ff' : '#ffffff', cursor: 'pointer', textAlign: 'left', fontWeight: 600, color: accessTypeDraft === 'FREE' ? '#1e40af' : '#475569',
@@ -1268,6 +1279,23 @@ export const ContentPage: React.FC = () => {
                   placeholder="e.g. 499"
                 />
               </label>
+
+              <label className="pf-admin-field">
+                <span>Access validity</span>
+                <select value={accessValidityModeDraft} onChange={(event) => setAccessValidityModeDraft(event.target.value as 'PERMANENT' | 'EXAM_DATE_OFFSET')}>
+                  <option value="PERMANENT">Permanent access</option>
+                  <option value="EXAM_DATE_OFFSET">Exam date + days</option>
+                </select>
+                <small style={{ color: '#64748b' }}>{accessValidityModeDraft === 'PERMANENT' ? 'The learner keeps access without a resource expiry date.' : 'The server calculates expiry separately from each learner’s saved exam date.'}</small>
+              </label>
+
+              {accessValidityModeDraft === 'EXAM_DATE_OFFSET' ? (
+                <label className="pf-admin-field">
+                  <span>Days after exam date <b style={{ color: '#dc2626' }}>*Required</b></span>
+                  <input type="number" min="0" max="3650" step="1" value={accessValidityOffsetDraft} onChange={(event) => setAccessValidityOffsetDraft(event.target.value)} />
+                  <small style={{ color: '#64748b' }}>0 means access remains valid through the exam date.</small>
+                </label>
+              ) : null}
 
               <label className="pf-admin-field">
                 <span>Description / Store Details</span>

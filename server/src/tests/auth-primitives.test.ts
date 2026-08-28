@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { test } from "node:test";
 import { hashPassword, verifyPassword } from "../auth/password.js";
+import { normalizeClientPlatform } from "../auth/types.js";
 import {
   createRefreshToken,
   hashRefreshToken,
@@ -69,4 +70,12 @@ test("password credentials use scrypt and reject an incorrect password", async (
   assert.match(encoded, /^scrypt\$/);
   assert.equal(await verifyPassword("correct horse battery staple", encoded), true);
   assert.equal(await verifyPassword("incorrect horse battery staple", encoded), false);
+});
+
+test("mobile client platform metadata is normalized and unknown values fail closed", () => {
+  assert.equal(normalizeClientPlatform("android"), "ANDROID");
+  assert.equal(normalizeClientPlatform(" IOS "), "IOS");
+  assert.equal(normalizeClientPlatform("WEB"), "WEB");
+  assert.equal(normalizeClientPlatform(undefined), "WEB");
+  assert.equal(normalizeClientPlatform("smart-fridge"), "UNKNOWN");
 });

@@ -20,6 +20,7 @@ import { adminRouter } from "../routes/adminRoutes.js";
 import { catalogRouter, contactRouter } from "../routes/publicRoutes.js";
 import { checkoutRouter, paymentWebhookRouter } from "../routes/commerceRoutes.js";
 import { studentDomainRouter } from "../routes/studentRoutes.js";
+import { protectedViewerRouter } from "../routes/protectedViewerRoutes.js";
 
 export const createApp = (config: AppConfig = getConfig()) => {
   const app = express();
@@ -49,6 +50,7 @@ export const createApp = (config: AppConfig = getConfig()) => {
     namespace: "api",
   }));
   app.use("/api/payments", express.raw({ type: "application/json", limit: "256kb" }), paymentWebhookRouter);
+  app.use("/api/protected-viewer", protectedViewerRouter);
   app.use("/api", requireJsonContentType);
   app.use("/api", express.json({ limit: config.server.jsonBodyLimit, type: ["application/json", "application/*+json"] }));
 

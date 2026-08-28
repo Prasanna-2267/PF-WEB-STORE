@@ -71,10 +71,23 @@ async function seedAuthFoundation(): Promise<void> {
   const passwordHash = await hashPassword(localPassword);
 
   const superAdmin = await prisma.user.upsert({
-    where: { email: "brightsteps2025@gmail.com" },
-    update: { fullName: "Brightsteps Super Admin", roleId: seededSuperAdminRole.id, status: "ACTIVE", deletedAt: null },
-    create: { id: randomUUID(), email: "brightsteps2025@gmail.com", fullName: "Brightsteps Super Admin", roleId: seededSuperAdminRole.id },
+    where: { email: "prasannasaravanan2267@gmail.com" },
+    update: { fullName: "Prasanna Saravanan", roleId: seededSuperAdminRole.id, status: "ACTIVE", deletedAt: null },
+    create: { id: randomUUID(), email: "prasannasaravanan2267@gmail.com", fullName: "Prasanna Saravanan", roleId: seededSuperAdminRole.id },
   });
+
+  // Real UUID-backed platform courses for the local Admin and Mobile apps.
+  // These replace the browser-only fixture IDs used by the early UI prototype.
+  await Promise.all([
+    { slug: "chartered-accountancy", code: "CA", name: "Chartered Accountancy", description: "Professional accounting and finance education." },
+    { slug: "jee", code: "JEE", name: "JEE", description: "Engineering entrance preparation." },
+    { slug: "neet", code: "NEET", name: "NEET", description: "Medical entrance preparation." },
+    { slug: "upsc", code: "UPSC", name: "UPSC", description: "Civil services preparation." },
+  ].map((course) => prisma.course.upsert({
+    where: { slug: course.slug },
+    update: { ...course, academyId: null, status: "ACTIVE", deletedAt: null },
+    create: { ...course, academyId: null, status: "ACTIVE" },
+  })));
   await prisma.passwordCredential.upsert({
     where: { userId: superAdmin.id },
     update: { passwordHash },

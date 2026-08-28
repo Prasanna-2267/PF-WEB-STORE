@@ -18,7 +18,7 @@ export async function listCatalog(input: { page: number; limit: number; search?:
   const [courses, packages, paidItems, totalCourses, totalPackages, totalPaidItems] = await Promise.all([
     prisma.course.findMany({ where: courseWhere, skip: (input.page - 1) * input.limit, take: input.limit, orderBy: [{ name: "asc" }, { id: "asc" }], select: { id: true, slug: true, code: true, name: true, description: true, academy: { select: { id: true, name: true, slug: true, logoUrl: true } }, _count: { select: { subjects: true, contentItems: true, packages: true } } } }),
     prisma.package.findMany({ where: packageWhere, skip: (input.page - 1) * input.limit, take: input.limit, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, courseId: true, title: true, slug: true, description: true, price: true, course: { select: { name: true, academy: { select: { id: true, name: true, slug: true } } } }, _count: { select: { items: true } } } }),
-    prisma.contentItem.findMany({ where: paidItemWhere, skip: (input.page - 1) * input.limit, take: input.limit, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, courseId: true, name: true, description: true, price: true, entityType: true, kind: true, mimeType: true, size: true, course: { select: { name: true, academy: { select: { id: true, name: true, slug: true } } } }, sampleImages: { orderBy: { displayOrder: "asc" }, select: { id: true, name: true, displayOrder: true } }, storeSections: { orderBy: { displayOrder: "asc" }, select: { id: true, heading: true, content: true, displayOrder: true } } } }),
+    prisma.contentItem.findMany({ where: paidItemWhere, skip: (input.page - 1) * input.limit, take: input.limit, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, courseId: true, name: true, description: true, price: true, validityMode: true, validityOffsetDays: true, entityType: true, kind: true, mimeType: true, size: true, course: { select: { name: true, academy: { select: { id: true, name: true, slug: true } } } }, sampleImages: { orderBy: { displayOrder: "asc" }, select: { id: true, name: true, displayOrder: true } }, storeSections: { orderBy: { displayOrder: "asc" }, select: { id: true, heading: true, content: true, displayOrder: true } } } }),
     prisma.course.count({ where: courseWhere }),
     prisma.package.count({ where: packageWhere }),
     prisma.contentItem.count({ where: paidItemWhere }),
@@ -39,7 +39,7 @@ export async function getCatalogCourse(courseId: string) {
 }
 
 export async function getCatalogPackage(packageId: string) {
-  const item = await prisma.package.findFirst({ where: { id: packageId, status: "PUBLISHED", deletedAt: null, course: { status: "ACTIVE", deletedAt: null, academy: { status: "ACTIVE", deletedAt: null } } }, include: { course: { select: { id: true, name: true, academy: { select: { id: true, name: true, slug: true } } } }, items: { orderBy: { displayOrder: "asc" }, take: 2_000, include: { contentItem: { select: { id: true, name: true, description: true, entityType: true, mimeType: true, kind: true, size: true, accessType: true } } } } } });
+  const item = await prisma.package.findFirst({ where: { id: packageId, status: "PUBLISHED", deletedAt: null, course: { status: "ACTIVE", deletedAt: null, academy: { status: "ACTIVE", deletedAt: null } } }, include: { course: { select: { id: true, name: true, academy: { select: { id: true, name: true, slug: true } } } }, items: { orderBy: { displayOrder: "asc" }, take: 2_000, include: { contentItem: { select: { id: true, name: true, description: true, entityType: true, mimeType: true, kind: true, size: true, accessType: true, validityMode: true, validityOffsetDays: true } } } } } });
   if (!item) throw notFound("CATALOG_PACKAGE_NOT_FOUND", "The published package was not found.");
   return money({
     ...item,
@@ -107,6 +107,7 @@ export async function getCatalogContent(contentId: string) {
     description: item!.description,
     price: item!.price,
     accessType: item!.accessType,
+    validity: { mode: item!.validityMode, offsetDays: item!.validityOffsetDays },
     entityType: item!.entityType,
     kind: item!.kind,
     mimeType: item!.mimeType,

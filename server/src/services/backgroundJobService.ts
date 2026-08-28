@@ -7,6 +7,7 @@ import { publishBroadcast as publishGlobalBroadcast } from "./adminBroadcastServ
 import { getConfig } from "../config/env.js";
 import { getEmailProvider } from "../integrations/provider-registry.js";
 import { executeContentTreeCopyJob } from "./contentService.js";
+import { dispatchLearnerPushDeliveries, runLearnerReminderSweep } from "./learnerNotificationService.js";
 
 export interface EnqueueJobInput { kind: string; payload: Prisma.InputJsonValue; academyId?: string; createdById?: string; runAt?: Date; deduplicationKey?: string; maxAttempts?: number }
 export async function enqueueJob(input: EnqueueJobInput, tx: Prisma.TransactionClient | typeof prisma = prisma) {
@@ -20,6 +21,8 @@ async function execute(job: { id: string; kind: string; payload: unknown; academ
   if (kind === "NOTIFICATION_SEND") return dispatchQueuedNotification(String(data.notificationId), String(data.academyId), data.actorId ? String(data.actorId) : undefined);
   if (kind === "BROADCAST_PUBLISH") return publishScheduledBroadcast(String(data.broadcastId), String(data.academyId), String(data.actorId));
   if (kind === "GLOBAL_BROADCAST_PUBLISH") return publishGlobalBroadcast(String(data.actorId), String(data.broadcastId));
+  if (kind === "LEARNER_PUSH_DELIVERY") return dispatchLearnerPushDeliveries(data.sourceKey ? String(data.sourceKey) : undefined);
+  if (kind === "LEARNER_REMINDER_SWEEP") return runLearnerReminderSweep();
   if (kind === "CONTACT_EMAIL") {
     const submission = await prisma.contactSubmission.findUniqueOrThrow({ where: { id: String(data.submissionId) }, include: { academy: { select: { email: true } } } });
     const recipient = submission.academy?.email ?? getConfig().email.contactRecipient;

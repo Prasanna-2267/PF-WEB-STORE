@@ -147,6 +147,7 @@ export interface AdminDialogProps {
   size?: 'small' | 'medium' | 'large' | 'wide';
   closeLabel?: string;
   initialFocusRef?: React.RefObject<HTMLElement | null>;
+  bodyClassName?: string;
 }
 
 const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -162,6 +163,7 @@ export const AdminDialog: React.FC<AdminDialogProps> = ({
   size = 'medium',
   closeLabel = 'Close modal',
   initialFocusRef,
+  bodyClassName,
 }) => {
   const titleId = useId();
   const descriptionId = useId();
@@ -284,7 +286,7 @@ export const AdminDialog: React.FC<AdminDialogProps> = ({
                 <X size={19} aria-hidden="true" />
               </button>
             </header>
-            <div className="pf-admin-dialog__body" data-lenis-prevent>{children}</div>
+            <div className={`pf-admin-dialog__body${bodyClassName ? ` ${bodyClassName}` : ''}`} data-lenis-prevent>{children}</div>
             {footer ? <footer className="pf-admin-dialog__footer">{footer}</footer> : null}
           </motion.div>
         </motion.div>

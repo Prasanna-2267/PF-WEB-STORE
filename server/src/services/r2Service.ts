@@ -1,5 +1,6 @@
 import { getStorageProvider } from "../integrations/provider-registry.js";
 import { badRequest, conflict } from "../errors/api-error.js";
+import { isAllowedContentMimeType } from "../utils/upload-validation.js";
 
 export interface R2UploadParams {
   courseId: string;
@@ -11,7 +12,6 @@ export interface R2UploadParams {
   checksumSha256: string;
 }
 
-const SAFE_MIME = /^(application\/(pdf|zip|json)|text\/(plain|csv)|image\/(jpeg|png|webp|gif)|video\/(mp4|webm)|audio\/(mpeg|mp4|wav))$/i;
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB max
 
 export function sanitizeFileName(fileName: string): string {
@@ -39,7 +39,7 @@ export class R2Service {
    * Generates a short-lived presigned PUT URL for direct browser uploads to R2.
    */
   static async generateUploadPresignedUrl(params: R2UploadParams) {
-    if (!SAFE_MIME.test(params.mimeType)) {
+    if (!isAllowedContentMimeType(params.mimeType)) {
       throw badRequest("UNSUPPORTED_FILE_TYPE", "This file type is not allowed for R2 storage.");
     }
     if (params.sizeBytes < 1 || params.sizeBytes > MAX_FILE_SIZE) {

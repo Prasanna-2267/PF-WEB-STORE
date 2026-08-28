@@ -60,7 +60,9 @@ interface ContentState {
     applyToChildren?: boolean,
     description?: string,
     sampleImages?: import('@/features/admin/content/types/content').ContentSampleImage[],
-    storeSections?: import('@/features/admin/content/types/content').ContentStoreSection[]
+    storeSections?: import('@/features/admin/content/types/content').ContentStoreSection[],
+    validityMode?: import('@/features/admin/content/types/content').ContentValidityMode,
+    validityOffsetDays?: number | null
   ) => Promise<ContentItem>;
   markOpened: (itemId: string) => Promise<void>;
   clearCompletedUploads: () => void;
@@ -302,8 +304,8 @@ export const createContentStore = (repository: ContentRepository = mockContentRe
       await refresh();
       return item;
     },
-    updateAccessType: async (itemId, accessType, price, applyToChildren, description, sampleImages, storeSections) => {
-      const item = await repository.updateAccessType(itemId, accessType, price, applyToChildren, description, sampleImages, storeSections);
+    updateAccessType: async (itemId, accessType, price, applyToChildren, description, sampleImages, storeSections, validityMode, validityOffsetDays) => {
+      const item = await repository.updateAccessType(itemId, accessType, price, applyToChildren, description, sampleImages, storeSections, validityMode, validityOffsetDays);
       await refresh();
       return item;
     },

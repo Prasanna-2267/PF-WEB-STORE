@@ -35,11 +35,19 @@ export const useCourseStore = create<CourseState>((set, get) => {
   };
   const load = async () => {
     set({ status: 'loading', error: null });
-    try { const courses = await courseRepository.list(); const selections = chooseFallbacks(courses, get().selections); persistSelections(selections); set({ courses, selections, status: 'ready' }); }
+    try {
+      const courses = await courseRepository.list();
+      const selections = chooseFallbacks(courses, { ...storedSelections(), ...get().selections });
+      persistSelections(selections);
+      set({ courses, selections, status: 'ready' });
+    }
     catch (error) { set({ status: 'error', error: error instanceof Error ? error.message : 'Courses could not be loaded.' }); }
   };
   return {
-    status: 'idle', courses: [], selections: typeof window === 'undefined' ? {} : storedSelections(), error: null,
+    // Persisted selections are restored only after the live course list has
+    // validated them. This prevents stale fixture IDs from reaching UUID-only
+    // backend routes during the first render.
+    status: 'idle', courses: [], selections: {}, error: null,
     initialize: async () => { if (get().status === 'idle') await load(); }, refresh: load,
     select: (module, courseId) => set((state) => { const selections = { ...state.selections, [module]: courseId }; persistSelections(selections); return { selections }; }),
     selectedCourse: (module) => get().courses.find((course) => course.id === get().selections[module]) ?? null,

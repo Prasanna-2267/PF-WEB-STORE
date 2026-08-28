@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { test } from "node:test";
+import { PDFDocument } from "pdf-lib";
 import { createApp } from "../app/create-app.js";
 import { hashPassword } from "../auth/password.js";
 import { loginWithPassword, rotateRefreshToken } from "../auth/auth-service.js";
@@ -26,6 +27,8 @@ import * as templates from "../services/notificationTemplateService.js";
 import * as publicApi from "../services/publicService.js";
 import * as questions from "../services/questionService.js";
 import * as student from "../services/studentService.js";
+import * as studentLibrary from "../services/studentLibraryService.js";
+import * as practice from "../services/practiceService.js";
 import { integrationDatabaseEnabled } from "../tests/integration-database-guard.js";
 
 const enabled = integrationDatabaseEnabled("RUN_BACKEND_INTEGRATION");
@@ -51,6 +54,20 @@ let contextB: TenantContext;
 const expectCode = async (fn: () => Promise<unknown>, code: string) => {
   await assert.rejects(fn, (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && error.code === code));
 };
+
+async function selectCourseForStudent(userId: string, selectedCourseId: string) {
+  await prisma.learnerPreference.upsert({
+    where: { userId },
+    create: {
+      userId,
+      selectedCourseId,
+      examDate: new Date(Date.UTC(new Date().getUTCFullYear() + 1, 0, 1)),
+      examDatePrecision: "MONTH",
+      onboardingCompletedAt: new Date(),
+    },
+    update: { selectedCourseId },
+  });
+}
 
 test.before(async () => {
   if (!enabled) return;
@@ -93,7 +110,7 @@ test("Phase 4 migration ledger, deterministic seed, and operational constraints 
     SELECT COUNT(*) FILTER (WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL)::bigint AS applied,
            COUNT(*) FILTER (WHERE finished_at IS NULL AND rolled_back_at IS NULL)::bigint AS failed
     FROM "_prisma_migrations"`;
-  assert.equal(Number(migrations[0]?.applied), 20);
+  assert.equal(Number(migrations[0]?.applied), 25);
   assert.equal(Number(migrations[0]?.failed), 0);
   const roles = await prisma.role.findMany({ where: { key: { in: ["super_admin", "admin", "ACADEMY_ADMIN", "student"] } }, include: { rolePermissions: true } });
   assert.equal(roles.length, 4);
@@ -129,6 +146,56 @@ test("authentication persists sessions, rejects failures, and atomically rotates
     assert.equal((await fetch(`${sessionUrl}/session`, { headers })).status, 401);
     await assert.rejects(() => rotateRefreshToken(logoutLogin.refreshToken));
   } finally { await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); }
+});
+
+test("staged mobile registration verifies email and mobile before creating a student session", { skip: !enabled }, async () => {
+  const server = createApp(getConfig()).listen(0, "127.0.0.1");
+  await new Promise<void>((resolve, reject) => { server.once("listening", resolve); server.once("error", reject); });
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/auth`;
+  const headers = { "content-type": "application/json", "x-client-platform": "ANDROID", "x-device-name": "Phase 4 Android" };
+  const email = `mobile-registration-${suffix}@test.invalid`;
+  try {
+    const createdResponse = await fetch(`${base}/registrations`, {
+      method: "POST", headers,
+      body: JSON.stringify({ fullName: "Mobile Registration Student", phone: "+919000000099", email, password }),
+    });
+    assert.equal(createdResponse.status, 201);
+    const created = await createdResponse.json() as { registrationId: string; developmentCode: string };
+    assert.match(created.developmentCode, /^\d{4}$/);
+
+    const emailVerification = await fetch(`${base}/registrations/${created.registrationId}/email/verify`, {
+      method: "POST", headers, body: JSON.stringify({ code: created.developmentCode }),
+    });
+    assert.equal(emailVerification.status, 200);
+
+    const mobileSend = await fetch(`${base}/registrations/${created.registrationId}/mobile/send`, { method: "POST", headers, body: "{}" });
+    assert.equal(mobileSend.status, 200);
+    const mobileDelivery = await mobileSend.json() as { developmentCode: string };
+    assert.match(mobileDelivery.developmentCode, /^\d{4}$/);
+
+    const mobileVerification = await fetch(`${base}/registrations/${created.registrationId}/mobile/verify`, {
+      method: "POST", headers, body: JSON.stringify({ code: mobileDelivery.developmentCode }),
+    });
+    assert.equal(mobileVerification.status, 200);
+
+    const completedResponse = await fetch(`${base}/registrations/${created.registrationId}/complete`, { method: "POST", headers, body: "{}" });
+    assert.equal(completedResponse.status, 201);
+    const completed = await completedResponse.json() as { accessToken: string; user: { id: string; email: string; fullName: string; role: string; permissions: string[] } };
+    assert.ok(completed.accessToken);
+    assert.equal(completed.user.email, email);
+    assert.equal(completed.user.fullName, "Mobile Registration Student");
+    assert.equal(completed.user.role, "student");
+    assert.ok(Array.isArray(completed.user.permissions));
+
+    const persisted = await prisma.user.findUniqueOrThrow({ where: { email }, include: { passwordCredential: true, sessions: true } });
+    assert.equal(persisted.phone, "+919000000099");
+    assert.ok(persisted.passwordCredential);
+    assert.equal(persisted.sessions.length, 1);
+    assert.equal(persisted.sessions[0]!.platform, "ANDROID");
+    assert.equal((await fetch(`${base}/registrations/${created.registrationId}/complete`, { method: "POST", headers, body: "{}" })).status, 409);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 });
 
 test("Super Admin academy creation atomically provisions one active Academy Admin identity", { skip: !enabled }, async () => {
@@ -268,6 +335,23 @@ test("HTTP RBAC, single-tenant Academy Admin scope, IDOR, and commercial boundar
     assert.equal((await call("/api/academy/overview", studentToken)).status, 403);
     assert.equal((await call("/api/academy/questions", studentToken)).status, 403);
     assert.equal((await call("/api/academy/broadcasts", studentToken)).status, 403);
+    const bootstrapResponse = await call("/api/student/bootstrap", studentToken);
+    assert.equal(bootstrapResponse.status, 200);
+    const bootstrap = await bootstrapResponse.json() as {
+      user: { id: string; role: string };
+      session: { id: string; platform: string };
+      memberships: Array<{ academyId: string }>;
+      activeAcademy: { id: string } | null;
+      accessSummary: { planLabel: string; activeEntitlementCount: number };
+    };
+    assert.equal(bootstrap.user.id, studentAId);
+    assert.equal(bootstrap.user.role, "student");
+    assert.ok(bootstrap.session.id);
+    assert.equal(bootstrap.session.platform, "UNKNOWN");
+    assert.ok(bootstrap.memberships.some((membership) => membership.academyId === academyAId));
+    assert.ok(bootstrap.activeAcademy === null || bootstrap.activeAcademy.id === academyAId);
+    assert.equal(bootstrap.accessSummary.planLabel, "FREE");
+    assert.equal(bootstrap.accessSummary.activeEntitlementCount, 0);
     assert.equal((await fetch(`${base}/api/academy/questions`)).status, 401);
     assert.equal((await fetch(`${base}/api/academy/broadcasts`)).status, 401);
     await prisma.academyMembership.update({ where: { userId_academyId: { userId: studentAId, academyId: academyAId } }, data: { role: "ACADEMY_ADMIN" } });
@@ -319,6 +403,56 @@ test("HTTP RBAC, single-tenant Academy Admin scope, IDOR, and commercial boundar
     await prisma.user.update({ where: { id: superId }, data: { roleId: adminRole.id } });
     assert.equal((await call("/api/admin/overview", superToken)).status, 403);
     await prisma.user.update({ where: { id: superId }, data: { roleId: superRole.id } });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test("learner personalisation is tenant-visible, month-normalized, versioned, and included in bootstrap", { skip: !enabled }, async () => {
+  const platformCourse = await prisma.course.create({ data: {
+    academyId: null,
+    slug: `learner-preference-${suffix}`,
+    code: `LP${suffix.slice(0, 6)}`.toUpperCase(),
+    name: `Learner Preference ${suffix}`,
+    status: "ACTIVE",
+  } });
+  const server = createApp(getConfig()).listen(0, "127.0.0.1");
+  await new Promise<void>((resolve, reject) => { server.once("listening", resolve); server.once("error", reject); });
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const call = (path: string, init: RequestInit = {}) => fetch(`${base}${path}`, { ...init, headers: { authorization: `Bearer ${studentToken}`, "content-type": "application/json", ...(init.headers ?? {}) } });
+  const examYear = new Date().getUTCFullYear() + 1;
+  try {
+    const optionsResponse = await call("/api/student/preferences/options");
+    assert.equal(optionsResponse.status, 200);
+    const options = await optionsResponse.json() as { courses: Array<{ id: string }> };
+    assert.ok(options.courses.some((course) => course.id === platformCourse.id));
+    assert.ok(options.courses.some((course) => course.id === courseAId));
+    assert.ok(!options.courses.some((course) => course.id === courseBId), "Foreign Academy courses must not be selectable");
+
+    const putResponse = await call("/api/student/preferences", {
+      method: "PUT",
+      body: JSON.stringify({ selectedCourseId: platformCourse.id, examMonth: 9, examYear, dailyTargetMinutes: 120, timezone: "Asia/Kolkata", language: "English", reminderTime: "19:00" }),
+    });
+    assert.equal(putResponse.status, 200);
+    const preference = await putResponse.json() as { selectedCourseId: string; examDate: string; examDatePrecision: string; dailyTargetMinutes: number; version: number };
+    assert.equal(preference.selectedCourseId, platformCourse.id);
+    assert.equal(preference.examDatePrecision, "MONTH");
+    assert.equal(new Date(preference.examDate).getUTCDate(), 1, "Missing exam day must normalize to the first of the month");
+    assert.equal(await prisma.academyCourseEnrollment.count({ where: { studentId: studentAId, courseId: platformCourse.id } }), 0, "Preference selection must not enroll or unlock a course");
+
+    const patchResponse = await call("/api/student/preferences", { method: "PATCH", body: JSON.stringify({ dailyTargetMinutes: 150, expectedVersion: preference.version }) });
+    assert.equal(patchResponse.status, 200);
+    const patched = await patchResponse.json() as { dailyTargetMinutes: number; version: number };
+    assert.equal(patched.dailyTargetMinutes, 150);
+    assert.equal(patched.version, preference.version + 1);
+    assert.equal((await call("/api/student/preferences", { method: "PATCH", body: JSON.stringify({ dailyTargetMinutes: 180, expectedVersion: preference.version }) })).status, 409);
+    assert.equal((await call("/api/student/preferences", { method: "PUT", body: JSON.stringify({ selectedCourseId: courseBId, examMonth: 9, examYear, dailyTargetMinutes: 120, timezone: "Asia/Kolkata" }) })).status, 404);
+
+    const bootstrapResponse = await call("/api/student/bootstrap");
+    assert.equal(bootstrapResponse.status, 200);
+    const bootstrap = await bootstrapResponse.json() as { preference: { selectedCourseId: string; dailyTargetMinutes: number } | null };
+    assert.equal(bootstrap.preference?.selectedCourseId, platformCourse.id);
+    assert.equal(bootstrap.preference?.dailyTargetMinutes, 150);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
@@ -448,6 +582,117 @@ test("content/storage lifecycle verifies metadata, ownership, hierarchy, copies,
     const proxyItem = await content.finalizeUpload({ academyId: academyAId, actorId: adminAId }, proxyIntent.uploadId, {});
     assert.equal(proxyItem.name, "proxy-verified.txt");
   } finally { providerTestHooks.reset(); }
+});
+
+test("protected note viewing watermarks content, binds sessions, tracks progress, and exposes no raw storage URL", { skip: !enabled }, async () => {
+  await selectCourseForStudent(studentAId, courseAId);
+  const sourceDocument = await PDFDocument.create();
+  sourceDocument.addPage([420, 595]);
+  sourceDocument.addPage([420, 595]);
+  const sourceBytes = Buffer.from(await sourceDocument.save());
+  const storagePath = `phase4/protected-${suffix}.pdf`;
+  const note = await prisma.contentItem.create({ data: {
+    courseId: courseAId,
+    kind: "FILE",
+    name: `Protected ${suffix}.pdf`,
+    mimeType: "application/pdf",
+    size: BigInt(sourceBytes.length),
+    storagePath,
+    entityType: "STUDY_MATERIAL",
+    accessType: "FREE",
+    status: "PUBLISHED",
+  } });
+  const lockedNote = await prisma.contentItem.create({ data: {
+    courseId: courseAId,
+    kind: "FILE",
+    name: `Locked ${suffix}.pdf`,
+    mimeType: "application/pdf",
+    size: BigInt(sourceBytes.length),
+    storagePath: `phase4/locked-${suffix}.pdf`,
+    entityType: "STUDY_MATERIAL",
+    accessType: "PAID",
+    price: "499.00",
+    status: "PUBLISHED",
+  } });
+  const storage: StorageProvider = {
+    async createUploadUrl(intent: UploadIntent) { return { uploadUrl: "https://storage.test/upload", expiresAt: new Date(Date.now() + 60_000), headers: { "content-type": intent.mimeType } }; },
+    async createDownloadUrl(key) { assert.equal(key, storagePath); return `data:application/pdf;base64,${sourceBytes.toString("base64")}`; },
+    async statObject() { return { sizeBytes: sourceBytes.length, mimeType: "application/pdf" }; },
+    async deleteObject() {},
+    async copyObject() {},
+  };
+  providerTestHooks.setStorage(storage);
+  const outsiderToken = (await loginWithPassword(`outsider-${suffix}@test.invalid`, password, metadata)).accessToken;
+  const server = createApp(getConfig()).listen(0, "127.0.0.1");
+  await new Promise<void>((resolve, reject) => { server.once("listening", resolve); server.once("error", reject); });
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const call = (path: string, token: string, init: RequestInit = {}) => fetch(`${base}${path}`, { ...init, headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...(init.headers ?? {}) } });
+  try {
+    const notesResponse = await call("/api/student/notes?status=all", studentToken);
+    assert.equal(notesResponse.status, 200);
+    const notes = await notesResponse.json() as { items: Array<{ id: string; access: { accessible: boolean; reason: string } }> };
+    assert.equal(notes.items.find((item) => item.id === lockedNote.id)?.access.reason, "PURCHASE_REQUIRED");
+    assert.equal((await call(`/api/student/notes/${lockedNote.id}/viewer-sessions`, studentToken, { method: "POST", body: "{}" })).status, 403);
+
+    const favouriteResponse = await call(`/api/student/notes/${lockedNote.id}/state`, studentToken, { method: "PATCH", body: JSON.stringify({ favourite: true, completed: true }) });
+    assert.equal(favouriteResponse.status, 200, "Locked note metadata actions must remain available without granting access");
+    const favourite = await favouriteResponse.json() as { favourite: boolean; completed: boolean };
+    assert.deepEqual({ favourite: favourite.favourite, completed: favourite.completed }, { favourite: true, completed: true });
+    const revisionResponse = await call(`/api/student/notes/${lockedNote.id}/revisions`, studentToken, { method: "POST", body: JSON.stringify({ source: "ACTION_SHEET" }) });
+    assert.equal(revisionResponse.status, 201);
+    assert.equal((await revisionResponse.json() as { state: { revisionCount: number } }).state.revisionCount, 1);
+    const favouritesResponse = await call("/api/student/notes/favourites", studentToken);
+    assert.equal(favouritesResponse.status, 200);
+    assert.ok((await favouritesResponse.json() as { items: Array<{ id: string }> }).items.some((item) => item.id === lockedNote.id));
+
+    assert.equal((await call(`/api/student/content/${note.id}/access`, studentToken)).status, 404, "The raw signed-URL endpoint must remain removed");
+    const createdResponse = await call(`/api/student/notes/${note.id}/viewer-sessions`, studentToken, { method: "POST", body: "{}" });
+    assert.equal(createdResponse.status, 201);
+    const created = await createdResponse.json() as { viewerSessionId: string; contentUrl: string; manifestUrl: string; url?: string };
+    assert.equal(created.url, undefined);
+    assert.ok(created.contentUrl.startsWith("/api/protected-viewer/"));
+
+    const manifestResponse = await call(created.manifestUrl, studentToken);
+    assert.equal(manifestResponse.status, 200);
+    const manifest = await manifestResponse.json() as { watermark: { displayIdentity: string; traceId: string }; capabilities: { download: boolean; print: boolean } };
+    assert.equal(manifest.watermark.displayIdentity, `student-a-${suffix}@test.invalid`);
+    assert.match(manifest.watermark.traceId, /^[0-9a-f]{24}$/);
+    assert.deepEqual({ download: manifest.capabilities.download, print: manifest.capabilities.print }, { download: false, print: false });
+    assert.equal((await call(created.manifestUrl, outsiderToken)).status, 404, "A different authenticated user must not reuse the viewer session");
+
+    const contentResponse = await fetch(`${base}${created.contentUrl}`);
+    assert.equal(contentResponse.status, 200);
+    assert.match(contentResponse.headers.get("cache-control") ?? "", /no-store/);
+    assert.doesNotMatch(contentResponse.headers.get("content-disposition") ?? "", /attachment/i);
+    const protectedBytes = Buffer.from(await contentResponse.arrayBuffer());
+    assert.notEqual(createHash("sha256").update(protectedBytes).digest("hex"), createHash("sha256").update(sourceBytes).digest("hex"));
+    assert.equal((await PDFDocument.load(protectedBytes)).getPageCount(), 2);
+
+    const rangeResponse = await fetch(`${base}${created.contentUrl}`, { headers: { range: "bytes=0-19" } });
+    assert.equal(rangeResponse.status, 206);
+    assert.equal((await rangeResponse.arrayBuffer()).byteLength, 20);
+    assert.match(rangeResponse.headers.get("content-range") ?? "", /^bytes 0-19\//);
+    const tamperedContentUrl = created.contentUrl.replace(/ticket=([a-f0-9])/, (_match, first: string) => `ticket=${first === "a" ? "b" : "a"}`);
+    assert.equal((await fetch(`${base}${tamperedContentUrl}`)).status, 404, "A modified viewer ticket must not expose content");
+
+    const firstProgress = await call(`/api/student/viewer-sessions/${created.viewerSessionId}/progress`, studentToken, { method: "PATCH", body: JSON.stringify({ currentPage: 2, progressPercent: 55, scrollOffset: 400 }) });
+    assert.equal(firstProgress.status, 200);
+    const lowerProgress = await call(`/api/student/viewer-sessions/${created.viewerSessionId}/progress`, studentToken, { method: "PATCH", body: JSON.stringify({ currentPage: 1, progressPercent: 10 }) });
+    assert.equal(lowerProgress.status, 200);
+    assert.equal((await lowerProgress.json() as { progressPercent: number }).progressPercent, 55);
+    const learnerState = await prisma.learnerNoteState.findUniqueOrThrow({ where: { userId_contentItemId: { userId: studentAId, contentItemId: note.id } } });
+    assert.ok(learnerState.firstOpenedAt && learnerState.lastOpenedAt);
+    assert.equal(learnerState.progressPercent, 55, "Reader progress must be synchronized to learner note state without regressing");
+    const recentResponse = await call("/api/student/notes/recent?limit=3", studentToken);
+    assert.equal(recentResponse.status, 200);
+    assert.equal((await recentResponse.json() as { items: Array<{ id: string }> }).items[0]?.id, note.id);
+
+    assert.equal((await call(`/api/student/viewer-sessions/${created.viewerSessionId}`, studentToken, { method: "DELETE" })).status, 204);
+    assert.equal((await call(created.manifestUrl, studentToken)).status, 403);
+  } finally {
+    providerTestHooks.reset();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 });
 
 test("question and taxonomy lifecycle is tenant-scoped and sanitizes persisted rich text", { skip: !enabled }, async () => {
@@ -649,6 +894,163 @@ test("commerce enforces server pricing, idempotency, coupon concurrency, webhook
     assert.equal(couponAttempts.filter((item) => item.status === "fulfilled").length, 1);
     assert.equal((await prisma.coupon.findUniqueOrThrow({ where: { id: coupon.id } })).usageCount, 1);
   } finally { providerTestHooks.reset(); }
+});
+
+test("student package, store, entitlement, and library projections reflect authoritative free purchases", { skip: !enabled }, async () => {
+  await selectCourseForStudent(studentAId, courseAId);
+  const note = await prisma.contentItem.create({ data: {
+    courseId: courseAId,
+    kind: "FILE",
+    name: `Library ${suffix}.pdf`,
+    mimeType: "application/pdf",
+    size: 2048,
+    storagePath: `phase4/library-${suffix}.pdf`,
+    entityType: "PREMIUM_NOTE",
+    accessType: "PAID",
+    price: "249.00",
+    status: "PUBLISHED",
+  } });
+  const pkg = await prisma.package.create({ data: {
+    courseId: courseAId,
+    title: `Free library package ${suffix}`,
+    slug: `free-library-${suffix}`,
+    description: "Student library projection fixture",
+    price: "0.00",
+    status: "PUBLISHED",
+    items: { create: { contentItemId: note.id, displayOrder: 1 } },
+  } });
+
+  const before = await studentLibrary.getPackage(studentAId, pkg.id);
+  assert.equal(before.access.owned, false);
+  const checkout = await commerce.createCheckout(studentAId, { packageIds: [pkg.id] }, `library-free-${suffix}`) as { orderId: string; status: string; totalAmount: number };
+  assert.equal(checkout.status, "PAID");
+  assert.equal(checkout.totalAmount, 0);
+
+  const after = await studentLibrary.getPackage(studentAId, pkg.id);
+  assert.equal(after.access.owned, true);
+  assert.equal(after.itemCount, 1);
+  const packages = await studentLibrary.listPackages(studentAId, { ownership: "owned", page: 1, limit: 100 });
+  assert.ok(packages.items.some((item) => item.id === pkg.id));
+  const store = await studentLibrary.listStoreResources(studentAId, { type: "all", page: 1, limit: 100 });
+  assert.equal(store.items.find((item) => item.id === pkg.id)?.access.owned, true);
+  const library = await studentLibrary.getLibrary(studentAId, { page: 1, limit: 100 });
+  assert.ok(library.items.some((item) => item.id === note.id));
+  assert.ok(library.summary.freePurchases >= 1);
+  const receipt = await studentLibrary.getReceipt(studentAId, checkout.orderId);
+  assert.equal(receipt.purchaseType, "FREE_PURCHASE");
+  assert.equal(receipt.totals.total?.amountMinor, 0);
+  assert.equal(receipt.items[0]?.packageId, pkg.id);
+  await assert.rejects(() => studentLibrary.getReceipt(studentBId, checkout.orderId), (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && error.code === "ORDER_NOT_FOUND"));
+  const entitlements = await studentLibrary.listEntitlements(studentAId, { status: "ACTIVE", page: 1, limit: 100 });
+  assert.ok(entitlements.items.some((item) => item.order?.orderId === checkout.orderId && item.resourceId === pkg.id));
+
+  const expired = await prisma.entitlement.create({ data: { userId: studentAId, resourceType: "PREMIUM_NOTES", contentItemId: note.id, resourceTitle: note.name, source: "ADMIN_GRANT", accessType: "TIME_LIMITED", status: "ACTIVE", expiresAt: new Date(Date.now() - 60_000), reason: "Expiry projection check" } });
+  const expiredDetail = await studentLibrary.getEntitlement(studentAId, expired.id);
+  assert.equal(expiredDetail.status, "EXPIRED", "Request-time access state must not trust a stale stored ACTIVE value");
+  await assert.rejects(() => studentLibrary.getEntitlement(studentBId, expired.id), (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && error.code === "ENTITLEMENT_NOT_FOUND"));
+});
+
+test("secure practice hides answers, enforces Free/Paid retry policy, timers, idempotency, and chapter tracking", { skip: !enabled }, async () => {
+  const subject = await prisma.subject.create({ data: { courseId: courseAId, name: `Practice Subject ${suffix}` } });
+  const freeChapter = await prisma.taxonomyChapter.create({ data: { courseId: courseAId, subjectId: subject.id, name: `Free Chapter ${suffix}` } });
+  const paidChapter = await prisma.taxonomyChapter.create({ data: { courseId: courseAId, subjectId: subject.id, name: `Paid Chapter ${suffix}` } });
+  await prisma.learnerPreference.upsert({
+    where: { userId: studentBId },
+    create: { userId: studentBId, selectedCourseId: courseAId, examDate: new Date(Date.UTC(new Date().getUTCFullYear() + 1, 0, 1)), examDatePrecision: "MONTH", onboardingCompletedAt: new Date() },
+    update: { selectedCourseId: courseAId },
+  });
+  await prisma.learnerPreference.upsert({
+    where: { userId: studentAId },
+    create: { userId: studentAId, selectedCourseId: courseAId, examDate: new Date(Date.UTC(new Date().getUTCFullYear() + 1, 0, 1)), examDatePrecision: "MONTH", onboardingCompletedAt: new Date() },
+    update: { selectedCourseId: courseAId },
+  });
+  await prisma.question.create({ data: {
+    academyId: academyAId,
+    courseId: courseAId,
+    subjectId: subject.id,
+    chapterId: freeChapter.id,
+    kind: "NORMAL_MCQ",
+    status: "PUBLISHED",
+    practiceCollection: "PYQ",
+    practiceYear: 2025,
+    questionHtml: "Free secure prompt",
+    correctOptionId: "B",
+    correctExplanationHtml: "Free correct explanation",
+    premiumWrongOptionsExplanationHtml: "Free wrong explanation must remain hidden",
+    options: { create: [{ optionLabel: "A", html: "Wrong", displayOrder: 0 }, { optionLabel: "B", html: "Correct", displayOrder: 1 }] },
+  } });
+  await prisma.question.create({ data: {
+    academyId: academyAId,
+    courseId: courseAId,
+    subjectId: subject.id,
+    chapterId: freeChapter.id,
+    kind: "NORMAL_MCQ",
+    status: "PUBLISHED",
+    practiceCollection: "PYQ",
+    practiceYear: 2025,
+    questionHtml: "Free correct prompt",
+    correctOptionId: "D",
+    correctExplanationHtml: "Free explanation released after correct answer",
+    premiumWrongOptionsExplanationHtml: "Unused free wrong explanation",
+    options: { create: [{ optionLabel: "A", html: "Wrong", displayOrder: 0 }, { optionLabel: "D", html: "Correct", displayOrder: 1 }] },
+  } });
+  const freeSession = await practice.createPracticeSession(studentBId, { sourceKind: "ARCHIVE", subjectId: subject.id, chapterId: freeChapter.id, collection: "PYQ", year: 2025, answerFormat: "MCQ", questionCount: 2, timerSeconds: 300 });
+  const freePrompts = await practice.listSessionQuestions(studentBId, freeSession.id, 1, 10);
+  const serializedPrompt = JSON.stringify(freePrompts);
+  assert.doesNotMatch(serializedPrompt, /correctOption|correct explanation|wrong explanation|answerHtml/i, "Prompts must not serialize answer material");
+  const freeQuestionId = freePrompts.items.find((item) => item.promptHtml === "Free secure prompt")!.id;
+  const freeCorrectQuestionId = freePrompts.items.find((item) => item.promptHtml === "Free correct prompt")!.id;
+  const freeWrong = await practice.submitAttempt(studentBId, freeSession.id, freeQuestionId, { clientAttemptId: `free-wrong-${suffix}`, answerOptionLabel: "A", durationMs: 1200 });
+  assert.equal(freeWrong.result.navigatorState, "LOCKED_WRONG");
+  assert.equal(freeWrong.result.explanation, null);
+  assert.equal(freeWrong.result.retryAllowed, false);
+  const freeReplay = await practice.submitAttempt(studentBId, freeSession.id, freeQuestionId, { clientAttemptId: `free-wrong-${suffix}`, answerOptionLabel: "A", durationMs: 1200 });
+  assert.equal(freeReplay.replay, true);
+  await expectCode(() => practice.submitAttempt(studentBId, freeSession.id, freeQuestionId, { clientAttemptId: `free-retry-${suffix}`, answerOptionLabel: "B" }), "WRONG_RETRY_PAID_REQUIRED");
+  const freeCorrect = await practice.submitAttempt(studentBId, freeSession.id, freeCorrectQuestionId, { clientAttemptId: `free-correct-${suffix}`, answerOptionLabel: "D" });
+  assert.equal(freeCorrect.result.navigatorState, "ANSWERED_CORRECT");
+  assert.equal(freeCorrect.result.explanation, "Free explanation released after correct answer");
+  await expectCode(() => practice.getPracticeSession(studentAId, freeSession.id), "PRACTICE_SESSION_NOT_FOUND");
+
+  const bank = await prisma.package.create({ data: { courseId: courseAId, title: `Question Bank PDF ${suffix}`, slug: `question-bank-pdf-${suffix}`, price: "499.00", status: "PUBLISHED" } });
+  await prisma.question.create({ data: {
+    academyId: academyAId,
+    courseId: courseAId,
+    subjectId: subject.id,
+    chapterId: paidChapter.id,
+    kind: "NORMAL_MCQ",
+    status: "PUBLISHED",
+    practiceCollection: "RTP",
+    questionHtml: "Free Admin-uploaded prompt",
+    correctOptionId: "C",
+    correctExplanationHtml: "Paid-policy correct explanation",
+    premiumWrongOptionsExplanationHtml: "Paid-policy wrong explanation",
+    options: { create: [{ optionLabel: "A", html: "Wrong", displayOrder: 0 }, { optionLabel: "C", html: "Correct", displayOrder: 1 }] },
+  } });
+  const paidOrder = await prisma.order.create({ data: { orderNumber: `PRACTICE-${suffix}`, userId: studentAId, courseId: courseAId, subtotal: "499.00", totalAmount: "499.00", status: "PAID", accessStatus: "GRANTED", paidAt: new Date(), receiptNumber: `PRACTICE-RCP-${suffix}`, items: { create: { packageId: bank.id, resourceType: "PACKAGE", titleSnapshot: bank.title, unitPrice: "499.00", quantity: 1, totalPrice: "499.00" } } } });
+  const bankEntitlement = await prisma.entitlement.create({ data: { userId: studentAId, resourceType: "PACKAGE", packageId: bank.id, resourceTitle: bank.title, source: "PURCHASE", orderId: paidOrder.id, status: "ACTIVE" } });
+  const freeVisibility = await practice.previewPracticeSet(studentBId, { sourceKind: "ARCHIVE", chapterId: paidChapter.id, collection: "RTP", answerFormat: "MCQ", questionCount: 1 });
+  assert.equal(freeVisibility.eligibleQuestionCount, 1, "Admin-uploaded course questions must remain visible without a Question Bank purchase");
+  const paidSession = await practice.createPracticeSession(studentAId, { sourceKind: "ARCHIVE", subjectId: subject.id, chapterId: paidChapter.id, collection: "RTP", answerFormat: "MCQ", questionCount: 1 });
+  const paidQuestionId = (await practice.listSessionQuestions(studentAId, paidSession.id, 1, 10)).items[0]!.id;
+  const paidWrong = await practice.submitAttempt(studentAId, paidSession.id, paidQuestionId, { clientAttemptId: `paid-wrong-${suffix}`, answerOptionLabel: "A" });
+  assert.equal(paidWrong.result.navigatorState, "ANSWERED_WRONG");
+  assert.equal(paidWrong.result.retryAllowed, true);
+  assert.equal(paidWrong.result.explanation, "Paid-policy wrong explanation");
+  const paidCorrect = await practice.submitAttempt(studentAId, paidSession.id, paidQuestionId, { clientAttemptId: `paid-correct-${suffix}`, answerOptionLabel: "C" });
+  assert.equal(paidCorrect.result.navigatorState, "ANSWERED_CORRECT");
+  assert.equal(paidCorrect.result.explanation, "Paid-policy correct explanation");
+  const tracker = await practice.getPracticeTracker(studentAId);
+  assert.ok(tracker.chapters.some((chapter) => chapter.chapterId === paidChapter.id && chapter.questionsSolved >= 1 && chapter.attempts >= 2));
+
+  await prisma.entitlement.update({ where: { id: bankEntitlement.id }, data: { status: "REVOKED", revokedAt: new Date() } });
+  const afterRevocation = await practice.previewPracticeSet(studentAId, { sourceKind: "ARCHIVE", chapterId: paidChapter.id, collection: "RTP", answerFormat: "MCQ", questionCount: 1 });
+  assert.equal(afterRevocation.eligibleQuestionCount, 1, "Revoking a PDF package must not remove free practice questions");
+
+  const timerSession = await practice.createPracticeSession(studentAId, { sourceKind: "ARCHIVE", subjectId: subject.id, chapterId: freeChapter.id, answerFormat: "MCQ", questionCount: 1, timerSeconds: 30 });
+  await prisma.practiceSession.update({ where: { id: timerSession.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+  const timerQuestionId = (await prisma.practiceSessionQuestion.findFirstOrThrow({ where: { sessionId: timerSession.id }, select: { id: true } })).id;
+  await expectCode(() => practice.submitAttempt(studentAId, timerSession.id, timerQuestionId, { clientAttemptId: `late-${suffix}`, answerOptionLabel: "B" }), "SESSION_EXPIRED");
 });
 
 test("Super Admin, Student, public catalog/contact, and recursive audit redaction use persisted data", { skip: !enabled }, async () => {

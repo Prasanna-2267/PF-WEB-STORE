@@ -516,7 +516,7 @@ export async function revokeAcademyAdmin(actorId: string, academyId: string, use
 export async function listPackages(input: { page: number; limit: number; courseId?: string; status?: "DRAFT" | "PUBLISHED" | "ARCHIVED"; includeDeleted?: boolean; search?: string }) {
   const searchFilter = input.search ? { OR: [{ title: { contains: input.search, mode: "insensitive" as const } }, { description: { contains: input.search, mode: "insensitive" as const } }] } : {};
   const where: Prisma.PackageWhereInput = { ...(input.courseId ? { courseId: input.courseId } : {}), ...(input.status ? { status: input.status } : {}), ...(input.includeDeleted ? {} : { deletedAt: null }), ...searchFilter };
-  const [data, total] = await Promise.all([prisma.package.findMany({ where, skip: (input.page - 1) * input.limit, take: input.limit, orderBy: [{ createdAt: "desc" }, { id: "desc" }], include: { course: { select: { id: true, name: true, code: true, academyId: true } }, items: { orderBy: { displayOrder: "asc" }, include: { contentItem: { select: { id: true, name: true, accessType: true, status: true, kind: true, size: true } } } } } }), prisma.package.count({ where })]);
+  const [data, total] = await Promise.all([prisma.package.findMany({ where, skip: (input.page - 1) * input.limit, take: input.limit, orderBy: [{ createdAt: "desc" }, { id: "desc" }], include: { course: { select: { id: true, name: true, code: true, academyId: true } }, items: { orderBy: { displayOrder: "asc" }, include: { contentItem: { select: { id: true, name: true, accessType: true, validityMode: true, validityOffsetDays: true, status: true, kind: true, size: true } } } } } }), prisma.package.count({ where })]);
   return { data, pagination: pagination(input.page, input.limit, total) };
 }
 

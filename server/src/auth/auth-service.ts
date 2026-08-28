@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { OAuth2Client } from "google-auth-library";
+import { createLearnerNotification } from "../services/learnerNotificationService.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import { getConfig } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
@@ -51,6 +52,7 @@ const cleanMetadata = (metadata: RequestMetadata) => ({
   ipAddress: metadata.ipAddress?.slice(0, 128),
   userAgent: metadata.userAgent?.slice(0, 512),
   deviceName: metadata.deviceName?.slice(0, 128),
+  platform: metadata.platform ?? "UNKNOWN",
 });
 
 const securityMetadata = (metadata: RequestMetadata) => {
@@ -74,7 +76,7 @@ const recordFailedLogin = async (userId: string | undefined, metadata: RequestMe
   }
 };
 
-const createSession = async (
+export const createSession = async (
   user: {
     id: string;
     email: string;
@@ -99,7 +101,7 @@ const createSession = async (
         userAgent: requestMetadata.userAgent,
         ipAddress: requestMetadata.ipAddress,
         deviceName: requestMetadata.deviceName,
-        platform: "WEB",
+        platform: requestMetadata.platform,
       },
       select: { id: true },
     });
@@ -170,7 +172,9 @@ export const loginWithPassword = async (
     throw unauthorized("The email or password is incorrect.");
   }
 
-  return createSession(user, metadata);
+  const result = await createSession(user, metadata);
+  void createLearnerNotification({ userId: user.id, category: "SECURITY", title: "New sign-in", body: `Your account signed in${metadata.deviceName ? ` on ${metadata.deviceName}` : " on a device"}.`, sourceKey: `security-login:${Date.now()}`, data: { url: "/(student)/account", platform: metadata.platform } }).catch(() => undefined);
+  return result;
 };
 
 export const registerWithPassword = async (
@@ -208,7 +212,9 @@ export const registerWithPassword = async (
     }
     throw error;
   }
-  return createSession(user, metadata);
+  const result = await createSession(user, metadata);
+  void createLearnerNotification({ userId: user.id, category: "SECURITY", title: "New Google sign-in", body: `Your account signed in with Google${metadata.deviceName ? ` on ${metadata.deviceName}` : ""}.`, sourceKey: `security-google-login:${Date.now()}`, data: { url: "/(student)/account", platform: metadata.platform } }).catch(() => undefined);
+  return result;
 };
 
 export const loginWithGoogle = async (

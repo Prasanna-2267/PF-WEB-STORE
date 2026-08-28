@@ -1,4 +1,5 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -61,6 +62,14 @@ import {
   StoreSectionHeading,
 } from './StoreComponents';
 import { StoreAddToCartButton } from './StoreCartActions';
+import {
+  checkoutKeys,
+  completeFakePayment,
+  createStoreCheckout,
+  useStoreEntitlements,
+  useStoreReceipt,
+  type CheckoutResponse,
+} from './data/checkoutApi';
 
 const collectionLabels = {
   'best-sellers': 'Best Sellers',
@@ -73,6 +82,20 @@ const collectionLabels = {
 
 const noteTypes: StoreProductType[] = ['visual-notes', 'mind-maps', 'revision-notes', 'question-bank', 'formula-sheet', 'mock-test'];
 const featuredHeroProduct = getProductBySlug('advanced-accounting') ?? storeProducts[0];
+
+const useCompleteStoreCatalog = () => {
+  const query = usePublicCatalog({ page: 1, limit: 100 });
+  const products = useMemo(() => {
+    const live = [
+      ...(query.data?.packages ?? []).map(adaptCatalogPackageToProduct),
+      ...(query.data?.paidItems ?? []).map(adaptCatalogItemToProduct),
+    ];
+    const byId = new Map<string, StoreProduct>();
+    [...storeProducts, ...live].forEach((product) => byId.set(product.id, product));
+    return [...byId.values()];
+  }, [query.data]);
+  return { ...query, products };
+};
 
 const PageReveal: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <motion.div
@@ -468,6 +491,8 @@ const ProductPreview: React.FC<{ product: StoreProduct; previewIndex: number }> 
 export const StoreProductPage: React.FC = () => {
   const { productSlug = '' } = useParams();
   const [previewIndex, setPreviewIndex] = useState(0);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const entitlements = useStoreEntitlements(isAuthenticated);
 
   // Fetch the full catalog list to resolve the product
   const catalogQuery = usePublicCatalog({ page: 1, limit: 100 });
@@ -549,6 +574,7 @@ export const StoreProductPage: React.FC = () => {
   const realAudience = product.audience?.filter((a) => a?.trim()) || [];
   const realIncluded = product.included?.filter((i) => i?.trim()) || [];
   const hasPreviewImages = product.previewImages.some((img) => img.src);
+  const alreadyOwned = Boolean(entitlements.data?.items.some((item) => item.resourceId === product.id));
 
   const previewList = hasPreviewImages
     ? product.previewImages.slice(0, 4)
@@ -588,7 +614,7 @@ export const StoreProductPage: React.FC = () => {
                 </>
               )}
             </div>
-            <Link className="pf-store-button pf-store-button--dark pf-store-button--wide" to={`${ROUTES.STORE_CHECKOUT}?product=${encodeURIComponent(product.slug)}`}>Buy now <ArrowRight size={17} /></Link>
+            {alreadyOwned ? <Link className="pf-store-button pf-store-button--dark pf-store-button--wide" to={ROUTES.STORE_PURCHASES}>Open my purchase <Check size={17} /></Link> : <Link className="pf-store-button pf-store-button--dark pf-store-button--wide" to={`${ROUTES.STORE_CHECKOUT}?product=${encodeURIComponent(product.slug)}`}>Buy now <ArrowRight size={17} /></Link>}
             <StoreAddToCartButton product={product} variant="wide" className="pf-store-button pf-store-button--dark pf-store-button--wide" />
             <ul>
               <li><Check size={15} /> Preview before purchase</li>
@@ -665,19 +691,23 @@ export const StoreCartPage: React.FC = () => {
   const { itemIds, addItem, removeItem, clearCart } = useCartStore();
   const [notice, setNotice] = useState('');
   const addSlug = searchParams.get('add');
+  const catalog = useCompleteStoreCatalog();
+  const catalogById = useMemo(() => new Map(catalog.products.map((product) => [product.id, product])), [catalog.products]);
+  const catalogBySlug = useMemo(() => new Map(catalog.products.map((product) => [product.slug, product])), [catalog.products]);
 
   useEffect(() => {
     if (!addSlug) return;
-    const product = getProductBySlug(addSlug);
+    if (catalog.isLoading) return;
+    const product = catalogBySlug.get(addSlug);
     if (!product) setNotice('That learning resource is no longer available.');
     else if (user?.enrolledCourse && product.course !== user.enrolledCourse.slug) setNotice(`This resource is not available for ${user.enrolledCourse.name}.`);
     else if (user?.purchasedNoteIds?.includes(product.id)) setNotice('This resource is already unlocked in your account.');
     else { addItem(product.id); setNotice(`${product.title} was added to your cart.`); }
     navigate(ROUTES.STORE_CART, { replace: true });
-  }, [addSlug, addItem, navigate, user]);
+  }, [addSlug, addItem, catalog.isLoading, catalogBySlug, navigate, user]);
 
   const notesCategoryPath = buildStoreCategoryPath(user?.enrolledCourse?.slug || 'ca-intermediate');
-  const products = itemIds.map((id) => storeProducts.find((product) => product.id === id)).filter((product): product is StoreProduct => Boolean(product));
+  const products = itemIds.map((id) => catalogById.get(id)).filter((product): product is StoreProduct => Boolean(product));
   const subtotal = products.reduce((sum, product) => sum + product.price, 0);
 
   return (
@@ -706,13 +736,19 @@ export const StoreCartPage: React.FC = () => {
 export const StoreCheckoutPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const itemIds = useCartStore((state) => state.itemIds);
   const clearCart = useCartStore((state) => state.clearCart);
   const [integrationMessage, setIntegrationMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const directProduct = getProductBySlug(searchParams.get('product') || '');
-  const products = directProduct ? [directProduct] : itemIds.map((id) => storeProducts.find((product) => product.id === id)).filter((product): product is StoreProduct => Boolean(product));
+  const [couponCode, setCouponCode] = useState('');
+  const [createdOrder, setCreatedOrder] = useState<CheckoutResponse | null>(null);
+  const catalog = useCompleteStoreCatalog();
+  const directKey = searchParams.get('product') || '';
+  const catalogById = useMemo(() => new Map(catalog.products.map((product) => [product.id, product])), [catalog.products]);
+  const directProduct = catalog.products.find((product) => product.slug === directKey || product.id === directKey);
+  const products = directProduct ? [directProduct] : itemIds.map((id) => catalogById.get(id)).filter((product): product is StoreProduct => Boolean(product));
   const validProducts = products.filter((product) => !user?.enrolledCourse || product.course === user.enrolledCourse.slug);
   const total = validProducts.reduce((sum, product) => sum + product.price, 0);
 
@@ -721,17 +757,22 @@ export const StoreCheckoutPage: React.FC = () => {
     setSubmitting(true);
     setIntegrationMessage('');
     try {
-      const packageIds = validProducts.filter((p) => p.productType === 'bundle').map((p) => p.id);
-      const response = await apiRequest<{ orderId: string; orderNumber: string; status: string }>('/api/commerce/checkout', {
-        method: 'POST',
-        headers: { 'idempotency-key': `chk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}` },
-        body: { packageIds },
-      });
-      clearCart();
-      if (response && response.orderId) {
-        navigate(`${ROUTES.STORE}/success/${response.orderId}`);
+      if (!createdOrder) {
+        const response = await createStoreCheckout(validProducts, couponCode);
+        if (response.status === 'PAID') {
+          clearCart();
+          navigate(`/store/checkout/success/${response.orderId}`);
+        } else if (response.checkoutUrl && !response.requiresFakePayment) {
+          window.location.assign(response.checkoutUrl);
+        } else {
+          setCreatedOrder(response);
+          setIntegrationMessage(`Order ${response.orderNumber} is ready for test payment.`);
+        }
       } else {
-        setIntegrationMessage('Order created successfully.');
+        await completeFakePayment(createdOrder.orderId);
+        await queryClient.invalidateQueries({ queryKey: checkoutKeys.entitlements });
+        clearCart();
+        navigate(`/store/checkout/success/${createdOrder.orderId}`);
       }
     } catch (err) {
       setIntegrationMessage(err instanceof Error ? err.message : 'Checkout failed. Please verify items and try again.');
@@ -746,14 +787,14 @@ export const StoreCheckoutPage: React.FC = () => {
       <PageReveal className="pf-store-checkout-page">
         <StoreBreadcrumbs items={[{ label: 'Store', to: ROUTES.STORE }, { label: 'Cart', to: ROUTES.STORE_CART }, { label: 'Checkout' }]} />
         <header className="pf-store-transaction-header"><p className="pf-store-kicker">Secure checkout</p><h1>One final step.<br /><em>Then back to learning.</em></h1></header>
-        {!validProducts.length ? <div className="pf-store-cart-empty"><FileText size={30} /><h2>There is nothing to check out.</h2><Link className="pf-store-button pf-store-button--dark" to={ROUTES.STORE}>Return to Store</Link></div> : (
+        {catalog.isLoading ? <div className="pf-store-cart-empty"><FileText size={30} /><h2>Preparing checkout…</h2></div> : !validProducts.length ? <div className="pf-store-cart-empty"><FileText size={30} /><h2>There is nothing to check out.</h2><Link className="pf-store-button pf-store-button--dark" to={ROUTES.STORE}>Return to Store</Link></div> : (
           <div className="pf-store-checkout-layout">
             <form onSubmit={submitCheckout} className="pf-store-checkout-form">
               <section><span className="pf-store-checkout-step">01</span><div><h2>Account</h2><p>Purchases are attached to the same identity used in the Android app.</p><div className="pf-store-identity"><span>{user?.fullName?.charAt(0) || 'P'}</span><p><strong>{user?.fullName}</strong><small>{user?.email}</small></p><CheckCircle2 size={18} /></div></div></section>
-              <section><span className="pf-store-checkout-step">02</span><div><h2>Billing details <small>Optional</small></h2><p>Add details only if you require them on a future invoice.</p><div className="pf-store-form-grid"><label>Full legal name<input name="legalName" autoComplete="name" /></label><label>Business or institution<input name="business" autoComplete="organization" /></label><label className="is-wide">Billing address<textarea name="address" rows={3} autoComplete="billing street-address" /></label></div></div></section>
-              <section><span className="pf-store-checkout-step">03</span><div><h2>Payment</h2><p>The live payment provider must create and verify the order server-side.</p><div className="pf-store-payment-placeholder"><CreditCard size={22} /><p><strong>Secure payment gateway</strong><span>Provider integration required before transactions can be accepted.</span></p><ShieldCheck size={20} /></div>{integrationMessage && <div className="pf-store-integration-message" role="alert">{integrationMessage}</div>}<button className="pf-store-button pf-store-button--dark pf-store-button--wide" type="submit" disabled={submitting}>{submitting ? 'Processing order…' : 'Continue to secure payment'} <ArrowRight size={16} /></button></div></section>
+              <section><span className="pf-store-checkout-step">02</span><div><h2>Order details</h2><p>Your receipt and access are attached to this account. A coupon is optional.</p><div className="pf-store-form-grid"><label>Full name<input value={user?.fullName ?? ''} readOnly /></label><label>Email address<input value={user?.email ?? ''} readOnly /></label><label className="is-wide">Coupon code<input value={couponCode} onChange={(event) => setCouponCode(event.target.value.toUpperCase())} disabled={Boolean(createdOrder)} placeholder="Optional" /></label><label className="is-wide"><span><input type="checkbox" required /> I confirm this is a test purchase with no real payment.</span></label></div></div></section>
+              <section><span className="pf-store-checkout-step">03</span><div><h2>{createdOrder ? 'Test payment' : 'Create order'}</h2><p>{createdOrder ? 'The order is stored. Complete the simulated paid transition to grant app access.' : 'The server verifies current prices before creating the order.'}</p><div className="pf-store-payment-placeholder"><CreditCard size={22} /><p><strong>{createdOrder ? 'Parallax test payment' : 'Server-verified order'}</strong><span>{createdOrder ? `${createdOrder.orderNumber} · ${formatPrice(createdOrder.totalAmount)}` : 'No card or banking details are collected.'}</span></p><ShieldCheck size={20} /></div>{integrationMessage && <div className="pf-store-integration-message" role="status">{integrationMessage}</div>}<button className="pf-store-button pf-store-button--dark pf-store-button--wide" type="submit" disabled={submitting}>{submitting ? 'Processing…' : createdOrder ? 'Complete fake payment' : 'Place test order'} <ArrowRight size={16} /></button></div></section>
             </form>
-            <aside className="pf-store-checkout-summary"><p>Purchase summary</p>{validProducts.map((product) => <article key={product.id}><StoreProductCover product={product} size="mini" /><div><strong>{product.title}</strong><span>{product.subject}</span></div><b>{formatPrice(product.price)}</b></article>)}<hr /><div><span>Total</span><strong>{formatPrice(total)}</strong></div><small>No payment will be simulated. Unlocking requires a verified server webhook.</small></aside>
+            <aside className="pf-store-checkout-summary"><p>Purchase summary</p>{validProducts.map((product) => <article key={product.id}><StoreProductCover product={product} size="mini" /><div><strong>{product.title}</strong><span>{product.subject}</span></div><b>{formatPrice(product.price)}</b></article>)}<hr /><div><span>Total</span><strong>{createdOrder ? formatPrice(createdOrder.totalAmount) : formatPrice(total)}</strong></div><small>Test mode only. Access is granted by the server after simulated payment succeeds.</small></aside>
           </div>
         )}
       </PageReveal>
@@ -762,14 +803,14 @@ export const StoreCheckoutPage: React.FC = () => {
 };
 
 export const StorePurchasesPage: React.FC = () => {
-  const user = useAuthStore((state) => state.user);
-  const products = storeProducts.filter((product) => user?.purchasedNoteIds?.includes(product.id));
+  const entitlements = useStoreEntitlements();
+  const products = entitlements.data?.items ?? [];
   return (
     <>
       <SeoHead title="My Purchases | Parallax Flow Store" description="View learning resources unlocked for your Parallax Flow account." canonicalPath={ROUTES.STORE_PURCHASES} robots="noindex, nofollow" />
       <PageReveal className="pf-store-account-page">
         <header className="pf-store-page-hero"><div><p className="pf-store-kicker">Your library</p><h1>Purchased.<br /><em>Ready in the app.</em></h1></div><p>Only server-verified entitlements belong here.<span>{products.length} unlocked resources</span></p></header>
-        {products.length ? <div className="pf-store-purchase-library">{products.map((product) => <article key={product.id}><StoreProductCover product={product} size="mini" /><div><span>Unlocked</span><h2>{product.title}</h2><p>{product.subject} · {product.version}</p></div><a className="pf-store-button" href={product.deepLink}>Open in app <ExternalLink size={15} /></a></article>)}</div> : <div className="pf-store-cart-empty"><BookOpen size={30} /><h2>No verified purchases yet.</h2><p>Resources appear here after the payment server grants access.</p><Link className="pf-store-button pf-store-button--dark" to={ROUTES.STORE}>Explore the Store</Link></div>}
+        {entitlements.isLoading ? <div className="pf-store-cart-empty"><BookOpen size={30} /><h2>Opening your purchases…</h2></div> : products.length ? <div className="pf-store-purchase-library">{products.map((product) => <article key={product.id}><div className="pf-store-success-mark is-verified"><Check size={22} /></div><div><span>{product.status === 'EXPIRING_SOON' ? 'Expiring soon' : 'Unlocked'}</span><h2>{product.title}</h2><p>{product.resourceType === 'PACKAGE' ? 'Study package' : 'Premium note'} · {product.order?.orderNumber ?? 'Access grant'}</p></div><a className="pf-store-button" href={`parallaxflow://${product.resourceType === 'PACKAGE' ? 'packages' : 'content'}/${product.resourceId}`}>Open in app <ExternalLink size={15} /></a></article>)}</div> : <div className="pf-store-cart-empty"><BookOpen size={30} /><h2>No verified purchases yet.</h2><p>Resources appear here after the payment server grants access.</p><Link className="pf-store-button pf-store-button--dark" to={ROUTES.STORE}>Explore the Store</Link></div>}
       </PageReveal>
     </>
   );
@@ -778,6 +819,7 @@ export const StorePurchasesPage: React.FC = () => {
 export const StoreProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const entitlements = useStoreEntitlements();
   const course = enrolledCourseFor(user?.enrolledCourse?.slug);
   const logoutFromStore = () => { void logout().then(() => navigate(ROUTES.STORE, { replace: true })); };
   return (
@@ -788,7 +830,7 @@ export const StoreProfilePage: React.FC = () => {
         <div className="pf-store-profile-grid">
           <section className="pf-store-profile-card pf-store-profile-card--identity"><span>{user?.fullName?.charAt(0) || 'P'}</span><div><p>Student account</p><h2>{user?.fullName}</h2><a href={`mailto:${user?.email}`}>{user?.email}</a></div></section>
           <section className="pf-store-profile-card"><p>Enrolled course</p><h2>{course?.name || 'Not assigned'}</h2><span>Course changes require an administrator.</span></section>
-          <section className="pf-store-profile-card"><p>Purchased</p><h2>{user?.purchasedNoteIds?.length || 0} resources</h2><Link to={ROUTES.STORE_PURCHASES}>View purchases <ArrowRight size={14} /></Link></section>
+          <section className="pf-store-profile-card"><p>Purchased</p><h2>{entitlements.data?.items.length ?? 0} resources</h2><Link to={ROUTES.STORE_PURCHASES}>View purchases <ArrowRight size={14} /></Link></section>
           <section className="pf-store-profile-card"><p>Subscription</p><h2>{user?.subscription || 'Free'}</h2><span>Billing integration is not connected.</span></section>
         </div>
         <button className="pf-store-logout" onClick={logoutFromStore}><LogOut size={17} /> Log out</button>
@@ -799,19 +841,17 @@ export const StoreProfilePage: React.FC = () => {
 
 export const StoreSuccessPage: React.FC = () => {
   const { orderId = '' } = useParams();
-  const [searchParams] = useSearchParams();
-  const user = useAuthStore((state) => state.user);
-  const product = getProductBySlug(searchParams.get('product') || '');
-  const verified = Boolean(product && user?.purchasedNoteIds?.includes(product.id));
+  const receipt = useStoreReceipt(orderId);
+  const verified = receipt.data?.status === 'PAID' && receipt.data?.accessStatus === 'GRANTED';
   return (
     <>
       <SeoHead title="Order Status | Parallax Flow Store" description="Review your Parallax Flow Store order and app access status." canonicalPath={`/store/checkout/success/${encodeURIComponent(orderId)}`} robots="noindex, nofollow" />
       <PageReveal className="pf-store-success-page">
         <div className={`pf-store-success-mark${verified ? ' is-verified' : ''}`}>{verified ? <Check size={30} /> : <LockKeyhole size={28} />}</div>
-        <p className="pf-store-kicker">Order {orderId || 'pending'}</p>
-        <h1>{verified ? 'Purchase successful.' : 'Verification required.'}</h1>
-        <p>{verified && product ? `${product.title} has been added to your account. Open the Parallax Flow app to start learning.` : 'This page cannot unlock content by itself. Access appears only after the server verifies payment and grants the entitlement.'}</p>
-        {verified && product ? <a className="pf-store-button pf-store-button--dark" href={product.deepLink}>Open app <ExternalLink size={16} /></a> : <Link className="pf-store-button pf-store-button--dark" to={ROUTES.STORE_PURCHASES}>Check my purchases</Link>}
+        <p className="pf-store-kicker">Order {receipt.data?.orderNumber ?? orderId ?? 'pending'}</p>
+        <h1>{receipt.isLoading ? 'Confirming your order.' : verified ? 'Purchase successful.' : 'Verification required.'}</h1>
+        <p>{verified ? `${receipt.data?.items.map((item) => item.titleSnapshot).join(', ')} has been added to your account. Open the Parallax Flow app to start learning.` : receipt.isError ? 'The receipt could not be loaded. Your order has not been altered; check My Purchases again.' : 'The server is confirming payment and access.'}</p>
+        {verified ? <Link className="pf-store-button pf-store-button--dark" to={ROUTES.STORE_PURCHASES}>View unlocked resources <ExternalLink size={16} /></Link> : <Link className="pf-store-button pf-store-button--dark" to={ROUTES.STORE_PURCHASES}>Check my purchases</Link>}
         <Link to={ROUTES.STORE}>Return to Store</Link>
       </PageReveal>
     </>

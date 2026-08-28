@@ -16,6 +16,7 @@ export interface CourseRepository {
 }
 
 export const COURSE_STORAGE_KEY = 'pf_admin_courses_v1';
+const allowOfflineFixtures = import.meta.env.MODE === 'test';
 
 const initialCourses: AdminCourse[] = [
   { id: 'course-chartered-accountancy', slug: 'chartered-accountancy', name: 'Chartered Accountancy', code: 'CA', description: 'Professional accounting and finance education.', status: 'ACTIVE', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
@@ -73,11 +74,11 @@ export const courseRepository: CourseRepository = {
     try {
       const response = await apiRequest<{ data: BackendCourseDto[] }>('/api/admin/courses?limit=100');
       if (response && Array.isArray(response.data)) {
-        const remoteCourses = response.data.map(adaptBackendCourse);
-        if (remoteCourses.length > 0) return remoteCourses;
+        return response.data.map(adaptBackendCourse);
       }
-    } catch {
-      // Fallback
+      throw new Error('The course service returned an invalid response.');
+    } catch (error) {
+      if (!allowOfflineFixtures) throw error;
     }
     return clone([...courses].sort((a, b) => a.name.localeCompare(b.name)));
   },
@@ -96,8 +97,9 @@ export const courseRepository: CourseRepository = {
       if (dto && dto.id) {
         return adaptBackendCourse(dto);
       }
+      if (!allowOfflineFixtures) throw new Error('The course service returned an invalid response.');
     } catch (err) {
-      if (err instanceof Error) throw err;
+      if (!allowOfflineFixtures) throw err;
     }
 
     // Local fallback
@@ -142,8 +144,9 @@ export const courseRepository: CourseRepository = {
       if (dto && dto.id) {
         return adaptBackendCourse(dto);
       }
+      if (!allowOfflineFixtures) throw new Error('The course service returned an invalid response.');
     } catch (err) {
-      if (err instanceof Error) throw err;
+      if (!allowOfflineFixtures) throw err;
     }
 
     const existing = courses.find((c) => c.id === courseId);
@@ -176,8 +179,8 @@ export const courseRepository: CourseRepository = {
       await apiRequest(`/api/admin/courses/${encodeURIComponent(courseId)}`, {
         method: 'DELETE',
       });
-    } catch {
-      // Fallback
+    } catch (error) {
+      if (!allowOfflineFixtures) throw error;
     }
     courses = courses.filter((c) => c.id !== courseId);
     persistLocal();

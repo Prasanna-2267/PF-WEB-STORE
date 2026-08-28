@@ -4,17 +4,17 @@ import { prisma } from "../db/prisma.js";
 import { ApiError, badRequest, conflict, notFound } from "../errors/api-error.js";
 import { getStorageProvider } from "../integrations/provider-registry.js";
 import { sanitizeRichText } from "../utils/sanitize-html.js";
-import { assertFileNameMatchesMime } from "../utils/upload-validation.js";
+import { assertFileNameMatchesMime, isAllowedContentMimeType } from "../utils/upload-validation.js";
 import { generatePdfFirstPageCover } from "./pdfCoverService.js";
+import { normalizeValidityPolicy } from "./resourceValidityService.js";
 
 export interface ContentScope { academyId?: string | null; actorId: string }
 export interface PageInput { page: number; limit: number; courseId: string; parentId?: string | null; search?: string; includeArchived?: boolean }
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
-const SAFE_MIME = /^(application\/(pdf|zip|json)|text\/(plain|csv)|image\/(jpeg|png|webp|gif)|video\/(mp4|webm)|audio\/(mpeg|mp4|wav))$/i;
 const contentSelect = {
   id: true, courseId: true, parentId: true, kind: true, name: true, size: true, mimeType: true,
-  description: true, entityType: true, accessType: true, price: true, status: true, displayOrder: true,
+  description: true, entityType: true, accessType: true, price: true, validityMode: true, validityOffsetDays: true, status: true, displayOrder: true,
   createdAt: true, updatedAt: true, deletedAt: true,
 } satisfies Prisma.ContentItemSelect;
 
@@ -117,7 +117,7 @@ export async function createUploadIntent(scope: ContentScope, payload: { courseI
     throw badRequest("UNNAMED_PAGE_LOCKED", "Content upload is locked until the page heading is given a valid name.");
   }
 
-  if (!SAFE_MIME.test(payload.mimeType)) throw badRequest("UNSUPPORTED_FILE_TYPE", "This file type is not allowed.");
+  if (!isAllowedContentMimeType(payload.mimeType)) throw badRequest("UNSUPPORTED_FILE_TYPE", "This file type is not allowed.");
   if (payload.sizeBytes < 1 || payload.sizeBytes > MAX_FILE_SIZE) throw badRequest("INVALID_FILE_SIZE", `Files must be between 1 byte and ${MAX_FILE_SIZE} bytes.`);
   if (!/^[a-f0-9]{64}$/i.test(payload.checksumSha256)) throw badRequest("INVALID_CHECKSUM", "checksumSha256 must be a 64-character hexadecimal SHA-256 digest.");
   const fileName = normalizeFileName(payload.fileName);
@@ -182,7 +182,7 @@ export async function uploadProxy(scope: ContentScope, uploadId: string, fileBuf
   return { uploadId: upload.id, objectKey: upload.objectKey, uploaded: true };
 }
 
-export async function finalizeUpload(scope: ContentScope, uploadId: string, payload: { parentId?: string | null; description?: string; entityType?: Prisma.ContentItemCreateInput["entityType"]; accessType?: "FREE" | "PAID"; price?: number; displayOrder?: number }) {
+export async function finalizeUpload(scope: ContentScope, uploadId: string, payload: { parentId?: string | null; description?: string; entityType?: Prisma.ContentItemCreateInput["entityType"]; accessType?: "FREE" | "PAID"; price?: number; validityMode?: "PERMANENT" | "EXAM_DATE_OFFSET"; validityOffsetDays?: number | null; displayOrder?: number }) {
   const upload = await prisma.storageUpload.findFirst({ where: { id: uploadId, createdById: scope.actorId, ...(scope.academyId !== undefined ? { academyId: scope.academyId } : {}) } });
   if (!upload) throw notFound("UPLOAD_NOT_FOUND", "The upload session was not found in the current scope.");
   if (upload.status === "FINALIZED") {
@@ -197,6 +197,7 @@ export async function finalizeUpload(scope: ContentScope, uploadId: string, payl
     throw conflict("UPLOAD_VERIFICATION_FAILED", "Stored R2 object metadata does not match declared size, MIME type, or checksum.");
   }
   if (payload.accessType === "PAID" && (!payload.price || payload.price <= 0)) throw badRequest("PRICE_REQUIRED", "Paid content requires a positive price.");
+  const validity = normalizeValidityPolicy({ accessType: payload.accessType ?? "FREE", validityMode: payload.validityMode, validityOffsetDays: payload.validityOffsetDays });
 
   try {
     const finalized = await prisma.$transaction(async (tx) => {
@@ -212,7 +213,8 @@ export async function finalizeUpload(scope: ContentScope, uploadId: string, payl
       const item = await tx.contentItem.create({ data: {
         courseId: upload.courseId!, parentId: payload.parentId ?? null, kind: "FILE", name: upload.originalName,
         size: upload.sizeBytes, mimeType: upload.mimeType, storagePath: upload.objectKey, description: payload.description?.trim() ?? "",
-        entityType: payload.entityType, accessType: payload.accessType ?? "FREE", price: payload.accessType === "PAID" ? payload.price : null,
+        entityType: payload.entityType, accessType: validity.accessType, price: validity.accessType === "PAID" ? payload.price : null,
+        validityMode: validity.validityMode, validityOffsetDays: validity.validityOffsetDays,
         status: "PUBLISHED", displayOrder: payload.displayOrder ?? 0,
       }, select: contentSelect });
       await audit(tx, scope, "CONTENT_UPLOAD_FINALIZED", item.id, `Finalized upload ${item.name}.`);
@@ -240,18 +242,26 @@ export async function getContentAccessUrl(scope: ContentScope, contentId: string
   return { id: item.id, fileName: item.name, mimeType: item.mimeType, disposition, url: await getStorageProvider().createDownloadUrl(item.storagePath, 300), expiresIn: 300 };
 }
 
-export async function updateContent(scope: ContentScope, contentId: string, payload: { name?: string; description?: string; entityType?: Prisma.ContentItemUpdateInput["entityType"]; accessType?: "FREE" | "PAID"; price?: number | null; status?: "PUBLISHED" | "ARCHIVED"; displayOrder?: number; applyToChildren?: boolean; storeSections?: Array<{ heading: string; content: string; displayOrder?: number }> }) {
+export async function updateContent(scope: ContentScope, contentId: string, payload: { name?: string; description?: string; entityType?: Prisma.ContentItemUpdateInput["entityType"]; accessType?: "FREE" | "PAID"; price?: number | null; validityMode?: "PERMANENT" | "EXAM_DATE_OFFSET"; validityOffsetDays?: number | null; status?: "PUBLISHED" | "ARCHIVED"; displayOrder?: number; applyToChildren?: boolean; storeSections?: Array<{ heading: string; content: string; displayOrder?: number }> }) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.contentItem.findFirst({ where: { id: contentId, deletedAt: null, course: scope.academyId !== undefined ? { academyId: scope.academyId } : undefined } });
     if (!existing) throw notFound("CONTENT_NOT_FOUND", "The content item was not found in the current scope.");
     const accessType = payload.accessType ?? existing.accessType;
     const price = payload.price === undefined ? existing.price : payload.price;
     if (accessType === "PAID" && (!price || Number(price) <= 0)) throw badRequest("PRICE_REQUIRED", "Paid content requires a positive price.");
+    const validity = normalizeValidityPolicy({
+      accessType,
+      validityMode: payload.validityMode ?? (payload.accessType === "FREE" ? "PERMANENT" : existing.validityMode),
+      validityOffsetDays: payload.validityOffsetDays === undefined ? existing.validityOffsetDays : payload.validityOffsetDays,
+    });
     const updated = await tx.contentItem.update({ where: { id: contentId }, data: {
       ...(payload.name !== undefined ? { name: normalizeFileName(payload.name) } : {}),
       ...(payload.description !== undefined ? { description: payload.description.trim() } : {}),
       ...(payload.entityType !== undefined ? { entityType: payload.entityType } : {}),
       ...(payload.accessType !== undefined ? { accessType: payload.accessType, price: payload.accessType === "FREE" ? null : price } : payload.price !== undefined ? { price } : {}),
+      ...((payload.accessType !== undefined || payload.validityMode !== undefined || payload.validityOffsetDays !== undefined)
+        ? { validityMode: validity.validityMode, validityOffsetDays: validity.validityOffsetDays }
+        : {}),
       ...(payload.status !== undefined ? { status: payload.status } : {}), ...(payload.displayOrder !== undefined ? { displayOrder: payload.displayOrder } : {}),
     }, select: { ...contentSelect, storeSections: { orderBy: { displayOrder: "asc" } }, sampleImages: { orderBy: [{ role: "asc" }, { displayOrder: "asc" }] } } });
 
@@ -284,6 +294,8 @@ export async function updateContent(scope: ContentScope, contentId: string, payl
           data: {
             accessType,
             price: accessType === "FREE" ? null : price,
+            validityMode: validity.validityMode,
+            validityOffsetDays: validity.validityOffsetDays,
           },
         });
         currentParentIds = childIds;
@@ -295,7 +307,17 @@ export async function updateContent(scope: ContentScope, contentId: string, payl
       select: { ...contentSelect, storeSections: { orderBy: { displayOrder: "asc" } }, sampleImages: { orderBy: [{ role: "asc" }, { displayOrder: "asc" }] } },
     });
 
-    await audit(tx, scope, "CONTENT_UPDATED", contentId, `Updated content ${updated.name}.`);
+    await audit(tx, scope, "CONTENT_UPDATED", contentId, `Updated content ${updated.name}.`, {
+      accessType: existing.accessType,
+      price: existing.price?.toString() ?? null,
+      validityMode: existing.validityMode,
+      validityOffsetDays: existing.validityOffsetDays,
+    }, {
+      accessType: reloaded?.accessType ?? updated.accessType,
+      price: (reloaded?.price ?? updated.price)?.toString() ?? null,
+      validityMode: reloaded?.validityMode ?? updated.validityMode,
+      validityOffsetDays: reloaded?.validityOffsetDays ?? updated.validityOffsetDays,
+    });
     return apiContent(reloaded ?? updated);
   });
 }
@@ -363,7 +385,7 @@ export async function copyContent(scope: ContentScope, contentId: string, destin
   const destinationKey = `${item.storagePath}-copy-${randomUUID()}`;
   await getStorageProvider().copyObject(item.storagePath, destinationKey);
   const copy = await prisma.$transaction(async (tx) => {
-    const created = await tx.contentItem.create({ data: { courseId: item.courseId, parentId: destinationParentId, kind: item.kind, name: `Copy of ${item.name}`.slice(0, 180), size: item.size, mimeType: item.mimeType, storagePath: destinationKey, description: item.description, entityType: item.entityType, accessType: item.accessType, price: item.price, status: item.status, displayOrder: item.displayOrder }, select: contentSelect });
+    const created = await tx.contentItem.create({ data: { courseId: item.courseId, parentId: destinationParentId, kind: item.kind, name: `Copy of ${item.name}`.slice(0, 180), size: item.size, mimeType: item.mimeType, storagePath: destinationKey, description: item.description, entityType: item.entityType, accessType: item.accessType, price: item.price, validityMode: item.validityMode, validityOffsetDays: item.validityOffsetDays, status: item.status, displayOrder: item.displayOrder }, select: contentSelect });
     await audit(tx, scope, "CONTENT_COPIED", created.id, `Copied content ${item.name}.`);
     return created;
   });
@@ -568,7 +590,7 @@ export async function executeContentTreeCopyJob(input: { jobId: string; actorId:
     for (const level of levels) for (const source of level) {
       const parentId = source.id === root.id ? input.destinationParentId ?? null : ids.get(source.parentId!);
       const metadata = related.find((item) => item.id === source.id)!;
-      const copy = await tx.contentItem.create({ data: { courseId: source.courseId, parentId, kind: source.kind, name: source.id === root.id ? `Copy of ${source.name}`.slice(0, 180) : source.name, size: source.size, mimeType: source.mimeType, storagePath: objectKeys.get(source.id), description: source.description, entityType: source.entityType, accessType: source.accessType, price: source.price, status: source.status, displayOrder: source.displayOrder, storeSections: metadata.storeSections.length ? { create: metadata.storeSections.map((section) => ({ heading: section.heading, content: section.content, displayOrder: section.displayOrder })) } : undefined, sampleImages: metadata.sampleImages.length ? { create: metadata.sampleImages.map((image) => ({ name: image.name, mimeType: image.mimeType, size: image.size, storagePath: sampleKeys.get(image.id)!, displayOrder: image.displayOrder })) } : undefined } });
+      const copy = await tx.contentItem.create({ data: { courseId: source.courseId, parentId, kind: source.kind, name: source.id === root.id ? `Copy of ${source.name}`.slice(0, 180) : source.name, size: source.size, mimeType: source.mimeType, storagePath: objectKeys.get(source.id), description: source.description, entityType: source.entityType, accessType: source.accessType, price: source.price, validityMode: source.validityMode, validityOffsetDays: source.validityOffsetDays, status: source.status, displayOrder: source.displayOrder, storeSections: metadata.storeSections.length ? { create: metadata.storeSections.map((section) => ({ heading: section.heading, content: section.content, displayOrder: section.displayOrder })) } : undefined, sampleImages: metadata.sampleImages.length ? { create: metadata.sampleImages.map((image) => ({ name: image.name, mimeType: image.mimeType, size: image.size, storagePath: sampleKeys.get(image.id)!, displayOrder: image.displayOrder })) } : undefined } });
       ids.set(source.id, copy.id); if (source.id === root.id) copiedRootId = copy.id;
     }
     await audit(tx, scope, "CONTENT_TREE_COPIED", copiedRootId, `Copied content tree ${root.name} (${all.length} items).`);

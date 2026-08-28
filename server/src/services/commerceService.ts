@@ -18,7 +18,13 @@ async function grantOrderEntitlements(tx: Prisma.TransactionClient, orderId: str
   await tx.order.update({ where: { id: orderId }, data: { accessStatus: "GRANTED" } });
 }
 
-export async function createCheckout(userId: string, input: { packageIds: string[]; couponCode?: string }, idempotencyKey: string) {
+type CheckoutInput = {
+  packageIds?: string[];
+  items?: Array<{ resourceType: "PACKAGE" | "CONTENT"; resourceId: string }>;
+  couponCode?: string;
+};
+
+export async function createCheckout(userId: string, input: CheckoutInput, idempotencyKey: string) {
   const hash = requestHash(input);
   const existing = await prisma.idempotencyRecord.findUnique({ where: { scope_key: { scope: `checkout:${userId}`, key: idempotencyKey } } });
   if (existing) {
@@ -26,10 +32,33 @@ export async function createCheckout(userId: string, input: { packageIds: string
     if (existing.responseCode >= 400) throw new ApiError(existing.responseCode, "CHECKOUT_PREVIOUSLY_FAILED", "The prior checkout attempt with this idempotency key failed.");
     return existing.responseBody;
   }
-  const packages = await prisma.package.findMany({ where: { id: { in: [...new Set(input.packageIds)] }, status: "PUBLISHED", deletedAt: null, course: { status: "ACTIVE", deletedAt: null } }, take: 50, include: { course: true } });
-  if (!packages.length || packages.length !== new Set(input.packageIds).size) throw badRequest("INVALID_CHECKOUT_ITEMS", "Every checkout package must be published and available.");
-  if (new Set(packages.map((item) => item.courseId)).size !== 1) throw badRequest("MULTI_COURSE_CHECKOUT_UNSUPPORTED", "A checkout can contain packages from only one course.");
-  const subtotal = packages.reduce((sum, item) => sum + Number(item.price), 0);
+  const packageIds = [...new Set([...(input.packageIds ?? []), ...(input.items ?? []).filter((item) => item.resourceType === "PACKAGE").map((item) => item.resourceId)])];
+  const contentIds = [...new Set((input.items ?? []).filter((item) => item.resourceType === "CONTENT").map((item) => item.resourceId))];
+  if (!packageIds.length && !contentIds.length) throw badRequest("INVALID_CHECKOUT_ITEMS", "At least one purchasable item is required.");
+  if (packageIds.length + contentIds.length > 50) throw badRequest("CHECKOUT_ITEM_LIMIT_EXCEEDED", "A checkout can contain at most 50 items.");
+
+  const [packages, contentItems] = await Promise.all([
+    prisma.package.findMany({ where: { id: { in: packageIds }, status: "PUBLISHED", deletedAt: null, course: { status: "ACTIVE", deletedAt: null } }, take: 50, include: { course: true } }),
+    prisma.contentItem.findMany({ where: { id: { in: contentIds }, kind: "FILE", accessType: "PAID", status: "PUBLISHED", deletedAt: null, price: { not: null }, course: { status: "ACTIVE", deletedAt: null } }, take: 50, include: { course: true } }),
+  ]);
+  if (packages.length !== packageIds.length || contentItems.length !== contentIds.length) throw badRequest("INVALID_CHECKOUT_ITEMS", "Every checkout item must be published, paid, and available.");
+  const courseIds = [...packages.map((item) => item.courseId), ...contentItems.map((item) => item.courseId)];
+  if (new Set(courseIds).size !== 1) throw badRequest("MULTI_COURSE_CHECKOUT_UNSUPPORTED", "A checkout can contain items from only one course.");
+  const alreadyOwned = await prisma.entitlement.findFirst({
+    where: {
+      userId,
+      status: "ACTIVE",
+      OR: [
+        { packageId: { in: packageIds } },
+        { contentItemId: { in: contentIds } },
+        ...(contentIds.length ? [{ package: { is: { items: { some: { contentItemId: { in: contentIds } } } } } }] : []),
+      ],
+      AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }],
+    },
+    select: { resourceTitle: true },
+  });
+  if (alreadyOwned) throw conflict("CHECKOUT_ITEM_ALREADY_OWNED", `${alreadyOwned.resourceTitle} is already available in your library.`);
+  const subtotal = [...packages.map((item) => Number(item.price)), ...contentItems.map((item) => Number(item.price))].reduce((sum, price) => sum + price, 0);
   let coupon: Awaited<ReturnType<typeof prisma.coupon.findFirst>> = null; let discount = 0;
   if (input.couponCode) {
     coupon = await prisma.coupon.findFirst({ where: { code: input.couponCode.toUpperCase(), enabled: true } });
@@ -40,7 +69,8 @@ export async function createCheckout(userId: string, input: { packageIds: string
     discount = coupon.discountType === "PERCENT" ? Math.min(subtotal, subtotal * Number(coupon.discountValue) / 100) : Math.min(subtotal, Number(coupon.discountValue));
   }
   const total = Math.max(0, Number((subtotal - discount).toFixed(2)));
-  const provider = total > 0 ? getPaymentProvider() : null;
+  const fakePaymentEnabled = getConfig().payment.fakePaymentEnabled;
+  const provider = total > 0 && !fakePaymentEnabled ? getPaymentProvider() : null;
   let order;
   try {
     order = await prisma.$transaction(async (tx) => {
@@ -48,11 +78,14 @@ export async function createCheckout(userId: string, input: { packageIds: string
       const claimed = await tx.coupon.updateMany({ where: { id: coupon.id, enabled: true, usageCount: coupon.maxUses === null ? undefined : { lt: coupon.maxUses } }, data: { usageCount: { increment: 1 } } });
       if (!claimed.count) throw conflict("COUPON_EXHAUSTED", "The coupon was exhausted by another checkout.");
     }
-    const created = await tx.order.create({ data: { orderNumber: orderNumber(), userId, courseId: packages[0].courseId, subtotal, discountAmount: discount, totalAmount: total, status: total === 0 ? "PAID" : "CREATED", accessStatus: total === 0 ? "PENDING" : "PENDING", isComplimentary: total === 0, paidAt: total === 0 ? new Date() : null, receiptNumber: total === 0 ? receiptNumber() : null, items: { create: packages.map((item) => ({ packageId: item.id, resourceType: "PACKAGE", titleSnapshot: item.title, unitPrice: item.price, quantity: 1, totalPrice: item.price })) } } });
+    const created = await tx.order.create({ data: { orderNumber: orderNumber(), userId, courseId: courseIds[0], subtotal, discountAmount: discount, totalAmount: total, status: total === 0 ? "PAID" : "CREATED", accessStatus: "PENDING", isComplimentary: total === 0, paidAt: total === 0 ? new Date() : null, receiptNumber: total === 0 ? receiptNumber() : null, paymentMethod: total === 0 ? "COMPLIMENTARY" : null, items: { create: [
+      ...packages.map((item) => ({ packageId: item.id, resourceType: "PACKAGE" as const, titleSnapshot: item.title, unitPrice: item.price, quantity: 1, totalPrice: item.price })),
+      ...contentItems.map((item) => ({ contentItemId: item.id, resourceType: "PREMIUM_NOTES" as const, titleSnapshot: item.name, unitPrice: item.price!, quantity: 1, totalPrice: item.price! })),
+    ] } } });
     if (coupon) await tx.couponRedemption.create({ data: { couponId: coupon.id, userId, orderId: created.id, discountAmount: discount } });
     if (total === 0) await grantOrderEntitlements(tx, created.id);
-    else await tx.payment.create({ data: { orderId: created.id, provider: "configured", amount: total, currency: "INR", status: "PENDING" } });
-    await tx.idempotencyRecord.create({ data: { scope: `checkout:${userId}`, key: idempotencyKey, requestHash: hash, responseCode: 201, responseBody: { orderId: created.id, orderNumber: created.orderNumber, status: created.status, currency: created.currency, subtotal, discountAmount: discount, totalAmount: total }, expiresAt: new Date(Date.now() + 24 * 60 * 60_000) } });
+    else await tx.payment.create({ data: { orderId: created.id, provider: fakePaymentEnabled ? "test" : "configured", amount: total, currency: "INR", status: "PENDING", paymentMethod: fakePaymentEnabled ? "FAKE_TEST_PAYMENT" : null } });
+    await tx.idempotencyRecord.create({ data: { scope: `checkout:${userId}`, key: idempotencyKey, requestHash: hash, responseCode: 201, responseBody: { orderId: created.id, orderNumber: created.orderNumber, status: created.status, currency: created.currency, subtotal, discountAmount: discount, totalAmount: total, paymentMode: fakePaymentEnabled && total > 0 ? "FAKE_TEST" : total === 0 ? "COMPLIMENTARY" : "PROVIDER", requiresFakePayment: fakePaymentEnabled && total > 0 }, expiresAt: new Date(Date.now() + 24 * 60 * 60_000) } });
     return created;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
@@ -63,7 +96,7 @@ export async function createCheckout(userId: string, input: { packageIds: string
     }
     throw error;
   }
-  let response: Record<string, unknown> = { orderId: order.id, orderNumber: order.orderNumber, status: order.status, currency: order.currency, subtotal, discountAmount: discount, totalAmount: total };
+  let response: Record<string, unknown> = { orderId: order.id, orderNumber: order.orderNumber, status: order.status, currency: order.currency, subtotal, discountAmount: discount, totalAmount: total, paymentMode: fakePaymentEnabled && total > 0 ? "FAKE_TEST" : total === 0 ? "COMPLIMENTARY" : "PROVIDER", requiresFakePayment: fakePaymentEnabled && total > 0 };
   if (provider) {
     try {
       const checkout = await provider.createCheckout({ orderId: order.id, amountMinor: Math.round(total * 100), currency: order.currency, idempotencyKey });
@@ -80,6 +113,42 @@ export async function createCheckout(userId: string, input: { packageIds: string
     }
   }
   await prisma.idempotencyRecord.update({ where: { scope_key: { scope: `checkout:${userId}`, key: idempotencyKey } }, data: { responseBody: response as Prisma.InputJsonValue } });
+  return response;
+}
+
+export async function confirmFakePayment(userId: string, orderId: string, idempotencyKey: string) {
+  if (!getConfig().payment.fakePaymentEnabled) throw notFound("FAKE_PAYMENT_NOT_AVAILABLE", "Test payment is not available in this environment.");
+  const scope = `fake-payment:${userId}:${orderId}`;
+  const hash = requestHash({ orderId, outcome: "SUCCESS" });
+  const existing = await prisma.idempotencyRecord.findUnique({ where: { scope_key: { scope, key: idempotencyKey } } });
+  if (existing) {
+    if (existing.requestHash !== hash) throw conflict("IDEMPOTENCY_KEY_REUSED", "This idempotency key was already used with a different request.");
+    return existing.responseBody;
+  }
+
+  const order = await prisma.order.findFirst({ where: { id: orderId, userId }, include: { payments: true } });
+  if (!order) throw notFound("ORDER_NOT_FOUND", "The order was not found.");
+  if (order.status === "PAID" && order.accessStatus === "GRANTED") {
+    return { orderId: order.id, orderNumber: order.orderNumber, status: order.status, accessStatus: order.accessStatus, receiptNumber: order.receiptNumber, paidAt: order.paidAt, duplicate: true };
+  }
+  if (order.status !== "CREATED") throw conflict("ORDER_NOT_PAYABLE", "Only a newly created order can complete test payment.");
+  const payment = order.payments.find((item) => item.status === "PENDING" && item.provider === "test");
+  if (!payment) throw conflict("TEST_PAYMENT_NOT_PENDING", "This order has no pending test payment.");
+
+  const response = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.order.updateMany({ where: { id: orderId, userId, status: "CREATED" }, data: { status: "PAID", paidAt: new Date(), receiptNumber: order.receiptNumber ?? receiptNumber(), paymentMethod: "FAKE_TEST_PAYMENT" } });
+    if (!claimed.count) {
+      const winner = await tx.order.findFirst({ where: { id: orderId, userId } });
+      if (winner?.status === "PAID") return { orderId: winner.id, orderNumber: winner.orderNumber, status: winner.status, accessStatus: winner.accessStatus, receiptNumber: winner.receiptNumber, paidAt: winner.paidAt, duplicate: true };
+      throw conflict("ORDER_NOT_PAYABLE", "The order is no longer payable.");
+    }
+    await tx.payment.update({ where: { id: payment.id }, data: { status: "SUCCESS", providerPaymentId: `TEST-${orderId}`, paymentMethod: "FAKE_TEST_PAYMENT", failureReason: null } });
+    await grantOrderEntitlements(tx, orderId);
+    const paid = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+    const result = { orderId: paid.id, orderNumber: paid.orderNumber, status: paid.status, accessStatus: paid.accessStatus, receiptNumber: paid.receiptNumber, paidAt: paid.paidAt, duplicate: false };
+    await tx.idempotencyRecord.create({ data: { scope, key: idempotencyKey, requestHash: hash, responseCode: 200, responseBody: result, expiresAt: new Date(Date.now() + 24 * 60 * 60_000) } });
+    return result;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   return response;
 }
 

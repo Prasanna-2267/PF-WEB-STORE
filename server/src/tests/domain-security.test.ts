@@ -6,6 +6,9 @@ import { assertFileNameMatchesMime } from "../utils/upload-validation.js";
 test("upload validation rejects traversal, active SVG, missing extensions, and MIME mismatches", () => {
   assert.doesNotThrow(() => assertFileNameMatchesMime("lesson.pdf", "application/pdf"));
   assert.doesNotThrow(() => assertFileNameMatchesMime("photo.JPEG", "image/jpeg"));
+  assert.doesNotThrow(() => assertFileNameMatchesMime("lesson-plan.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"));
+  assert.doesNotThrow(() => assertFileNameMatchesMime("revision-deck.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"));
+  assert.doesNotThrow(() => assertFileNameMatchesMime("marks.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
   assert.throws(() => assertFileNameMatchesMime("..%2Fsecrets.pdf", "application/pdf"));
   assert.throws(() => assertFileNameMatchesMime("payload.svg", "image/svg+xml"));
   assert.throws(() => assertFileNameMatchesMime("payload.pdf.exe", "application/pdf"));

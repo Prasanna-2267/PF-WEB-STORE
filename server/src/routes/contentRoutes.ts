@@ -3,7 +3,7 @@ import { z } from "zod";
 import { asyncRoute } from "../middleware/async-route.js";
 import * as content from "../services/contentService.js";
 
-const uuid = z.string().min(1).max(120);
+const uuid = z.string().uuid();
 const entityType = z.enum(["EXAM", "STAGE", "SUBJECT", "CHAPTER", "COURSE", "CATEGORY", "LESSON", "STUDY_MATERIAL", "GOVERNMENT_DOCUMENT", "QUESTION_PAPER", "REFERENCE_MATERIAL", "PREMIUM_NOTE", "MEDIA", "OTHER"]);
 const academyScope = (req: Express.Request) => ({ academyId: req.tenantContext!.academyId!, actorId: req.auth!.userId });
 // The global Super Admin content workspace owns only platform resources.
@@ -32,7 +32,7 @@ export function createContentRouter(kind: "admin" | "academy") {
   }));
   router.post("/uploads/:uploadId/finalize", asyncRoute(async (req, res) => {
     const academicFinalizeSchema = z.object({ parentId: uuid.nullish(), description: z.string().max(2_000).optional(), entityType: entityType.exclude(["PREMIUM_NOTE"]).optional(), displayOrder: z.number().int().min(0).max(1_000_000).optional() }).strict();
-    const adminFinalizeSchema = academicFinalizeSchema.extend({ entityType: entityType.optional(), accessType: z.enum(["FREE", "PAID"]).optional(), price: z.number().positive().max(9_999_999).optional() }).strict();
+    const adminFinalizeSchema = academicFinalizeSchema.extend({ entityType: entityType.optional(), accessType: z.enum(["FREE", "PAID"]).optional(), price: z.number().positive().max(9_999_999).optional(), validityMode: z.enum(["PERMANENT", "EXAM_DATE_OFFSET"]).optional(), validityOffsetDays: z.number().int().min(0).max(3650).nullable().optional() }).strict();
     const body = (kind === "academy" ? academicFinalizeSchema : adminFinalizeSchema).parse(req.body);
     res.status(201).json(await content.finalizeUpload(scope(req), uuid.parse(req.params.uploadId), body));
   }));
@@ -54,7 +54,7 @@ export function createContentRouter(kind: "admin" | "academy") {
   router.get("/:contentId/preview", asyncRoute(async (req, res) => { res.json(await content.getContentAccessUrl(scope(req), uuid.parse(req.params.contentId), "preview")); }));
   router.patch("/:contentId", asyncRoute(async (req, res) => {
     const baseUpdate = z.object({ name: z.string().min(1).max(180).optional(), description: z.string().max(2_000).optional(), entityType: entityType.exclude(["PREMIUM_NOTE"]).optional(), status: z.enum(["PUBLISHED", "ARCHIVED"]).optional(), displayOrder: z.number().int().min(0).max(1_000_000).optional() });
-    const adminUpdate = baseUpdate.extend({ entityType: entityType.optional(), accessType: z.enum(["FREE", "PAID"]).optional(), price: z.number().positive().max(9_999_999).nullable().optional(), applyToChildren: z.boolean().optional(), storeSections: z.array(z.object({ id: z.string().optional(), heading: z.string().max(200), content: z.string().max(2_000), displayOrder: z.number().int().optional() })).optional() });
+    const adminUpdate = baseUpdate.extend({ entityType: entityType.optional(), accessType: z.enum(["FREE", "PAID"]).optional(), price: z.number().positive().max(9_999_999).nullable().optional(), validityMode: z.enum(["PERMANENT", "EXAM_DATE_OFFSET"]).optional(), validityOffsetDays: z.number().int().min(0).max(3650).nullable().optional(), applyToChildren: z.boolean().optional(), storeSections: z.array(z.object({ id: z.string().optional(), heading: z.string().max(200), content: z.string().max(2_000), displayOrder: z.number().int().optional() })).optional() });
     const body = (kind === "academy" ? baseUpdate : adminUpdate).strict().refine((value) => Object.keys(value).length > 0).parse(req.body);
     res.json(await content.updateContent(scope(req), uuid.parse(req.params.contentId), body));
   }));

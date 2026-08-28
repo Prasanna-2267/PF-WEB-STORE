@@ -54,6 +54,22 @@ const MAX_STORE_SECTIONS = 3;
 const ACCEPTED_FILE_EXTENSIONS = new Set([
   'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'png', 'jpg', 'jpeg', 'webp', 'mp4', 'webm', 'zip',
 ]);
+const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  zip: 'application/zip',
+};
 const SAMPLE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const PHASE_DELAYS = { upload: 110, publish: 310 } as const;
 const COMPLETION_RETURN_DELAY = 650;
@@ -62,6 +78,7 @@ let temporarySequence = 0;
 const temporaryId = (kind: 'file' | 'folder') => `stage-${kind}-${Date.now()}-${temporarySequence += 1}`;
 const cleanPath = (value: string) => value.replace(/\\/g, '/').split('/').filter(Boolean).join('/');
 const fileExtension = (name: string) => name.split('.').pop()?.toLocaleLowerCase() ?? '';
+const contentMimeType = (file: File) => (MIME_BY_EXTENSION[fileExtension(file.name)] ?? file.type) || 'application/octet-stream';
 const formatBytes = (bytes: number): string => {
   if (!bytes) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -111,6 +128,8 @@ const buildEntries = (
           mimeType: null,
           accessType: 'FREE',
           price: null,
+          validityMode: 'PERMANENT',
+          validityOffsetDays: null,
           description: '',
           sampleImages: [],
           storeSections: [],
@@ -129,11 +148,13 @@ const buildEntries = (
       kind: 'file',
       name: parts.at(-1) || file.name,
       size: file.size,
-      mimeType: file.type || 'application/octet-stream',
+      mimeType: contentMimeType(file),
       sourceFile: file,
       entityType: previousEntry?.entityType ?? 'study-material',
       accessType: previousEntry?.accessType ?? 'FREE',
       price: previousEntry?.price ?? null,
+      validityMode: previousEntry?.validityMode ?? 'PERMANENT',
+      validityOffsetDays: previousEntry?.validityOffsetDays ?? null,
       description: previousEntry?.description ?? '',
       sampleImages: previousEntry?.sampleImages ?? [],
       storeSections: previousEntry?.storeSections ?? [],
@@ -152,6 +173,8 @@ const validateFile = (entry: ContentPublishEntry, duplicatePaths: Set<string>): 
   if (entry.accessType === 'PAID') {
     if (!entry.price || entry.price <= 0) issues.push('Enter a price greater than zero.');
     if (!entry.description.trim()) issues.push('Add a Store description.');
+    const validityDays = entry.validityOffsetDays ?? -1;
+    if (entry.validityMode === 'EXAM_DATE_OFFSET' && (!Number.isInteger(validityDays) || validityDays < 0 || validityDays > 3650)) issues.push('Enter validity from 0 to 3650 days after the exam date.');
     if (entry.sampleImages.length > MAX_SAMPLE_IMAGES) issues.push('Use no more than three sample images.');
     if (entry.storeSections.length > MAX_STORE_SECTIONS) issues.push('Use no more than three Store information sections.');
     entry.storeSections.forEach((section, index) => {
@@ -316,6 +339,8 @@ export const ContentPublishingWorkflow: React.FC<ContentPublishingWorkflowProps>
         ...entry,
         accessType: bulkAccess,
         price: bulkAccess === 'PAID' && numericPrice > 0 ? numericPrice : null,
+        validityMode: bulkAccess === 'FREE' ? 'PERMANENT' : entry.validityMode,
+        validityOffsetDays: bulkAccess === 'FREE' ? null : entry.validityOffsetDays,
         description: bulkDescription.trim() || entry.description,
         sampleImages: bulkAccess === 'FREE' ? [] : entry.sampleImages,
         storeSections: bulkAccess === 'FREE' ? [] : entry.storeSections,
@@ -499,6 +524,7 @@ export const ContentPublishingWorkflow: React.FC<ContentPublishingWorkflowProps>
       description={`Temporary upload session · Destination: ${destinationLabel}`}
       size="wide"
       footer={footer}
+      bodyClassName="pf-publish-dialog-body"
     >
       <div className="pf-publish-workflow">
         <ol className="pf-publish-steps" aria-label="Publishing progress">
@@ -525,7 +551,7 @@ export const ContentPublishingWorkflow: React.FC<ContentPublishingWorkflowProps>
         ) : null}
 
         {step === 'configure' ? (
-          <motion.section className="pf-publish-configure" style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 0.38fr) minmax(0, 0.62fr)', height: '100%', minHeight: 0, flex: '1 1 0%' }} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}>
+          <motion.section className="pf-publish-configure" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}>
             <aside className="pf-publish-tree" aria-label="Temporary content hierarchy">
               <header><div><strong>Content tree</strong><small>{files.length} independent file{files.length === 1 ? '' : 's'}</small></div><button type="button" onClick={() => setBulkOpen((current) => !current)}><Files /> Bulk configure</button></header>
               <div className="pf-publish-tree-scroll">
@@ -603,9 +629,11 @@ export const ContentPublishingWorkflow: React.FC<ContentPublishingWorkflowProps>
                       </div>
                     );
                   })}
-                  <fieldset className="pf-publish-access"><legend>Access type</legend><label className={activeFile.accessType === 'FREE' ? 'is-active' : ''}><input type="radio" name="access" checked={activeFile.accessType === 'FREE'} onChange={() => updateEntry(activeFile.temporaryId, { accessType: 'FREE', price: null, sampleImages: [], storeSections: [] })} /><span><CheckCircle2 /><strong>Free</strong><small>Available immediately in the library</small></span></label><label className={activeFile.accessType === 'PAID' ? 'is-active' : ''}><input type="radio" name="access" checked={activeFile.accessType === 'PAID'} onChange={() => updateEntry(activeFile.temporaryId, { accessType: 'PAID' })} /><span><LockKeyhole /><strong>Paid</strong><small>Requires Store metadata before publishing</small></span></label></fieldset>
+                  <fieldset className="pf-publish-access"><legend>Access type</legend><label className={activeFile.accessType === 'FREE' ? 'is-active' : ''}><input type="radio" name="access" checked={activeFile.accessType === 'FREE'} onChange={() => updateEntry(activeFile.temporaryId, { accessType: 'FREE', price: null, validityMode: 'PERMANENT', validityOffsetDays: null, sampleImages: [], storeSections: [] })} /><span><CheckCircle2 /><strong>Free</strong><small>Available immediately in the library</small></span></label><label className={activeFile.accessType === 'PAID' ? 'is-active' : ''}><input type="radio" name="access" checked={activeFile.accessType === 'PAID'} onChange={() => updateEntry(activeFile.temporaryId, { accessType: 'PAID' })} /><span><LockKeyhole /><strong>Paid</strong><small>Requires Store metadata before publishing</small></span></label></fieldset>
                   {activeFile.accessType === 'PAID' ? <div className="pf-publish-paid">
                     <label><span>Price (₹) <b>Required</b></span><input type="number" min="1" step="1" value={activeFile.price ?? ''} onChange={(event) => updateEntry(activeFile.temporaryId, { price: event.target.value ? Number(event.target.value) : null })} placeholder="499" /></label>
+                    <label><span>Access validity</span><select value={activeFile.validityMode ?? 'PERMANENT'} onChange={(event) => updateEntry(activeFile.temporaryId, { validityMode: event.target.value as 'PERMANENT' | 'EXAM_DATE_OFFSET', validityOffsetDays: event.target.value === 'PERMANENT' ? null : (activeFile.validityOffsetDays ?? 0) })}><option value="PERMANENT">Permanent</option><option value="EXAM_DATE_OFFSET">Exam date + days</option></select><small>{(activeFile.validityMode ?? 'PERMANENT') === 'PERMANENT' ? 'Access does not expire.' : 'Calculated from each learner’s saved exam date.'}</small></label>
+                    {activeFile.validityMode === 'EXAM_DATE_OFFSET' ? <label><span>Days after exam date <b>Required</b></span><input type="number" min="0" max="3650" step="1" value={activeFile.validityOffsetDays ?? 0} onChange={(event) => updateEntry(activeFile.temporaryId, { validityOffsetDays: event.target.value === '' ? null : Number(event.target.value) })} /><small>0 keeps access through the exam date; 30 keeps it for 30 additional days.</small></label> : null}
                     <label><span>Store description <b>Required</b></span><textarea rows={4} value={activeFile.description} onChange={(event) => updateEntry(activeFile.temporaryId, { description: event.target.value })} placeholder="Explain what the learner receives and why it is useful." /></label>
                     <section className="pf-publish-samples"><header><div><strong>Sample images</strong><small>{activeFile.sampleImages.length} / {MAX_SAMPLE_IMAGES} · JPG, PNG, WebP, or JFIF</small></div><label className={activeFile.sampleImages.length >= MAX_SAMPLE_IMAGES ? 'is-disabled' : ''}><ImagePlus /> Add images<input className="pf-admin-sr-only" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.jfif,.gif,.svg" multiple disabled={activeFile.sampleImages.length >= MAX_SAMPLE_IMAGES} onChange={(event) => { void addSampleImages([...(event.target.files ?? [])]); event.target.value = ''; }} /></label></header>{activeFile.sampleImages.length >= MAX_SAMPLE_IMAGES ? <p className="pf-publish-limit-note">Maximum 3 sample images reached.</p> : null}{imageError ? <p className="pf-publish-inline-error"><AlertCircle />{imageError}</p> : null}<div>{activeFile.sampleImages.map((image) => <article key={image.id}><img src={image.dataUrl} alt={`Sample preview ${image.order + 1}`} /><span><small>{image.name}</small><div><label>Replace<input className="pf-admin-sr-only" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.jfif,.gif,.svg" onChange={(event) => { void replaceSampleImage(image.id, event.target.files?.[0]); event.target.value = ''; }} /></label><button type="button" onClick={() => updateEntry(activeFile.temporaryId, { sampleImages: activeFile.sampleImages.filter((current) => current.id !== image.id).map((current, order) => ({ ...current, order })) })}>Remove</button></div></span></article>)}</div></section>
                     <section className="pf-publish-sections"><header><div><strong>Store information</strong><small>{activeFile.storeSections.length} / {MAX_STORE_SECTIONS} · Optional ordered sections</small></div><button type="button" onClick={addSection} disabled={activeFile.storeSections.length >= MAX_STORE_SECTIONS}><Plus /> Add section</button></header>{activeFile.storeSections.length >= MAX_STORE_SECTIONS ? <p className="pf-publish-limit-note">Maximum 3 sections reached.</p> : null}{activeFile.storeSections.map((section, index) => <article key={section.id}><div><span>Section {index + 1}</span><button type="button" onClick={() => moveSection(index, -1)} disabled={index === 0} aria-label="Move section up"><ArrowUp /></button><button type="button" onClick={() => moveSection(index, 1)} disabled={index === activeFile.storeSections.length - 1} aria-label="Move section down"><ArrowDown /></button><button type="button" onClick={() => updateEntry(activeFile.temporaryId, { storeSections: activeFile.storeSections.filter((current) => current.id !== section.id).map((current, order) => ({ ...current, order })) })} aria-label="Remove section"><Trash2 /></button></div><input aria-label={`Store section ${index + 1} heading`} value={section.heading} onChange={(event) => updateSection(section.id, { heading: event.target.value })} placeholder="Heading" /><textarea aria-label={`Store section ${index + 1} content`} rows={3} value={section.content} onChange={(event) => updateSection(section.id, { content: event.target.value })} placeholder="Content" /></article>)}</section>
@@ -621,7 +649,7 @@ export const ContentPublishingWorkflow: React.FC<ContentPublishingWorkflowProps>
           <motion.section className="pf-publish-review" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}>
             <header><div><span className={invalidFiles.length ? 'has-issues' : 'is-ready'}>{invalidFiles.length ? <AlertCircle /> : <CheckCircle2 />}</span><div><h3>{invalidFiles.length ? 'Resolve issues before publishing' : 'Ready to upload & publish'}</h3><p>{invalidFiles.length ? `${invalidFiles.length} file${invalidFiles.length === 1 ? '' : 's'} need attention.` : 'Review the session. The Content Library is still unchanged.'}</p></div></div><strong>{destinationLabel}</strong></header>
             <div className="pf-publish-review-stats"><div><strong>{files.length}</strong><span>Files</span></div><div><strong>{folders.length}</strong><span>Folders</span></div><div><strong>{files.filter((file) => file.accessType === 'FREE').length}</strong><span>Free</span></div><div><strong>{files.filter((file) => file.accessType === 'PAID').length}</strong><span>Paid</span></div><div><strong>₹{files.reduce((sum, file) => sum + (file.accessType === 'PAID' ? file.price ?? 0 : 0), 0).toLocaleString('en-IN')}</strong><span>Combined price</span></div></div>
-            <div className="pf-publish-review-list">{files.map((file) => { const issues = validation.get(file.temporaryId) ?? []; return <article key={file.temporaryId} className={issues.length ? 'has-issues' : ''}><FileText /><div><strong>{file.name}</strong><small>{file.relativePath} · {formatBytes(file.size)}</small></div><span>{file.accessType === 'PAID' ? `Paid · ₹${file.price?.toLocaleString('en-IN') ?? '—'}` : 'Free'}</span><i>{issues.length ? `${issues.length} issue${issues.length === 1 ? '' : 's'}` : 'Ready'}</i>{issues.length ? <button type="button" onClick={() => openIssue(file.temporaryId)}>Fix</button> : <CheckCircle2 />}</article>; })}</div>
+            <div className="pf-publish-review-list">{files.map((file) => { const issues = validation.get(file.temporaryId) ?? []; return <article key={file.temporaryId} className={issues.length ? 'has-issues' : ''}><FileText /><div><strong>{file.name}</strong><small>{file.relativePath} · {formatBytes(file.size)}</small></div><span>{file.accessType === 'PAID' ? `Paid · ₹${file.price?.toLocaleString('en-IN') ?? '—'} · ${file.validityMode === 'EXAM_DATE_OFFSET' ? `Exam +${file.validityOffsetDays ?? 0}d` : 'Permanent'}` : 'Free'}</span><i>{issues.length ? `${issues.length} issue${issues.length === 1 ? '' : 's'}` : 'Ready'}</i>{issues.length ? <button type="button" onClick={() => openIssue(file.temporaryId)}>Fix</button> : <CheckCircle2 />}</article>; })}</div>
             <p className="pf-publish-review-assurance"><Check /> Publishing creates the complete hierarchy in one operation. Cancelling before that point leaves the library untouched.</p>
           </motion.section>
         ) : null}

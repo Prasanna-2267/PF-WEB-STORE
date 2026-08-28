@@ -4,6 +4,12 @@ const MIME_EXTENSIONS: Readonly<Record<string, ReadonlySet<string>>> = {
   "application/pdf": new Set(["pdf"]),
   "application/zip": new Set(["zip"]),
   "application/json": new Set(["json"]),
+  "application/msword": new Set(["doc"]),
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": new Set(["docx"]),
+  "application/vnd.ms-powerpoint": new Set(["ppt"]),
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": new Set(["pptx"]),
+  "application/vnd.ms-excel": new Set(["xls"]),
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": new Set(["xlsx"]),
   "text/plain": new Set(["txt", "md", "log"]),
   "text/csv": new Set(["csv"]),
   "image/jpeg": new Set(["jpg", "jpeg"]),
@@ -16,6 +22,13 @@ const MIME_EXTENSIONS: Readonly<Record<string, ReadonlySet<string>>> = {
   "audio/mp4": new Set(["m4a", "mp4"]),
   "audio/wav": new Set(["wav"]),
 };
+
+// Student catalogue visibility must stay aligned with the formats Admin can publish.
+export const ALLOWED_CONTENT_MIME_TYPES = Object.freeze(Object.keys(MIME_EXTENSIONS));
+
+export function isAllowedContentMimeType(mimeType: string): boolean {
+  return Object.hasOwn(MIME_EXTENSIONS, mimeType.trim().toLowerCase());
+}
 
 export function assertFileNameMatchesMime(fileName: string, mimeType: string): void {
   let decoded = fileName;

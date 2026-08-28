@@ -62,6 +62,26 @@ model User {
   contactSubmissions             ContactSubmission[]
   activeAcademyPreference        UserAcademyPreference?
   notificationDeliveries         NotificationDelivery[]
+  learnerPreference              LearnerPreference?
+  noteViewerSessions             NoteViewerSession[]
+  learnerNoteStates              LearnerNoteState[]
+  noteRevisionEvents             NoteRevisionEvent[]
+  practiceSessions               PracticeSession[]
+  practiceAttempts               PracticeAttempt[]
+  rewardWallet                   RewardWallet?
+  rewardClaims                   RewardClaim[]
+  rewardLedgerEntries            RewardLedgerEntry[]
+  focusSessions                  FocusSession[]
+  dailyActivities                LearnerDailyActivity[]
+  streakState                    LearnerStreakState?
+  streakDays                     LearnerStreakDay[]
+  studyPlans                     LearnerStudyPlan[]
+  studyTasks                     LearnerStudyTask[]
+  monthlyReports                 LearnerMonthlyReport[]
+  mobilePushTokens               MobilePushToken[]
+  learnerNotificationPreference  LearnerNotificationPreference?
+  learnerNotifications           LearnerNotification[]
+  accountVerificationChallenges  AccountVerificationChallenge[]
 
   @@index([roleId])
   @@index([status, createdAt])
@@ -105,22 +125,23 @@ model RolePermission {
 }
 
 model UserSession {
-  id               String          @id @default(uuid()) @db.Uuid
-  userId           String          @db.Uuid
-  authSessionId    String          @unique
-  deviceName       String?
-  platform         SessionPlatform @default(UNKNOWN)
-  userAgent        String?
-  ipAddress        String?
-  location         String?
-  createdAt        DateTime        @default(now())
-  lastSeenAt       DateTime        @default(now())
-  expiresAt        DateTime
-  revokedAt        DateTime?
-  refreshTokenHash String?         @db.VarChar(64)
-  rotationCounter  Int             @default(0)
-  lastRotatedAt    DateTime?
-  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  id                 String              @id @default(uuid()) @db.Uuid
+  userId             String              @db.Uuid
+  authSessionId      String              @unique
+  deviceName         String?
+  platform           SessionPlatform     @default(UNKNOWN)
+  userAgent          String?
+  ipAddress          String?
+  location           String?
+  createdAt          DateTime            @default(now())
+  lastSeenAt         DateTime            @default(now())
+  expiresAt          DateTime
+  revokedAt          DateTime?
+  refreshTokenHash   String?             @db.VarChar(64)
+  rotationCounter    Int                 @default(0)
+  lastRotatedAt      DateTime?
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  noteViewerSessions NoteViewerSession[]
 
   @@index([userId, revokedAt])
   @@index([expiresAt])
@@ -134,6 +155,592 @@ model PasswordCredential {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model RegistrationChallenge {
+  id                String    @id @default(uuid()) @db.Uuid
+  email             String
+  phone             String
+  fullName          String
+  passwordHash      String?
+  emailOtpHash      String?   @db.VarChar(64)
+  mobileOtpHash     String?   @db.VarChar(64)
+  emailAttempts     Int       @default(0)
+  mobileAttempts    Int       @default(0)
+  emailResendCount  Int       @default(0)
+  mobileResendCount Int       @default(0)
+  emailSentAt       DateTime?
+  mobileSentAt      DateTime?
+  emailVerifiedAt   DateTime?
+  mobileVerifiedAt  DateTime?
+  expiresAt         DateTime
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([email, completedAt, cancelledAt])
+  @@index([expiresAt])
+}
+
+enum ExamDatePrecision {
+  DAY
+  MONTH
+}
+
+enum LearnerTheme {
+  LIGHT
+  DARK
+}
+
+enum AccountVerificationPurpose {
+  EMAIL_CHANGE
+  MOBILE_CHANGE
+  DELETE_ACCOUNT
+}
+
+model LearnerPreference {
+  userId                String             @id @db.Uuid
+  selectedCourseId      String?            @db.Uuid
+  examDate              DateTime?
+  examDatePrecision     ExamDatePrecision?
+  academyReference      String?
+  dailyTargetMinutes    Int                @default(120)
+  timezone              String             @default("Asia/Kolkata")
+  language              String             @default("English")
+  reminderTime          String             @default("19:00")
+  preferredTheme        LearnerTheme       @default(DARK)
+  onboardingCompletedAt DateTime?
+  version               Int                @default(1)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  selectedCourse        Course?            @relation(fields: [selectedCourseId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([selectedCourseId])
+}
+
+model AccountVerificationChallenge {
+  id          String                     @id @default(uuid()) @db.Uuid
+  userId      String                     @db.Uuid
+  purpose     AccountVerificationPurpose
+  targetValue String                     @db.VarChar(320)
+  otpHash     String?                    @db.VarChar(64)
+  attempts    Int                        @default(0)
+  resendCount Int                        @default(0)
+  sentAt      DateTime?
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  cancelledAt DateTime?
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userId, purpose, consumedAt, cancelledAt])
+  @@index([expiresAt])
+}
+
+enum MobilePushPlatform {
+  ANDROID
+  IOS
+}
+
+enum LearnerNotificationCategory {
+  BROADCAST
+  DAILY_PLAN
+  REVISION_DUE
+  RESOURCE_EXPIRY
+  STREAK_RISK
+  SECURITY
+  ACCOUNT
+}
+
+enum LearnerNotificationDeliveryStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+model MobilePushToken {
+  id                String             @id @default(uuid()) @db.Uuid
+  userId            String             @db.Uuid
+  token             String             @unique @db.VarChar(220)
+  platform          MobilePushPlatform
+  installationId    String             @db.VarChar(160)
+  deviceName        String?            @db.VarChar(160)
+  appVersion        String?            @db.VarChar(40)
+  enabled           Boolean            @default(true)
+  lastSeenAt        DateTime           @default(now())
+  revokedAt         DateTime?
+  consecutiveErrors Int                @default(0)
+  lastError         String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  user       User                              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  deliveries LearnerNotificationPushDelivery[]
+
+  @@unique([userId, installationId])
+  @@index([userId, enabled, revokedAt])
+}
+
+model LearnerNotificationPreference {
+  userId                String   @id @db.Uuid
+  pushEnabled           Boolean  @default(true)
+  broadcastEnabled      Boolean  @default(true)
+  dailyPlanEnabled      Boolean  @default(true)
+  revisionDueEnabled    Boolean  @default(true)
+  resourceExpiryEnabled Boolean  @default(true)
+  streakRiskEnabled     Boolean  @default(true)
+  securityEnabled       Boolean  @default(true)
+  accountEnabled        Boolean  @default(true)
+  quietHoursEnabled     Boolean  @default(false)
+  quietHoursStart       String   @default("22:00") @db.VarChar(5)
+  quietHoursEnd         String   @default("07:00") @db.VarChar(5)
+  updatedAt             DateTime @updatedAt
+  createdAt             DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model LearnerNotification {
+  id           String                      @id @default(uuid()) @db.Uuid
+  userId       String                      @db.Uuid
+  category     LearnerNotificationCategory
+  title        String                      @db.VarChar(180)
+  body         String                      @db.Text
+  sourceKey    String                      @db.VarChar(240)
+  data         Json?
+  scheduledFor DateTime                    @default(now())
+  readAt       DateTime?
+  createdAt    DateTime                    @default(now())
+  updatedAt    DateTime                    @updatedAt
+
+  user       User                              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  deliveries LearnerNotificationPushDelivery[]
+
+  @@unique([userId, sourceKey])
+  @@index([userId, readAt, createdAt])
+  @@index([category, scheduledFor])
+}
+
+model LearnerNotificationPushDelivery {
+  id                String                            @id @default(uuid()) @db.Uuid
+  notificationId    String                            @db.Uuid
+  pushTokenId       String                            @db.Uuid
+  status            LearnerNotificationDeliveryStatus @default(PENDING)
+  attemptCount      Int                               @default(0)
+  providerMessageId String?
+  lastError         String?
+  nextAttemptAt     DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime                          @default(now())
+  updatedAt         DateTime                          @updatedAt
+
+  notification LearnerNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  pushToken    MobilePushToken     @relation(fields: [pushTokenId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([notificationId, pushTokenId])
+  @@index([status, nextAttemptAt])
+  @@index([pushTokenId, createdAt])
+}
+
+enum RewardClaimStatus {
+  PENDING
+  CLAIMED
+  EXPIRED
+  CANCELLED
+}
+
+enum RewardLedgerKind {
+  EARN
+  SPEND
+  EXPIRE
+  ADJUST
+}
+
+enum RewardSourceType {
+  DAILY_FOCUS
+  STREAK
+  HEART_RECOVERY
+  ADMIN_ADJUSTMENT
+}
+
+model RewardWallet {
+  userId      String   @id @db.Uuid
+  points      Int      @default(0)
+  hearts      Int      @default(3)
+  heartPeriod String?  @db.VarChar(7)
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([updatedAt])
+}
+
+model RewardClaim {
+  id            String            @id @default(uuid()) @db.Uuid
+  userId        String            @db.Uuid
+  sourceType    RewardSourceType
+  sourceId      String            @db.VarChar(160)
+  points        Int               @default(0)
+  hearts        Int               @default(0)
+  policyVersion String            @db.VarChar(80)
+  status        RewardClaimStatus @default(PENDING)
+  availableAt   DateTime          @default(now())
+  expiresAt     DateTime?
+  claimedAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  ledgerEntry RewardLedgerEntry?
+
+  @@unique([userId, sourceType, sourceId, policyVersion])
+  @@index([userId, status, availableAt])
+  @@index([expiresAt, status])
+}
+
+model RewardLedgerEntry {
+  id                 String           @id @default(uuid()) @db.Uuid
+  userId             String           @db.Uuid
+  kind               RewardLedgerKind
+  sourceType         RewardSourceType
+  sourceId           String           @db.VarChar(160)
+  pointsDelta        Int              @default(0)
+  heartsDelta        Int              @default(0)
+  pointsBalanceAfter Int
+  heartsBalanceAfter Int
+  policyVersion      String           @db.VarChar(80)
+  idempotencyKey     String           @db.VarChar(200)
+  claimId            String?          @unique @db.Uuid
+  createdAt          DateTime         @default(now())
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  claim       RewardClaim?      @relation(fields: [claimId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  recoveryDay LearnerStreakDay?
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt, id])
+  @@index([sourceType, sourceId])
+}
+
+enum FocusSessionSource {
+  HOME
+  TRACKER
+  STUDY_TASK
+  NOTE
+}
+
+enum FocusSessionStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+enum StreakDayStatus {
+  ACTIVE
+  PROTECTED
+}
+
+model FocusSession {
+  id                     String             @id @default(uuid()) @db.Uuid
+  userId                 String             @db.Uuid
+  source                 FocusSessionSource
+  sourceId               String?            @db.Uuid
+  plannedDurationSeconds Int?
+  status                 FocusSessionStatus @default(ACTIVE)
+  startedAt              DateTime           @default(now())
+  lastHeartbeatAt        DateTime           @default(now())
+  checkedOutAt           DateTime?
+  abandonedAt            DateTime?
+  durationSeconds        Int?
+  checkoutIdempotencyKey String?            @db.VarChar(200)
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([userId, checkoutIdempotencyKey])
+  @@index([userId, status, startedAt])
+  @@index([userId, startedAt, id])
+  @@index([lastHeartbeatAt, status])
+}
+
+model LearnerDailyActivity {
+  userId            String   @db.Uuid
+  localDate         DateTime @db.Date
+  timezone          String   @db.VarChar(80)
+  targetMinutes     Int
+  focusSeconds      Int      @default(0)
+  readingSeconds    Int      @default(0)
+  practiceSeconds   Int      @default(0)
+  revisionSeconds   Int      @default(0)
+  focusSessionCount Int      @default(0)
+  qualifiesStreak   Boolean  @default(false)
+  goalCompleted     Boolean  @default(false)
+  lastActivityAt    DateTime
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([userId, localDate])
+  @@index([userId, localDate])
+  @@index([localDate, qualifiesStreak])
+}
+
+enum StudyPlanTaskType {
+  READ_NOTE
+  CONTINUE_NOTE
+  REVISE_NOTE
+  MANUAL
+}
+
+enum StudyPlanTaskSource {
+  SYLLABUS_PLAN
+  REVISION_DUE
+  CONTINUE_RESOURCE
+  CARRY_OVER
+  MANUAL
+}
+
+enum StudyPlanTaskStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  RESCHEDULED
+  REPLACED
+}
+
+enum StudyEstimateSource {
+  ADMIN
+  FALLBACK_V1
+  LEARNER
+}
+
+model LearnerStudyPlan {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @db.Uuid
+  courseId         String   @db.Uuid
+  localDate        DateTime @db.Date
+  timezone         String   @db.VarChar(80)
+  availableMinutes Int
+  algorithmVersion String   @db.VarChar(80)
+  generation       Int      @default(1)
+  generatedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user   User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  course Course             @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  tasks  LearnerStudyTask[]
+
+  @@unique([userId, localDate])
+  @@index([userId, localDate])
+  @@index([courseId, localDate])
+}
+
+model LearnerStudyTask {
+  id                 String              @id @default(uuid()) @db.Uuid
+  planId             String              @db.Uuid
+  userId             String              @db.Uuid
+  contentItemId      String?             @db.Uuid
+  type               StudyPlanTaskType
+  source             StudyPlanTaskSource
+  status             StudyPlanTaskStatus @default(PLANNED)
+  estimateSource     StudyEstimateSource
+  title              String              @db.VarChar(180)
+  reason             String              @db.VarChar(320)
+  plannedMinutes     Int
+  actualMinutes      Int?
+  priority           Int
+  sequence           Int
+  startedAt          DateTime?
+  completedAt        DateTime?
+  skippedAt          DateTime?
+  rescheduledForDate DateTime?           @db.Date
+  hiddenAt           DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  plan        LearnerStudyPlan @relation(fields: [planId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  contentItem ContentItem?     @relation(fields: [contentItemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([userId, status, updatedAt])
+  @@index([planId, sequence])
+  @@index([contentItemId, status])
+  @@index([rescheduledForDate])
+}
+
+model StudyWorkloadEstimate {
+  contentItemId            String   @id @db.Uuid
+  estimatedReadingMinutes  Int
+  estimatedRevisionMinutes Int
+  version                  Int      @default(1)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([updatedAt])
+}
+
+model LearnerMonthlyReport {
+  id                  String   @id @default(uuid()) @db.Uuid
+  userId              String   @db.Uuid
+  courseId            String   @db.Uuid
+  yearMonth           String   @db.VarChar(7)
+  timezone            String   @db.VarChar(80)
+  courseCodeSnapshot  String   @db.VarChar(80)
+  courseNameSnapshot  String   @db.VarChar(180)
+  periodStart         DateTime @db.Date
+  periodEndExclusive  DateTime @db.Date
+  totalStudySeconds   Int
+  focusSeconds        Int
+  readingSeconds      Int
+  practiceSeconds     Int
+  revisionSeconds     Int
+  activeDays          Int
+  goalDays            Int
+  streakDays          Int
+  protectedDays       Int
+  notesCompleted      Int
+  revisionsCompleted  Int
+  studyTasksCompleted Int
+  totalNotes          Int
+  syllabusCompleted   Int
+  syllabusPercent     Int
+  weeklyStudySeconds  Json
+  algorithmVersion    String   @db.VarChar(80)
+  generatedAt         DateTime @default(now())
+  createdAt           DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([userId, yearMonth])
+  @@index([userId, periodStart])
+  @@index([courseId, periodStart])
+}
+
+model LearnerStreakState {
+  userId            String    @id @db.Uuid
+  currentStreak     Int       @default(0)
+  longestStreak     Int       @default(0)
+  lastQualifiedDate DateTime? @db.Date
+  version           Int       @default(1)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model LearnerStreakDay {
+  userId           String          @db.Uuid
+  localDate        DateTime        @db.Date
+  status           StreakDayStatus @default(ACTIVE)
+  timezone         String          @db.VarChar(80)
+  focusSeconds     Int             @default(0)
+  targetMinutes    Int
+  qualifiedAt      DateTime
+  protectedAt      DateTime?
+  recoveryLedgerId String?         @unique @db.Uuid
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  recoveryLedger RewardLedgerEntry? @relation(fields: [recoveryLedgerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([userId, localDate])
+  @@index([userId, status, localDate])
+}
+
+enum NoteViewerSessionStatus {
+  ACTIVE
+  CLOSED
+  EXPIRED
+}
+
+model NoteViewerSession {
+  id              String                  @id @default(uuid()) @db.Uuid
+  userId          String                  @db.Uuid
+  userSessionId   String                  @db.Uuid
+  contentItemId   String                  @db.Uuid
+  traceId         String                  @unique @db.VarChar(32)
+  status          NoteViewerSessionStatus @default(ACTIVE)
+  pageCount       Int?
+  currentPage     Int?
+  progressPercent Int                     @default(0)
+  scrollOffset    Float?
+  openedAt        DateTime                @default(now())
+  lastSeenAt      DateTime                @default(now())
+  expiresAt       DateTime
+  closedAt        DateTime?
+  updatedAt       DateTime                @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  userSession UserSession @relation(fields: [userSessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userId, status, lastSeenAt])
+  @@index([contentItemId, openedAt])
+  @@index([userSessionId, status])
+  @@index([expiresAt, status])
+}
+
+enum NoteRevisionSource {
+  ACTION_SHEET
+  READER
+  MANUAL
+}
+
+model LearnerNoteState {
+  userId          String    @db.Uuid
+  contentItemId   String    @db.Uuid
+  completed       Boolean   @default(false)
+  favourite       Boolean   @default(false)
+  progressPercent Int       @default(0)
+  currentPage     Int?
+  scrollOffset    Float?
+  firstOpenedAt   DateTime?
+  lastOpenedAt    DateTime?
+  completedAt     DateTime?
+  revisionCount   Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  contentItem ContentItem         @relation(fields: [contentItemId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  revisions   NoteRevisionEvent[]
+
+  @@id([userId, contentItemId])
+  @@index([userId, favourite, updatedAt])
+  @@index([userId, completed, updatedAt])
+  @@index([userId, lastOpenedAt])
+  @@index([contentItemId])
+}
+
+model NoteRevisionEvent {
+  id            String             @id @default(uuid()) @db.Uuid
+  userId        String             @db.Uuid
+  contentItemId String             @db.Uuid
+  source        NoteRevisionSource @default(ACTION_SHEET)
+  revisedAt     DateTime           @default(now())
+  createdAt     DateTime           @default(now())
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  noteState LearnerNoteState @relation(fields: [userId, contentItemId], references: [userId, contentItemId], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userId, revisedAt])
+  @@index([contentItemId, revisedAt])
 }
 
 enum CourseStatus {
@@ -154,20 +761,24 @@ model Course {
   updatedAt   DateTime     @updatedAt
   deletedAt   DateTime?
 
-  academy             Academy?                  @relation(fields: [academyId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  subjects            Subject[]
-  contentItems        ContentItem[]
-  contentLocations    ContentLocationSetting[]
-  packages            Package[]
-  taxonomyChapters    TaxonomyChapter[]
-  questions           Question[]
-  caseSubQuestions    CaseSubQuestion[]
-  orders              Order[]
-  entitlements        Entitlement[]
-  broadcastTargets    BroadcastCourseTarget[]
-  enrollments         AcademyCourseEnrollment[]
-  targetNotifications Notification[]
-  storageUploads      StorageUpload[]
+  academy               Academy?                  @relation(fields: [academyId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  subjects              Subject[]
+  contentItems          ContentItem[]
+  learnerStudyPlans     LearnerStudyPlan[]
+  learnerMonthlyReports LearnerMonthlyReport[]
+  contentLocations      ContentLocationSetting[]
+  packages              Package[]
+  taxonomyChapters      TaxonomyChapter[]
+  questions             Question[]
+  caseSubQuestions      CaseSubQuestion[]
+  orders                Order[]
+  entitlements          Entitlement[]
+  broadcastTargets      BroadcastCourseTarget[]
+  enrollments           AcademyCourseEnrollment[]
+  targetNotifications   Notification[]
+  storageUploads        StorageUpload[]
+  learnerPreferences    LearnerPreference[]
+  practiceSessions      PracticeSession[]
 
   @@unique([academyId, code])
   @@index([academyId, status, deletedAt])
@@ -188,6 +799,7 @@ model Subject {
   caseSubQuestions CaseSubQuestion[]
   couponTargets    CouponTarget[]
   entitlements     Entitlement[]
+  practiceSessions PracticeSession[]
 
   @@index([courseId, deletedAt])
 }
@@ -200,6 +812,11 @@ enum ContentKind {
 enum ContentAccessType {
   FREE
   PAID
+}
+
+enum ContentValidityMode {
+  PERMANENT
+  EXAM_DATE_OFFSET
 }
 
 enum ContentEntityType {
@@ -242,6 +859,12 @@ model ContentItem {
   accessType ContentAccessType @default(FREE)
   price      Decimal?          @db.Decimal(10, 2)
 
+  // Paid resources are permanent unless an Admin explicitly chooses an
+  // exam-relative validity window. Existing content therefore keeps its
+  // current behaviour after this additive migration.
+  validityMode       ContentValidityMode @default(PERMANENT)
+  validityOffsetDays Int?
+
   status ContentStatus @default(PUBLISHED)
 
   displayOrder Int @default(0)
@@ -255,13 +878,17 @@ model ContentItem {
   course Course       @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   parent ContentItem? @relation("ContentHierarchy", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  children      ContentItem[]            @relation("ContentHierarchy")
-  sampleImages  ContentSampleImage[]
-  storeSections ContentStoreSection[]
-  locations     ContentLocationSetting[]
-  packageItems  PackageItem[]
-  orderItems    OrderItem[]
-  entitlements  Entitlement[]
+  children         ContentItem[]            @relation("ContentHierarchy")
+  sampleImages     ContentSampleImage[]
+  storeSections    ContentStoreSection[]
+  locations        ContentLocationSetting[]
+  packageItems     PackageItem[]
+  orderItems       OrderItem[]
+  entitlements     Entitlement[]
+  viewerSessions   NoteViewerSession[]
+  learnerStates    LearnerNoteState[]
+  studyTasks       LearnerStudyTask[]
+  workloadEstimate StudyWorkloadEstimate?
 
   @@index([courseId, parentId, deletedAt, displayOrder])
   @@index([kind, accessType])
@@ -406,6 +1033,7 @@ model TaxonomyChapter {
   lessons          TaxonomyLesson[]
   questions        Question[]
   caseSubQuestions CaseSubQuestion[]
+  practiceSessions PracticeSession[]
 
   @@index([subjectId])
   @@index([courseId])
@@ -422,6 +1050,7 @@ model TaxonomyLesson {
   topics           TaxonomyTopic[]
   questions        Question[]
   caseSubQuestions CaseSubQuestion[]
+  practiceSessions PracticeSession[]
 
   @@index([chapterId])
 }
@@ -436,6 +1065,7 @@ model TaxonomyTopic {
   lesson           TaxonomyLesson    @relation(fields: [lessonId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   questions        Question[]
   caseSubQuestions CaseSubQuestion[]
+  practiceSessions PracticeSession[]
 
   @@index([lessonId])
 }
@@ -459,6 +1089,13 @@ enum QuestionKind {
   CASE_DESCRIPTIVE
 }
 
+enum PracticeCollection {
+  PYQ
+  RTP
+  MTP
+  ORIGINAL
+}
+
 enum CaseClassificationMode {
   ENTIRE_CASE
   INDIVIDUAL_SUB_QUESTIONS
@@ -479,30 +1116,34 @@ model Question {
   caseId                             String?
   classificationMode                 CaseClassificationMode @default(ENTIRE_CASE)
 
-  courseId  String? @db.Uuid
-  subjectId String? @db.Uuid
-  chapterId String? @db.Uuid
-  lessonId  String? @db.Uuid
-  topicId   String? @db.Uuid
+  courseId           String?            @db.Uuid
+  subjectId          String?            @db.Uuid
+  chapterId          String?            @db.Uuid
+  lessonId           String?            @db.Uuid
+  topicId            String?            @db.Uuid
+  practiceCollection PracticeCollection @default(ORIGINAL)
+  practiceYear       Int?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  academy      Academy?          @relation(fields: [academyId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  course       Course?           @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  subject      Subject?          @relation(fields: [subjectId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  chapter      TaxonomyChapter?  @relation(fields: [chapterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  lesson       TaxonomyLesson?   @relation(fields: [lessonId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  topic        TaxonomyTopic?    @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  options      QuestionOption[]
-  subQuestions CaseSubQuestion[]
+  academy                  Academy?                  @relation(fields: [academyId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  course                   Course?                   @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  subject                  Subject?                  @relation(fields: [subjectId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  chapter                  TaxonomyChapter?          @relation(fields: [chapterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  lesson                   TaxonomyLesson?           @relation(fields: [lessonId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  topic                    TaxonomyTopic?            @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  options                  QuestionOption[]
+  subQuestions             CaseSubQuestion[]
+  practiceSessionQuestions PracticeSessionQuestion[]
 
   @@index([academyId, status, deletedAt])
   @@index([courseId, subjectId, chapterId, lessonId, topicId])
   @@index([kind, status, difficulty, deletedAt])
   @@index([caseId])
   @@index([createdAt])
+  @@index([courseId, practiceCollection, practiceYear, status])
 }
 
 model QuestionOption {
@@ -539,15 +1180,146 @@ model CaseSubQuestion {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  parentQuestion Question         @relation(fields: [questionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  course         Course?          @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  subject        Subject?         @relation(fields: [subjectId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  chapter        TaxonomyChapter? @relation(fields: [chapterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  lesson         TaxonomyLesson?  @relation(fields: [lessonId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  topic          TaxonomyTopic?   @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  options        QuestionOption[]
+  parentQuestion           Question                  @relation(fields: [questionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  course                   Course?                   @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  subject                  Subject?                  @relation(fields: [subjectId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  chapter                  TaxonomyChapter?          @relation(fields: [chapterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  lesson                   TaxonomyLesson?           @relation(fields: [lessonId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  topic                    TaxonomyTopic?            @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  options                  QuestionOption[]
+  practiceSessionQuestions PracticeSessionQuestion[]
 
   @@index([questionId, displayOrder])
+}
+
+enum PracticeSourceKind {
+  ARCHIVE
+}
+
+enum PracticeAnswerFormat {
+  MCQ
+  DESCRIPTIVE
+  CASE_STUDY
+}
+
+enum PracticeAccessPolicy {
+  FREE
+  PAID
+}
+
+enum PracticeSessionStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+  ABANDONED
+}
+
+enum PracticeNavigatorState {
+  UNANSWERED
+  ANSWERED_CORRECT
+  ANSWERED_WRONG
+  MARKED_REVIEW
+  LOCKED_WRONG
+  AWAITING_REVIEW
+}
+
+model PracticeSession {
+  id                String                @id @default(uuid()) @db.Uuid
+  userId            String                @db.Uuid
+  courseId          String                @db.Uuid
+  sourceKind        PracticeSourceKind
+  subjectId         String?               @db.Uuid
+  chapterId         String?               @db.Uuid
+  lessonId          String?               @db.Uuid
+  topicId           String?               @db.Uuid
+  collection        PracticeCollection?
+  year              Int?
+  answerFormat      PracticeAnswerFormat
+  accessPolicy      PracticeAccessPolicy
+  timerSeconds      Int?
+  questionCount     Int
+  answeredCount     Int                   @default(0)
+  correctCount      Int                   @default(0)
+  wrongCount        Int                   @default(0)
+  markedReviewCount Int                   @default(0)
+  status            PracticeSessionStatus @default(ACTIVE)
+  startedAt         DateTime              @default(now())
+  expiresAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  user      User                      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  course    Course                    @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  subject   Subject?                  @relation(fields: [subjectId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  chapter   TaxonomyChapter?          @relation(fields: [chapterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  lesson    TaxonomyLesson?           @relation(fields: [lessonId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  topic     TaxonomyTopic?            @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  questions PracticeSessionQuestion[]
+
+  @@index([userId, status, startedAt])
+  @@index([courseId, subjectId, chapterId, startedAt])
+  @@index([expiresAt, status])
+}
+
+model PracticeSessionQuestion {
+  id                          String                 @id @default(uuid()) @db.Uuid
+  sessionId                   String                 @db.Uuid
+  questionId                  String                 @db.Uuid
+  subQuestionId               String?                @db.Uuid
+  sequence                    Int
+  kind                        QuestionKind
+  difficulty                  QuestionDifficulty
+  promptHtml                  String
+  caseHtml                    String                 @default("")
+  optionsSnapshot             Json
+  correctOptionLabel          String?                @db.VarChar(1)
+  answerHtml                  String                 @default("")
+  correctExplanationHtml      String                 @default("")
+  premiumWrongExplanationHtml String                 @default("")
+  subjectId                   String?                @db.Uuid
+  chapterId                   String?                @db.Uuid
+  lessonId                    String?                @db.Uuid
+  topicId                     String?                @db.Uuid
+  navigatorState              PracticeNavigatorState @default(UNANSWERED)
+  attemptCount                Int                    @default(0)
+  final                       Boolean                @default(false)
+  lastAttemptAt               DateTime?
+  createdAt                   DateTime               @default(now())
+  updatedAt                   DateTime               @updatedAt
+
+  session     PracticeSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  question    Question          @relation(fields: [questionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  subQuestion CaseSubQuestion?  @relation(fields: [subQuestionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  attempts    PracticeAttempt[]
+
+  @@unique([sessionId, sequence])
+  @@index([sessionId, navigatorState, sequence])
+  @@index([questionId])
+  @@index([subQuestionId])
+  @@index([chapterId, topicId])
+}
+
+model PracticeAttempt {
+  id                  String   @id @default(uuid()) @db.Uuid
+  userId              String   @db.Uuid
+  sessionQuestionId   String   @db.Uuid
+  attemptNumber       Int
+  clientAttemptId     String   @db.VarChar(100)
+  answerOptionLabel   String?  @db.VarChar(1)
+  answerText          String?
+  correct             Boolean?
+  durationMs          Int?
+  explanationReleased Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sessionQuestion PracticeSessionQuestion @relation(fields: [sessionQuestionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([sessionQuestionId, attemptNumber])
+  @@unique([sessionQuestionId, clientAttemptId])
+  @@index([userId, createdAt])
+  @@index([sessionQuestionId, createdAt])
 }
 
 enum OrderStatus {

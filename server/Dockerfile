@@ -20,6 +20,7 @@ RUN DIRECT_URL=postgresql://build:build@127.0.0.1:5432/build npm ci
 
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
+COPY scripts ./scripts
 
 RUN DIRECT_URL=postgresql://build:build@127.0.0.1:5432/build npm run build
 
@@ -40,6 +41,7 @@ RUN npm ci --omit=dev --omit=optional --ignore-scripts \
     && npm cache clean --force
 
 COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/assets ./assets
 
 USER node
 

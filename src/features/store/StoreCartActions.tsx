@@ -6,6 +6,7 @@ import { useAuthStore, type UserProfile } from '@/app/store/useAuthStore';
 import { useCartStore } from '@/app/store/useCartStore';
 import { ROUTES } from '@/config/routes';
 import type { StoreProduct } from './types/catalog';
+import { useStoreEntitlements } from './data/checkoutApi';
 
 const CART_ANIMATION_DURATION_SECONDS = 1.50;
 const CART_MOTION_TIMES = [0, .02, .12, .92, 1];
@@ -124,10 +125,12 @@ export const StoreAddToCartButton: React.FC<StoreAddToCartButtonProps> = ({
   const user = useAuthStore((state) => state.user);
   const itemIds = useCartStore((state) => state.itemIds);
   const addItem = useCartStore((state) => state.addItem);
+  const entitlements = useStoreEntitlements(isAuthenticated);
   const isInCart = itemIds.includes(product.id);
+  const isServerOwned = Boolean(entitlements.data?.items.some((item) => item.resourceId === product.id));
   const [phase, setPhase] = useState<AddButtonPhase>('idle');
   const [announcement, setAnnouncement] = useState('');
-  const buttonState = phase === 'adding' ? 'adding' : isInCart ? 'added' : 'idle';
+  const buttonState = phase === 'adding' ? 'adding' : isInCart || isServerOwned ? 'added' : 'idle';
 
   useEffect(() => {
     if (phase !== 'adding') return undefined;
@@ -163,6 +166,11 @@ export const StoreAddToCartButton: React.FC<StoreAddToCartButtonProps> = ({
       return;
     }
 
+    if (isServerOwned) {
+      setAnnouncement(`${product.title} is already unlocked in your account.`);
+      return;
+    }
+
     const guard = getStoreCartGuard(product, user, itemIds);
     if (guard) {
       setAnnouncement(guard.message);
@@ -186,9 +194,9 @@ export const StoreAddToCartButton: React.FC<StoreAddToCartButtonProps> = ({
         className={buttonClasses}
         type="button"
         data-state={buttonState}
-        disabled={phase === 'adding' || isInCart}
+        disabled={phase === 'adding' || isInCart || isServerOwned}
         aria-busy={phase === 'adding'}
-        aria-label={isInCart ? `${product.title} added to cart` : `Add ${product.title} to cart`}
+        aria-label={isServerOwned ? `${product.title} already unlocked` : isInCart ? `${product.title} added to cart` : `Add ${product.title} to cart`}
         onClick={handleAdd}
         animate={{ scale: phase === 'adding' ? .95 : 1, y: 0 }}
         transition={{ duration: phase === 'adding' ? .2 : .18, ease: [0.22, 1, 0.36, 1] }}
@@ -227,7 +235,7 @@ export const StoreAddToCartButton: React.FC<StoreAddToCartButtonProps> = ({
                     ? <Check size={17} strokeWidth={2.2} />
                     : <Plus size={17} strokeWidth={2} />}
                 </motion.span>
-                <span>{buttonState === 'added' ? 'Added' : 'Add to cart'}</span>
+                <span>{buttonState === 'added' ? (isServerOwned ? 'Unlocked' : 'Added') : 'Add to cart'}</span>
               </motion.span>
             )}
 

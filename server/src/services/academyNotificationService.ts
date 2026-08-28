@@ -3,6 +3,7 @@ import type { TenantContext } from '../auth/tenant-auth.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { assertChannelsConfigured, deliverEmails, recordInAppDeliveries, type DeliveryChannel } from './notificationDeliveryService.js';
 import { enqueueJob } from './backgroundJobService.js';
+import { fanoutAcademyNotificationToMobile } from './learnerNotificationService.js';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
@@ -404,6 +405,7 @@ export async function dispatchNotification(notificationId: string, options: { ac
       return sent;
     });
     await recordInAppDeliveries(notification.id, notification.academyId, studentUserIds);
+    await fanoutAcademyNotificationToMobile(notification.id, studentUserIds);
     return notificationSummary(updated);
   } catch (error) {
     await recoverProcessing(notification);

@@ -35,7 +35,7 @@ const sanitiseItemIds = (value: unknown): string[] => {
     new Set(
       value.filter(
         (candidate): candidate is string =>
-          typeof candidate === 'string' && Boolean(getProductById(candidate)),
+          typeof candidate === 'string' && candidate.trim().length > 0 && candidate.length <= 200,
       ),
     ),
   );
@@ -46,7 +46,7 @@ export const useCartStore = create<CartState>()(
     (set) => ({
       itemIds: [],
       addItem: (productId) => {
-        if (!getProductById(productId)) return;
+        if (!productId?.trim()) return;
 
         set((state) =>
           state.itemIds.includes(productId)

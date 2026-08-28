@@ -12,7 +12,17 @@ export interface RequestMetadata {
   ipAddress?: string;
   userAgent?: string;
   deviceName?: string;
+  platform?: ClientPlatform;
 }
+
+export type ClientPlatform = "ANDROID" | "IOS" | "WEB" | "UNKNOWN";
+
+export const normalizeClientPlatform = (value: string | undefined): ClientPlatform => {
+  if (!value) return "WEB";
+  const normalized = value.trim().toUpperCase();
+  if (normalized === "ANDROID" || normalized === "IOS" || normalized === "WEB") return normalized;
+  return "UNKNOWN";
+};
 
 export interface PublicUser {
   id: string;

@@ -9,7 +9,8 @@ import {
   revokeSession,
   rotateRefreshToken,
 } from "../auth/auth-service.js";
-import type { RequestMetadata } from "../auth/types.js";
+import { normalizeClientPlatform, type RequestMetadata } from "../auth/types.js";
+import { completeRegistration, createRegistration, sendRegistrationOtp, verifyRegistrationOtp } from "../auth/registration-service.js";
 import { getConfig } from "../config/env.js";
 import { asyncRoute } from "../middleware/async-route.js";
 import { createRateLimiter } from "../middleware/rate-limit.js";
@@ -19,6 +20,9 @@ const credentialsSchema = z.object({
   password: z.string().min(1).max(128),
 });
 const registrationSchema = credentialsSchema.extend({ fullName: z.string().trim().min(2).max(120) });
+const stagedRegistrationSchema = registrationSchema.extend({ phone: z.string().trim().min(8).max(30), password: z.string().min(8).max(128) });
+const registrationIdSchema = z.string().uuid();
+const otpSchema = z.object({ code: z.string().regex(/^\d{4}$/) }).strict();
 const googleSchema = z.object({ idToken: z.string().min(100).max(16_384) });
 const refreshSchema = z.object({ refreshToken: z.string().min(40).max(512) });
 
@@ -26,6 +30,7 @@ const requestMetadata = (req: Request): RequestMetadata => ({
   ipAddress: req.ip,
   userAgent: req.get("user-agent"),
   deviceName: req.get("x-device-name"),
+  platform: normalizeClientPlatform(req.get("x-client-platform")),
 });
 
 export const createAuthRouter = (): Router => {
@@ -48,6 +53,27 @@ export const createAuthRouter = (): Router => {
   router.post("/register", asyncRoute(async (req, res) => {
     const body = registrationSchema.parse(req.body);
     res.status(201).json(await registerWithPassword(body, requestMetadata(req)));
+  }));
+  router.post("/registrations", asyncRoute(async (req, res) => {
+    const body = stagedRegistrationSchema.parse(req.body);
+    res.status(201).json(await createRegistration(body));
+  }));
+  router.post("/registrations/:registrationId/email/send", asyncRoute(async (req, res) => {
+    res.json(await sendRegistrationOtp(registrationIdSchema.parse(req.params.registrationId), "email"));
+  }));
+  router.post("/registrations/:registrationId/email/verify", asyncRoute(async (req, res) => {
+    const body = otpSchema.parse(req.body);
+    res.json(await verifyRegistrationOtp(registrationIdSchema.parse(req.params.registrationId), "email", body.code));
+  }));
+  router.post("/registrations/:registrationId/mobile/send", asyncRoute(async (req, res) => {
+    res.json(await sendRegistrationOtp(registrationIdSchema.parse(req.params.registrationId), "mobile"));
+  }));
+  router.post("/registrations/:registrationId/mobile/verify", asyncRoute(async (req, res) => {
+    const body = otpSchema.parse(req.body);
+    res.json(await verifyRegistrationOtp(registrationIdSchema.parse(req.params.registrationId), "mobile", body.code));
+  }));
+  router.post("/registrations/:registrationId/complete", asyncRoute(async (req, res) => {
+    res.status(201).json(await completeRegistration(registrationIdSchema.parse(req.params.registrationId), requestMetadata(req)));
   }));
   router.post("/google", asyncRoute(async (req, res) => {
     const body = googleSchema.parse(req.body);
