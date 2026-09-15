@@ -60,7 +60,7 @@ export const getSafeReturnDestination = (state: unknown, role: UserRole): To => 
   const isAcademyAdminDestination = pathname === '/academy' || pathname.startsWith('/academy/');
 
   if (role === 'super_admin') {
-    return isSuperAdminDestination || isAcademyAdminDestination
+    return isSuperAdminDestination
       ? { pathname, search: safeSearch, hash: safeHash }
       : fallbackDestination;
   }
