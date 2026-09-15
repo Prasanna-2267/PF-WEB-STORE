@@ -25,9 +25,13 @@ Database integration tests are deliberately opt-in. Set `DATABASE_URL` and `TEST
 
 ## Durable jobs
 
-Run `npm run jobs:worker` as a separate long-lived production process using the same image and database configuration as the API. The worker polls every five seconds by default; `JOB_WORKER_POLL_INTERVAL_MS` and `JOB_WORKER_BATCH_LIMIT` may tune the interval and batch size. Set `JOB_WORKER_RUN_ONCE=true` only for deployment smoke checks. Development-only one-shot execution remains available through `npm run jobs:run-once:dev` after dependencies are installed.
+Run `npm run jobs:worker` as a separate long-lived production process using the same image and database configuration as the API. The worker polls every five seconds by default; `JOB_WORKER_POLL_INTERVAL_MS` and `JOB_WORKER_BATCH_LIMIT` may tune the interval and batch size. It also reconciles purchased Monthly Report schedules every six hours by default (`MONTHLY_REPORT_MAINTENANCE_INTERVAL_MS`) so missed or pre-deployment purchase-month jobs are repaired safely. Set `JOB_WORKER_RUN_ONCE=true` only for deployment smoke checks. During local development, keep `npm run jobs:worker:dev` running beside `npm run dev`; development-only one-shot execution remains available through `npm run jobs:run-once:dev`.
 
-Jobs use persisted leases, compare-and-set claims, retry backoff, stale-lock recovery, terminal failure states, and deduplication keys. Supported work includes scheduled notifications, academy and global broadcasts, contact email, and recursive content copies. Deployments must run both the API command (`npm start`) and the worker command (`npm run jobs:worker`) as separate services.
+To preview a purchased Monthly Report immediately in development without changing its month-end schedule, run `npm run reports:test-delivery -- --email registered@example.com`. Add `--month YYYY-MM` to select a particular purchased month. The command generates the report from that user's real data, writes a PDF under `.tmp/monthly-report-tests`, and sends the same PDF to the user's registered address through the configured email provider. It refuses to run when `NODE_ENV=production`.
+
+Jobs use persisted leases, compare-and-set claims, retry backoff, stale-lock recovery, terminal failure states, and deduplication keys. Supported work includes new-account email, scheduled notifications, academy and global broadcasts, contact email, and recursive content copies. Deployments must run both the API command (`npm start`) and the worker command (`npm run jobs:worker`) as separate services.
+
+New-account email is written to the durable outbox in the same transaction that creates the account, then delivered only after commit by the worker. Configure `PUBLIC_APP_URL`, optional `PUBLIC_LOGO_URL`, and `SUPPORT_EMAIL` together with the existing SMTP/HTTP email provider variables. `PUBLIC_LOGO_URL` defaults to the existing `/logo.png` public asset under `PUBLIC_APP_URL`. For a no-send HTML preview, run `npm run email:preview:account-created` and capture stdout in a local development file if desired.
 
 ## Migration warning
 

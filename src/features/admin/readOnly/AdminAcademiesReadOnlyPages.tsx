@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { type FormEvent, useState } from 'react';
 import { BookOpen, Building2, Mail, Search, UsersRound } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
@@ -25,7 +26,7 @@ export const AdminAcademiesReadOnlyPage: React.FC = () => {
     <section className="pf-admin-table-card">
       <div className="pf-admin-table-card__header pf-admin-student-toolbar">
         <form className="pf-admin-search-field" onSubmit={submitSearch}><Search size={17} /><label className="pf-admin-sr-only" htmlFor="admin-academy-search">Search academies</label><input id="admin-academy-search" className="pf-admin-input" type="search" value={searchInput} placeholder="Search name, email, or slug" onChange={(event) => setSearchInput(event.target.value)} /></form>
-        <label className="pf-admin-field"><span>Status</span><select className="pf-admin-select" value={status} onChange={(event) => { setStatus(event.target.value as AdminAcademyStatus | ''); setPage(1); }}><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="PENDING">Pending</option><option value="SUSPENDED">Suspended</option></select></label>
+        <label className="pf-admin-field"><span>Status</span><AppSelect className="pf-admin-select" value={status} onChange={(event) => { setStatus(event.target.value as AdminAcademyStatus | ''); setPage(1); }}><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="PENDING">Pending</option><option value="SUSPENDED">Suspended</option></AppSelect></label>
         <div className="pf-admin-field"><span>Sort</span><button className="pf-admin-button pf-admin-button--quiet" type="button" disabled>Newest first</button></div>
       </div>
       {query.isPending ? <AdminSkeleton rows={8} variant="table" label="Loading academies" />

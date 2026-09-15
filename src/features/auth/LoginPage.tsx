@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate, type To } from 'react-router-dom';
-import { GoogleLogin, type CredentialResponse } from '@react-oauth/google';
+import { GoogleLogin, GoogleOAuthProvider, type CredentialResponse } from '@react-oauth/google';
 import { authService } from '@/services/auth.service';
 import {
   useAuthStore,
@@ -9,6 +9,7 @@ import {
 import type { AuthResult } from '@/lib/api/contracts';
 import { ROUTES } from '@/config/routes';
 import { SeoHead } from '@/seo/SeoHead';
+import { PasswordField } from './PasswordField';
 
 const ADMIN_OVERVIEW_PATH = '/admin/overview';
 
@@ -100,7 +101,8 @@ export const LoginPage: React.FC = () => {
       });
       completeLogin(response);
     } catch (err) {
-      setError((err as Error).message || 'Unable to sign in.');
+      const msg = (err as Error).message;
+      setError(msg === 'Failed to fetch' || msg?.includes('fetch') ? 'Unable to connect to backend server. Please verify the server is running on port 4000.' : msg || 'Unable to sign in.');
     } finally {
       setLoading(false);
     }
@@ -137,15 +139,17 @@ export const LoginPage: React.FC = () => {
         <p className="pf-auth-copy">Your learning journey is just one sign-in away.</p>
 
         <div className="pf-auth-oauth-wrap" style={{ margin: '20px 0 16px', display: 'flex', justifyContent: 'center' }}>
-          {import.meta.env.VITE_GOOGLE_CLIENT_ID ? (
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={handleGoogleError}
-              shape="pill"
-              theme="outline"
-              text="signin_with"
-              width="320"
-            />
+          {import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ? (
+            <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID.trim()}>
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleError}
+                shape="pill"
+                theme="outline"
+                text="signin_with"
+                width="320"
+              />
+            </GoogleOAuthProvider>
           ) : <small>Google sign-in is not configured.</small>}
         </div>
 
@@ -160,10 +164,7 @@ export const LoginPage: React.FC = () => {
             Email address
             <input name="email" type="email" required placeholder="Enter your email address" />
           </label>
-          <label>
-            Password
-            <input name="password" type="password" required placeholder="Enter your password" />
-          </label>
+          <PasswordField name="password" label="Password" required placeholder="Enter your password" autoComplete="current-password" />
           <div className="pf-auth-options">
             <label>
               <input name="remember" type="checkbox" defaultChecked /> Remember me

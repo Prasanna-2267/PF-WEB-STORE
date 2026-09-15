@@ -1,7 +1,6 @@
 import type { NoteRevisionSource, Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../db/prisma.js";
 import { conflict, forbidden, notFound } from "../errors/api-error.js";
-import { earliestExpiry, resolveResourceExpiry } from "./resourceValidityService.js";
 import { expandedPackageContentIds, publishedCourseContent } from "./packageContentService.js";
 import { ALLOWED_CONTENT_MIME_TYPES } from "../utils/upload-validation.js";
 
@@ -29,13 +28,18 @@ const contentSelect = {
   entityType: true,
   accessType: true,
   price: true,
-  validityMode: true,
-  validityOffsetDays: true,
+  accessDurationValue: true,
+  accessDurationUnit: true,
   mimeType: true,
   size: true,
   displayOrder: true,
   createdAt: true,
   updatedAt: true,
+  attachedLinks: {
+    where: { deletedAt: null },
+    orderBy: [{ createdAt: "asc" as const }, { id: "asc" as const }],
+    select: { id: true, url: true, description: true },
+  },
 } satisfies Prisma.ContentItemSelect;
 
 type ContentRecord = Prisma.ContentItemGetPayload<{ select: typeof contentSelect }>;
@@ -55,23 +59,30 @@ interface NoteTreeFolder {
   description: string;
   entityType: ContentRecord["entityType"];
   pageHeading: string;
+  attachedLinks: ContentRecord["attachedLinks"];
   state: ReturnType<typeof presentState>;
   children: Array<NoteTreeFolder | (PresentedNote & { kind: "note" })>;
 }
 
 type NoteAccess = {
   accessible: boolean;
-  reason: "FREE" | "OWNED" | "GRANTED" | "PURCHASE_REQUIRED" | "COURSE_ENROLLMENT_REQUIRED" | "EXAM_DATE_REQUIRED" | "RESOURCE_EXPIRED";
+  reason: "FREE" | "OWNED" | "GRANTED" | "PURCHASE_REQUIRED" | "COURSE_ENROLLMENT_REQUIRED" | "RESOURCE_EXPIRED";
   expiresAt: Date | null;
-  validityMode: ContentRecord["validityMode"];
-  validityOffsetDays: number | null;
+  accessDurationValue: number | null;
+  accessDurationUnit: ContentRecord["accessDurationUnit"];
 };
 
 const publishedContentWhere = (courseId: string): Prisma.ContentItemWhereInput => ({
   courseId,
   status: "PUBLISHED",
   deletedAt: null,
-  OR: [{ kind: "FOLDER" }, { kind: "FILE", mimeType: { in: learnerNoteMimeTypes } }],
+  AND: [
+    // In PostgreSQL, `NOT (entityType = 'MONTHLY_REPORT')` does not match
+    // NULL values. Ordinary uploaded content intentionally has no entityType,
+    // so keep NULL in the catalogue while excluding generated reports.
+    { OR: [{ entityType: null }, { entityType: { not: "MONTHLY_REPORT" } }] },
+    { OR: [{ kind: "FOLDER" }, { kind: "FILE", mimeType: { in: learnerNoteMimeTypes } }] },
+  ],
 });
 
 async function selectedCourse(userId: string) {
@@ -99,7 +110,7 @@ async function selectedCourse(userId: string) {
 
 async function accessContext(userId: string, courseId: string, academyId: string | null) {
   const now = new Date();
-  const [entitlements, enrollment, preference] = await Promise.all([
+  const [entitlements, membership] = await Promise.all([
     prisma.entitlement.findMany({
       where: { userId, status: "ACTIVE", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
       select: {
@@ -112,9 +123,8 @@ async function accessContext(userId: string, courseId: string, academyId: string
       take: 2000,
     }),
     academyId
-      ? prisma.academyCourseEnrollment.findFirst({ where: { studentId: userId, academyId, courseId, status: "ACTIVE" }, select: { id: true } })
+      ? prisma.academyMembership.findFirst({ where: { userId, academyId, role: "ACADEMY_STUDENT", status: "ACTIVE" }, select: { id: true } })
       : Promise.resolve(null),
-    prisma.learnerPreference.findUnique({ where: { userId }, select: { examDate: true } }),
   ]);
   const byContent = new Map<string, { source: string; expiresAt: Date | null }>();
   let courseEntitlement: { source: string; expiresAt: Date | null } | undefined;
@@ -133,22 +143,39 @@ async function accessContext(userId: string, courseId: string, academyId: string
     const value = { source: entitlement.source, expiresAt: entitlement.expiresAt };
     for (const contentItemId of expanded) byContent.set(contentItemId, value);
   }
-  return { byContent, courseEntitlement, enrolled: Boolean(enrollment), examDate: preference?.examDate ?? null };
+  return { byContent, courseEntitlement, academyMember: Boolean(membership) };
 }
 
-function resolveAccess(item: Pick<ContentRecord, "id" | "accessType" | "validityMode" | "validityOffsetDays">, academyId: string | null, context: Awaited<ReturnType<typeof accessContext>>): NoteAccess {
-  const validity = { validityMode: item.validityMode, validityOffsetDays: item.validityOffsetDays };
+function resolveAccess(item: Pick<ContentRecord, "id" | "accessType" | "accessDurationValue" | "accessDurationUnit">, academyId: string | null, context: Awaited<ReturnType<typeof accessContext>>): NoteAccess {
+  const validity = { accessDurationValue: item.accessDurationValue, accessDurationUnit: item.accessDurationUnit };
+  // Academy membership is a tenant boundary, not a blanket paid-content
+  // entitlement. Members receive eligible free files; paid files still require
+  // an active direct, course or package entitlement below.
+  if (academyId && !context.academyMember) return { accessible: false, reason: "COURSE_ENROLLMENT_REQUIRED", expiresAt: null, ...validity };
+  if (item.accessType === "FREE") return { accessible: true, reason: "FREE", expiresAt: null, ...validity };
   const entitlement = context.byContent.get(item.id) ?? context.courseEntitlement;
   if (entitlement) {
-    const resourceExpiry = resolveResourceExpiry(validity, context.examDate);
-    if (resourceExpiry === undefined) return { accessible: false, reason: "EXAM_DATE_REQUIRED", expiresAt: null, ...validity };
-    const expiresAt = earliestExpiry(entitlement.expiresAt, resourceExpiry);
+    const expiresAt = entitlement.expiresAt;
     if (expiresAt && expiresAt <= new Date()) return { accessible: false, reason: "RESOURCE_EXPIRED", expiresAt, ...validity };
     return { accessible: true, reason: entitlement.source === "ADMIN_GRANT" ? "GRANTED" : "OWNED", expiresAt, ...validity };
   }
-  if (item.accessType === "PAID") return { accessible: false, reason: "PURCHASE_REQUIRED", expiresAt: null, ...validity };
-  if (academyId && !context.enrolled) return { accessible: false, reason: "COURSE_ENROLLMENT_REQUIRED", expiresAt: null, ...validity };
-  return { accessible: true, reason: "FREE", expiresAt: null, ...validity };
+  return { accessible: false, reason: "PURCHASE_REQUIRED", expiresAt: null, ...validity };
+}
+
+/** Shared entitlement projection used by Practice. Keeping this here makes
+ * linked-question access use the exact same free, package, grant, enrollment,
+ * validity and expiry rules as the Notes catalogue. */
+export async function accessibleContentIdsForCourse(userId: string, courseId: string) {
+  const course = await prisma.course.findFirst({
+    where: { id: courseId, status: "ACTIVE", deletedAt: null, OR: [{ academyId: null }, { academy: { status: "ACTIVE", deletedAt: null } }] },
+    select: { id: true, academyId: true },
+  });
+  if (!course) throw notFound("COURSE_NOT_FOUND", "The active course was not found.");
+  const [items, context] = await Promise.all([
+    prisma.contentItem.findMany({ where: publishedContentWhere(courseId), select: { id: true, accessType: true, accessDurationValue: true, accessDurationUnit: true } }),
+    accessContext(userId, courseId, course.academyId),
+  ]);
+  return new Set(items.filter((item) => resolveAccess(item, course.academyId, context).accessible).map((item) => item.id));
 }
 
 function emptyState() {
@@ -186,7 +213,8 @@ function presentNote(item: ContentRecord, state: StateRecord | null | undefined,
     sizeBytes: item.size.toString(),
     accessType: item.accessType,
     price: item.price?.toString() ?? null,
-    validity: { mode: item.validityMode, offsetDays: item.validityOffsetDays },
+    purchaseTarget: item.accessType === "PAID" ? { resourceType: "PREMIUM_NOTES" as const, resourceId: item.id, storePath: `/store/product/${encodeURIComponent(item.id)}?type=notes` } : null,
+    accessDuration: { value: item.accessDurationValue, unit: item.accessDurationUnit },
     access,
     breadcrumb: breadcrumbFor(item, folders),
     state: presentState(state),
@@ -223,6 +251,7 @@ export async function listNoteTree(userId: string) {
       description: item.description,
       entityType: item.entityType,
       pageHeading: context.headingByFolderId.get(item.id) || item.name,
+      attachedLinks: item.attachedLinks,
       state: presentState(context.stateById.get(item.id)),
       children: [],
     };
@@ -267,7 +296,8 @@ export async function listNotes(userId: string, input: { search?: string; status
 
 export async function listRecentNotes(userId: string, limit: number) {
   const context = await catalogueContext(userId);
-  const notes = context.items.filter((item) => item.kind === "FILE" && context.stateById.get(item.id)?.lastOpenedAt)
+  const notes = context.items.filter((item) => item.kind === "FILE"
+      && context.stateById.get(item.id)?.lastOpenedAt)
     .sort((a, b) => context.stateById.get(b.id)!.lastOpenedAt!.getTime() - context.stateById.get(a.id)!.lastOpenedAt!.getTime())
     .slice(0, limit);
   return { items: notes.map((item) => presentNote(item, context.stateById.get(item.id), context.folders, resolveAccess(item, context.course.academyId, context.access))) };
@@ -307,15 +337,14 @@ export async function assertNoteCanOpen(userId: string, noteId: string) {
       deletedAt: null,
       course: { status: "ACTIVE", deletedAt: null, OR: [{ academyId: null }, { academy: { status: "ACTIVE", deletedAt: null } }] },
     },
-    select: { id: true, name: true, courseId: true, accessType: true, validityMode: true, validityOffsetDays: true, course: { select: { academyId: true } } },
+    select: { id: true, name: true, courseId: true, accessType: true, accessDurationValue: true, accessDurationUnit: true, course: { select: { academyId: true } } },
   });
   if (!note) throw notFound("NOTE_NOT_FOUND", "The published note was not found.");
   const context = await accessContext(userId, note.courseId, note.course.academyId);
   const access = resolveAccess(note, note.course.academyId, context);
   if (access.accessible) return { ...note, access };
   if (access.reason === "PURCHASE_REQUIRED") throw forbidden("CONTENT_ENTITLEMENT_REQUIRED", "Purchase or an active grant is required to open this note.");
-  if (access.reason === "EXAM_DATE_REQUIRED") throw forbidden("EXAM_DATE_REQUIRED", "Set your exam month and year before opening this time-limited resource.");
-  if (access.reason === "RESOURCE_EXPIRED") throw forbidden("CONTENT_ACCESS_EXPIRED", "This resource has reached the validity date set by the publisher.");
+  if (access.reason === "RESOURCE_EXPIRED") throw forbidden("CONTENT_ACCESS_EXPIRED", "Your purchased access period for this resource has ended.");
   throw forbidden("COURSE_ENROLLMENT_REQUIRED", "An active course enrollment is required to open this note.");
 }
 

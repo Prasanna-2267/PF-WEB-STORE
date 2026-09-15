@@ -2,7 +2,6 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../db/prisma.js";
 import { badRequest, forbidden, notFound } from "../errors/api-error.js";
 import { getRewardWallet } from "./rewardService.js";
-import { resolveResourceExpiry } from "./resourceValidityService.js";
 import { createLearnerNotification } from "./learnerNotificationService.js";
 
 export async function getBootstrap(userId: string, sessionId: string) {
@@ -105,13 +104,13 @@ export async function getDashboard(userId: string, requestedAcademyId?: string) 
 }
 export async function listCourses(userId: string, requestedAcademyId?: string) {
   const academyId = await academyIdFor(userId, requestedAcademyId);
-  const enrollments = await prisma.academyCourseEnrollment.findMany({ where: { studentId: userId, academyId, status: "ACTIVE", course: { status: "ACTIVE", deletedAt: null } }, orderBy: { enrolledAt: "desc" }, take: 500, include: { course: { include: { _count: { select: { contentItems: true, packages: true } } } } } });
-  return { academyId, data: enrollments };
+  const courses = await prisma.course.findMany({ where: { academyId, status: "ACTIVE", deletedAt: null }, orderBy: [{ name: "asc" }, { id: "asc" }], take: 500, include: { _count: { select: { contentItems: true, packages: true } }, enrollments: { where: { studentId: userId, status: "ACTIVE" }, take: 1, select: { id: true, status: true, enrolledAt: true } } } });
+  return { academyId, data: courses.map(({ enrollments, ...course }) => ({ id: enrollments[0]?.id ?? `membership:${course.id}`, academyId, studentId: userId, courseId: course.id, status: "ACTIVE" as const, enrolledAt: enrollments[0]?.enrolledAt ?? null, course })) };
 }
 export async function getCourse(userId: string, courseId: string) {
-  const enrollment = await prisma.academyCourseEnrollment.findFirst({ where: { studentId: userId, courseId, status: "ACTIVE", course: { status: "ACTIVE", deletedAt: null, academy: { status: "ACTIVE", deletedAt: null } } }, include: { course: { include: { subjects: { where: { deletedAt: null }, orderBy: { name: "asc" } }, packages: { where: { status: "PUBLISHED", deletedAt: null }, orderBy: { title: "asc" } } } } } });
-  if (!enrollment) throw notFound("ENROLLED_COURSE_NOT_FOUND", "The enrolled course was not found.");
-  return { ...enrollment, course: { ...enrollment.course, packages: enrollment.course.packages.map((item) => ({ ...item, price: Number(item.price) })) } };
+  const course = await prisma.course.findFirst({ where: { id: courseId, status: "ACTIVE", deletedAt: null, academy: { status: "ACTIVE", deletedAt: null, memberships: { some: { userId, role: "ACADEMY_STUDENT", status: "ACTIVE" } } } }, include: { subjects: { where: { deletedAt: null }, orderBy: { name: "asc" } }, packages: { where: { status: "PUBLISHED", deletedAt: null }, orderBy: { title: "asc" } } } });
+  if (!course) throw notFound("ACADEMY_COURSE_NOT_FOUND", "The academy course was not found or is unavailable to this account.");
+  return { id: `membership:${course.id}`, academyId: course.academyId!, studentId: userId, courseId: course.id, status: "ACTIVE" as const, enrolledAt: null, course: { ...course, packages: course.packages.map((item) => ({ ...item, price: Number(item.price) })) } };
 }
 export async function listCourseContent(userId: string, courseId: string, parentId?: string | null) {
   await getCourse(userId, courseId);
@@ -121,8 +120,8 @@ export async function listCourseContent(userId: string, courseId: string, parent
   ]);
   const entitled = new Set(entitlements.flatMap((entry) => [...(entry.contentItemId ? [entry.contentItemId] : []), ...(entry.package?.items.map((item) => item.contentItemId) ?? [])]));
   const courseAccess = entitlements.some((entry) => entry.courseId === courseId);
-  const rows = await prisma.contentItem.findMany({ where: { courseId, parentId: parentId ?? null, status: "PUBLISHED", deletedAt: null }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }], take: 500, select: { id: true, parentId: true, kind: true, name: true, description: true, entityType: true, accessType: true, price: true, validityMode: true, validityOffsetDays: true, mimeType: true, size: true, _count: { select: { children: true } } } });
-  return { data: rows.map((item) => { const expiresAt = resolveResourceExpiry(item, preference?.examDate); const entitledAccess = courseAccess || entitled.has(item.id); return { ...item, size: Number(item.size), price: item.price ? Number(item.price) : null, validity: { mode: item.validityMode, offsetDays: item.validityOffsetDays }, accessible: item.kind === "FOLDER" || item.accessType === "FREE" || (entitledAccess && expiresAt !== undefined && (!expiresAt || expiresAt > new Date())), expiresAt: expiresAt ?? null }; }) };
+  const rows = await prisma.contentItem.findMany({ where: { courseId, parentId: parentId ?? null, status: "PUBLISHED", deletedAt: null }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }], take: 500, select: { id: true, parentId: true, kind: true, name: true, description: true, entityType: true, accessType: true, price: true, accessDurationValue: true, accessDurationUnit: true, mimeType: true, size: true, _count: { select: { children: true } } } });
+  return { data: rows.map((item) => ({ ...item, size: Number(item.size), price: item.price ? Number(item.price) : null, accessDuration: { value: item.accessDurationValue, unit: item.accessDurationUnit }, accessible: true, expiresAt: null })) };
 }
 export async function listOrders(userId: string, page: number, limit: number) {
   const where = { userId } satisfies Prisma.OrderWhereInput;

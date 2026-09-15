@@ -16,6 +16,10 @@ export interface AcademyContentItem {
   mimeType: string | null;
   description: string;
   entityType: string | null;
+  accessType: 'FREE' | 'PAID';
+  price: number | null;
+  accessDurationValue: number | null;
+  accessDurationUnit: 'DAYS' | 'WEEKS' | 'MONTHS' | null;
   status: 'PUBLISHED' | 'ARCHIVED';
   displayOrder: number;
   deletedAt: string | null;
@@ -117,7 +121,7 @@ export const academyContentApi = {
   createFolder: (courseId: string, parentId: string | null, name: string) => apiRequest<AcademyContentItem>('/api/academy/content/folders', {
     method: 'POST', body: { courseId, parentId, name },
   }),
-  update: (contentId: string, body: { name?: string; description?: string; displayOrder?: number }) => apiRequest<AcademyContentItem>(`/api/academy/content/${encodeURIComponent(contentId)}`, {
+  update: (contentId: string, body: { name?: string; description?: string; displayOrder?: number; accessType?: 'FREE' | 'PAID'; price?: number | null; accessDurationValue?: number | null; accessDurationUnit?: 'DAYS' | 'WEEKS' | 'MONTHS' | null }) => apiRequest<AcademyContentItem>(`/api/academy/content/${encodeURIComponent(contentId)}`, {
     method: 'PATCH', body,
   }),
   rename: (contentId: string, name: string) => academyContentApi.update(contentId, { name }),
@@ -137,7 +141,7 @@ export const academyContentApi = {
     courseId: string,
     parentId: string | null,
     file: File,
-    metadata: { description?: string; entityType?: string; displayOrder?: number } = {},
+    metadata: { description?: string; entityType?: string; displayOrder?: number; accessType?: 'FREE' | 'PAID'; price?: number; accessDurationValue?: number | null; accessDurationUnit?: 'DAYS' | 'WEEKS' | 'MONTHS' | null } = {},
   ) => {
     const checksumSha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())))
       .map((byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -154,7 +158,16 @@ export const academyContentApi = {
     }));
     return retryUploadStep(() => apiRequest<AcademyContentItem>(`/api/academy/content/uploads/${encodeURIComponent(intent.uploadId)}/finalize`, {
       method: 'POST',
-      body: { parentId, entityType: metadata.entityType ?? 'STUDY_MATERIAL', description: metadata.description, displayOrder: metadata.displayOrder },
+      body: {
+        parentId,
+        entityType: metadata.entityType ?? 'STUDY_MATERIAL',
+        description: metadata.description,
+        displayOrder: metadata.displayOrder,
+        accessType: metadata.accessType ?? 'FREE',
+        price: metadata.accessType === 'PAID' ? metadata.price : undefined,
+        accessDurationValue: metadata.accessType === 'PAID' ? metadata.accessDurationValue : null,
+        accessDurationUnit: metadata.accessType === 'PAID' ? metadata.accessDurationUnit : null,
+      },
       timeoutMs: 300_000,
     }));
   },

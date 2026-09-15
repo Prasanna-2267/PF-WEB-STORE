@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import { useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useCourseStore, type CourseModule } from '@/app/store/useCourseStore';
@@ -30,7 +31,7 @@ export const CourseSelector = ({
     <label className="pf-admin-course-selector">
       <span>Choose course</span>
       <div>
-        <select
+        <AppSelect
           value={selectedId}
           disabled={status === 'loading' || !activeCourses.length}
           onChange={(event) => void handleChange(event.target.value)}
@@ -40,7 +41,7 @@ export const CourseSelector = ({
           {activeCourses.map((course) => (
             <option key={course.id} value={course.id}>{course.code} — {course.name}</option>
           ))}
-        </select>
+        </AppSelect>
         <ChevronDown size={16} aria-hidden="true" />
       </div>
     </label>

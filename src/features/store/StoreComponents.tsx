@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Check, ChevronRight, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -14,6 +14,7 @@ const productTypeLabels: Record<StoreProductType, string> = {
   'question-bank': 'Question Bank',
   'formula-sheet': 'Formula Sheet',
   'mock-test': 'Mock Test',
+  'monthly-report': 'Monthly Report',
   bundle: 'Learning Bundle',
   subscription: 'Subscription',
 };
@@ -24,10 +25,14 @@ export const StoreProductCover: React.FC<{
   product: StoreProduct;
   size?: 'card' | 'large' | 'mini';
 }> = ({ product, size = 'card' }) => {
-  if (product.coverImage) {
+  const [coverFailed, setCoverFailed] = useState(false);
+
+  useEffect(() => setCoverFailed(false), [product.coverImage]);
+
+  if (product.coverImage && !coverFailed) {
     return (
       <div className={`pf-store-cover pf-store-cover--${size}`} data-course={product.course} aria-hidden="true">
-        <img src={product.coverImage} alt={product.title} className="pf-store-cover__img" />
+        <img src={product.coverImage} alt={product.title} className="pf-store-cover__img" onError={() => setCoverFailed(true)} />
       </div>
     );
   }

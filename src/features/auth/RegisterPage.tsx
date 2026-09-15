@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GoogleLogin, type CredentialResponse } from '@react-oauth/google';
+import { GoogleLogin, GoogleOAuthProvider, type CredentialResponse } from '@react-oauth/google';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/app/store/useAuthStore';
 import { ROUTES } from '@/config/routes';
 import { SeoHead } from '@/seo/SeoHead';
+import { PasswordField } from './PasswordField';
 
 export const RegisterPage: React.FC = () => {
   const completeAuthentication = useAuthStore((state) => state.completeAuthentication);
@@ -78,15 +79,17 @@ export const RegisterPage: React.FC = () => {
         </p>
 
         <div className="pf-auth-oauth-wrap" style={{ margin: '20px 0 16px', display: 'flex', justifyContent: 'center' }}>
-          {import.meta.env.VITE_GOOGLE_CLIENT_ID ? (
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={handleGoogleError}
-              shape="pill"
-              theme="outline"
-              text="signup_with"
-              width="320"
-            />
+          {import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ? (
+            <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID.trim()}>
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleError}
+                shape="pill"
+                theme="outline"
+                text="signup_with"
+                width="320"
+              />
+            </GoogleOAuthProvider>
           ) : <small>Google sign-up is not configured.</small>}
         </div>
 
@@ -105,14 +108,8 @@ export const RegisterPage: React.FC = () => {
             Email address
             <input name="email" type="email" required placeholder="you@example.com" />
           </label>
-          <label>
-            Password
-            <input name="password" type="password" required minLength={12} maxLength={128} />
-          </label>
-          <label>
-            Confirm password
-            <input name="confirmPassword" type="password" required minLength={12} maxLength={128} />
-          </label>
+          <PasswordField name="password" label="Password" required minLength={12} maxLength={128} autoComplete="new-password" />
+          <PasswordField name="confirmPassword" label="Confirm password" required minLength={12} maxLength={128} autoComplete="new-password" />
           {error && <p className="pf-auth-error">{error}</p>}
           <div className="pf-auth-btn-wrap">
             <button disabled={loading}>

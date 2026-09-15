@@ -67,9 +67,9 @@ export async function resolveTenantContext(req: TenantRequest): Promise<TenantCo
     return {
       user: { id: req.auth.userId, email: req.auth.email, fullName: req.auth.fullName, roleKey: req.auth.roleKey },
       academyId: academy.id,
-      roleInAcademy: "ACADEMY_ADMIN",
+      roleInAcademy: null,
       membershipId: null,
-      permissions: new Set(["academy:manage", "academy:read"]),
+      permissions: new Set(["academy:read"]),
       isSuperAdmin: true,
     };
   }
@@ -121,7 +121,10 @@ export async function requireAcademyAdminMiddleware(req: TenantRequest, _res: Re
   try {
     const context = req.tenantContext ?? await resolveTenantContext(req);
     req.tenantContext = context;
-    if (!context.isSuperAdmin && (!req.auth || !["ACADEMY_ADMIN", "academy_admin"].includes(req.auth.roleKey) || context.roleInAcademy !== "ACADEMY_ADMIN")) {
+    if (context.isSuperAdmin) {
+      throw forbidden("ACADEMY_ADMIN_REQUIRED", "Super Admin academy inspection is read-only. Use the platform academy detail APIs.");
+    }
+    if (!req.auth || !["ACADEMY_ADMIN", "academy_admin"].includes(req.auth.roleKey) || context.roleInAcademy !== "ACADEMY_ADMIN") {
       throw forbidden("ACADEMY_ADMIN_REQUIRED", "An active Academy Admin membership is required.");
     }
     next();

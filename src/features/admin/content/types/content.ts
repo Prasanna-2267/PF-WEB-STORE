@@ -1,7 +1,7 @@
 export type ContentItemKind = 'folder' | 'file';
 
 export type ContentAccessType = 'FREE' | 'PAID';
-export type ContentValidityMode = 'PERMANENT' | 'EXAM_DATE_OFFSET';
+export type AccessDurationUnit = 'DAYS' | 'WEEKS' | 'MONTHS';
 
 export interface ContentSampleImage {
   id: string;
@@ -61,8 +61,8 @@ export interface ContentItem {
   entityType: ContentEntityType | null;
   accessType: ContentAccessType;
   price: number | null;
-  validityMode?: ContentValidityMode;
-  validityOffsetDays?: number | null;
+  accessDurationValue?: number | null;
+  accessDurationUnit?: AccessDurationUnit | null;
   sampleImages: ContentSampleImage[];
   storeSections: ContentStoreSection[];
   displayOrder: number;
@@ -100,8 +100,8 @@ export interface ContentUploadInput {
   entityType?: ContentEntityType | null;
   accessType?: ContentAccessType;
   price?: number | null;
-  validityMode?: ContentValidityMode;
-  validityOffsetDays?: number | null;
+  accessDurationValue?: number | null;
+  accessDurationUnit?: AccessDurationUnit | null;
   description?: string;
   sampleImages?: ContentSampleImage[];
   storeSections?: ContentStoreSection[];
@@ -120,8 +120,8 @@ export interface ContentPublishEntry {
   entityType?: ContentEntityType | null;
   accessType: ContentAccessType;
   price: number | null;
-  validityMode?: ContentValidityMode;
-  validityOffsetDays?: number | null;
+  accessDurationValue?: number | null;
+  accessDurationUnit?: AccessDurationUnit | null;
   description: string;
   pageHeading?: string;
   sampleImages: ContentSampleImage[];

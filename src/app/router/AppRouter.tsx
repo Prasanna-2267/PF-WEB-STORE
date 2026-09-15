@@ -9,7 +9,6 @@ import { RequireSuperAdmin } from '@/components/guards/RequireSuperAdmin';
 import { PublicExperienceRoute } from '@/components/guards/PublicExperienceRoute';
 import { RequireStudent } from '@/components/guards/RequireStudent';
 import { RequireAcademyAdmin } from '@/components/guards/RequireAcademyAdmin';
-import { IntegrationPendingPage } from '@/components/IntegrationPendingPage';
 
 // Feature Pages
 import HomePage from '@/features/home/HomePage';
@@ -24,6 +23,7 @@ const StoreProductPage = lazy(() => import('@/features/store/StorePages').then((
 const StoreCartPage = lazy(() => import('@/features/store/StorePages').then((module) => ({ default: module.StoreCartPage })));
 const StoreCheckoutPage = lazy(() => import('@/features/store/StorePages').then((module) => ({ default: module.StoreCheckoutPage })));
 const StorePurchasesPage = lazy(() => import('@/features/store/StorePages').then((module) => ({ default: module.StorePurchasesPage })));
+const StorePurchaseReceiptPage = lazy(() => import('@/features/store/StorePages').then((module) => ({ default: module.StorePurchaseReceiptPage })));
 const StoreProfilePage = lazy(() => import('@/features/store/StorePages').then((module) => ({ default: module.StoreProfilePage })));
 const StoreSuccessPage = lazy(() => import('@/features/store/StorePages').then((module) => ({ default: module.StoreSuccessPage })));
 const StoreNotFoundPage = lazy(() => import('@/features/store/StorePages').then((module) => ({ default: module.StoreNotFoundPage })));
@@ -56,6 +56,7 @@ const AcademyCourseReadOnlyDetailPage = lazy(() => import('@/features/academy/re
 const AcademyContentPage = lazy(() => import('@/features/academy/content/AcademyContentPage'));
 const AcademyQuestionsPage = lazy(() => import('@/features/academy/questions/AcademyQuestionsPage'));
 const AcademyBroadcastPage = lazy(() => import('@/features/academy/broadcast/AcademyBroadcastPage'));
+const AcademySettingsPage = lazy(() => import('@/features/academy/settings/AcademySettingsPage'));
 const StudentAdmissionView = lazy(() => import('@/features/student/admissions/StudentAdmissionView'));
 const StudentQuestionsPage = lazy(() => import('@/features/student/questions/StudentQuestionsPage').then((m) => ({ default: m.StudentQuestionsPage })));
 
@@ -128,6 +129,7 @@ export const AppRouter: React.FC = () => {
               <Route path="checkout" element={<StoreCheckoutPage />} />
               <Route path="checkout/success/:orderId" element={<StoreSuccessPage />} />
               <Route path="purchases" element={<StorePurchasesPage />} />
+              <Route path="purchases/:orderId" element={<StorePurchaseReceiptPage />} />
               <Route path="profile" element={<StoreProfilePage />} />
             </Route>
             <Route path="*" element={<StoreNotFoundPage />} />
@@ -160,8 +162,6 @@ export const AppRouter: React.FC = () => {
             <Route path="broadcast/:broadcastId" element={<AdminBroadcastDetailPage />} />
             <Route path="academies" element={<AdminAcademiesPage />} />
             <Route path="academies/:academyId" element={<AdminAcademyDetailPage />} />
-            <Route path="account" element={<IntegrationPendingPage module="Account" />} />
-            <Route path="settings" element={<IntegrationPendingPage module="Settings" />} />
             <Route path="*" element={<Navigate to={ROUTES.ADMIN_OVERVIEW} replace />} />
           </Route>
         </Route>
@@ -227,6 +227,7 @@ export const AppRouter: React.FC = () => {
           <Route path="content" element={<AcademyContentPage />} />
           <Route path="questions" element={<AcademyQuestionsPage />} />
           <Route path="broadcast" element={<AcademyBroadcastPage />} />
+          <Route path="settings" element={<AcademySettingsPage />} />
         </Route>
 
         {/* All other endpoints redirect directly to Home */}

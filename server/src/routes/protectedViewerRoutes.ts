@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { asyncRoute } from "../middleware/async-route.js";
-import * as viewer from "../services/noteViewerService.js";
+import * as viewer from "../services/protectedViewerService.js";
 import { pdfJsClassicPath, pdfJsClassicWorkerPath, pdfJsLegacyModulePath, pdfJsLegacyWorkerPath, pdfJsModulePath, pdfJsWorkerPath, protectedFileViewerHtml, protectedFileViewerScript, protectedPdfViewerBootstrap, protectedPdfViewerHtml, protectedPdfViewerScript } from "../services/protectedViewerPage.js";
 
 const uuid = z.string().uuid();

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { degrees, PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import type { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../db/prisma.js";
 import { badRequest, forbidden, notFound, serviceUnavailable } from "../errors/api-error.js";
 import { getStorageProvider } from "../integrations/provider-registry.js";
@@ -7,16 +8,32 @@ import { assertNoteCanOpen, recordNoteOpened, recordReadingProgress } from "./no
 import { ALLOWED_CONTENT_MIME_TYPES } from "../utils/upload-validation.js";
 
 const VIEWER_TTL_MS = 15 * 60_000;
-const MAX_SOURCE_BYTES = 25 * 1024 * 1024;
+// Content uploads are allowed to exceed 25 MiB. Keep the protected viewer's
+// in-memory ceiling high enough for those published documents while retaining
+// a firm bound around PDF parsing and watermark generation.
+export const MAX_PROTECTED_NOTE_SOURCE_BYTES = 100 * 1024 * 1024;
 const SUPPORTED_NOTE_MIME_TYPES = [...ALLOWED_CONTENT_MIME_TYPES];
 type ProtectedContent = { buffer: Buffer; pageCount: number; fileName: string; mimeType: string; expiresAt: Date };
 const protectedPdfCache = new Map<string, { expiresAt: Date; content: ProtectedContent }>();
 
 const viewerInclude = {
-  contentItem: { select: { id: true, name: true, mimeType: true, size: true, storagePath: true } },
+  contentItem: {
+    select: {
+      id: true,
+      name: true,
+      mimeType: true,
+      size: true,
+      storagePath: true,
+      attachedLinks: {
+        where: { deletedAt: null },
+        select: { id: true, url: true, description: true, createdAt: true, updatedAt: true },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      },
+    },
+  },
   user: { select: { email: true, status: true, deletedAt: true } },
   userSession: { select: { userId: true, expiresAt: true, revokedAt: true } },
-} as const;
+} satisfies Prisma.NoteViewerSessionInclude;
 
 type AccessibleNote = {
   id: string;
@@ -117,6 +134,7 @@ export async function getViewerManifest(userId: string, userSessionId: string, v
     expiresAt: viewer.expiresAt,
     watermark: { displayIdentity: viewer.user.email, traceId: viewer.traceId },
     capabilities: { continuousScroll: true, pinchZoom: true, download: false, print: false },
+    attachedLinks: viewer.contentItem.attachedLinks,
   };
 }
 
@@ -149,7 +167,7 @@ async function renderWatermarkedPdf(source: Buffer, email: string, traceId: stri
 
 async function renderViewerContent(viewer: Awaited<ReturnType<typeof requireViewerSession>>) {
   if (!viewer.contentItem.storagePath) throw notFound("NOTE_NOT_FOUND", "The note source is unavailable.");
-  if (viewer.contentItem.size > BigInt(MAX_SOURCE_BYTES)) throw serviceUnavailable("NOTE_TOO_LARGE_FOR_PROTECTED_VIEW", "This note is too large for protected viewing.");
+  if (viewer.contentItem.size > BigInt(MAX_PROTECTED_NOTE_SOURCE_BYTES)) throw serviceUnavailable("NOTE_TOO_LARGE_FOR_PROTECTED_VIEW", "This note is too large for protected viewing.");
 
   const mimeType = viewer.contentItem.mimeType ?? "application/octet-stream";
   if (mimeType === "application/pdf") {
@@ -170,9 +188,9 @@ async function renderViewerContent(viewer: Awaited<ReturnType<typeof requireView
   }
   if (!response.ok) throw serviceUnavailable("NOTE_SOURCE_UNAVAILABLE", "The protected note source is temporarily unavailable.");
   const contentLength = Number(response.headers.get("content-length") ?? 0);
-  if (contentLength > MAX_SOURCE_BYTES) throw serviceUnavailable("NOTE_TOO_LARGE_FOR_PROTECTED_VIEW", "This note is too large for protected viewing.");
+  if (contentLength > MAX_PROTECTED_NOTE_SOURCE_BYTES) throw serviceUnavailable("NOTE_TOO_LARGE_FOR_PROTECTED_VIEW", "This note is too large for protected viewing.");
   const source = Buffer.from(await response.arrayBuffer());
-  if (source.length > MAX_SOURCE_BYTES) throw serviceUnavailable("NOTE_TOO_LARGE_FOR_PROTECTED_VIEW", "This note is too large for protected viewing.");
+  if (source.length > MAX_PROTECTED_NOTE_SOURCE_BYTES) throw serviceUnavailable("NOTE_TOO_LARGE_FOR_PROTECTED_VIEW", "This note is too large for protected viewing.");
 
   if (mimeType.startsWith("image/")) {
     await prisma.noteViewerSession.updateMany({ where: { id: viewer.id, status: "ACTIVE" }, data: { pageCount: 1, lastSeenAt: new Date() } });

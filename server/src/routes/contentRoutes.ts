@@ -2,13 +2,28 @@ import express, { Router } from "express";
 import { z } from "zod";
 import { asyncRoute } from "../middleware/async-route.js";
 import * as content from "../services/contentService.js";
+import * as attachedLinks from "../services/contentAttachedLinkService.js";
 
 const uuid = z.string().uuid();
 const entityType = z.enum(["EXAM", "STAGE", "SUBJECT", "CHAPTER", "COURSE", "CATEGORY", "LESSON", "STUDY_MATERIAL", "GOVERNMENT_DOCUMENT", "QUESTION_PAPER", "REFERENCE_MATERIAL", "PREMIUM_NOTE", "MEDIA", "OTHER"]);
+const isHttpUrl = (value: string) => {
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+};
+const attachedLinkBody = z.object({
+  url: z.string().trim().min(1, "A link is required.").max(2_048).refine(isHttpUrl, "Enter a valid HTTP or HTTPS link."),
+  description: z.string().trim().min(1, "A description is required.").max(2_000),
+}).strict();
 const academyScope = (req: Express.Request) => ({ academyId: req.tenantContext!.academyId!, actorId: req.auth!.userId });
 // The global Super Admin content workspace owns only platform resources.
 // Academy resources are reachable exclusively through the academy-scoped router.
-const adminScope = (req: Express.Request) => ({ academyId: req.tenantContext?.academyId ?? undefined, actorId: req.auth!.userId });
+// `null` is an intentional platform-only scope. Passing `undefined` would make
+// course ownership unconstrained and would let the global content workspace
+// mutate an Academy course when supplied with its UUID.
+const adminScope = (req: Express.Request) => ({ academyId: null, actorId: req.auth!.userId });
 
 export function createContentRouter(kind: "admin" | "academy") {
   const router = Router();
@@ -32,14 +47,28 @@ export function createContentRouter(kind: "admin" | "academy") {
   }));
   router.post("/uploads/:uploadId/finalize", asyncRoute(async (req, res) => {
     const academicFinalizeSchema = z.object({ parentId: uuid.nullish(), description: z.string().max(2_000).optional(), entityType: entityType.exclude(["PREMIUM_NOTE"]).optional(), displayOrder: z.number().int().min(0).max(1_000_000).optional() }).strict();
-    const adminFinalizeSchema = academicFinalizeSchema.extend({ entityType: entityType.optional(), accessType: z.enum(["FREE", "PAID"]).optional(), price: z.number().positive().max(9_999_999).optional(), validityMode: z.enum(["PERMANENT", "EXAM_DATE_OFFSET"]).optional(), validityOffsetDays: z.number().int().min(0).max(3650).nullable().optional() }).strict();
-    const body = (kind === "academy" ? academicFinalizeSchema : adminFinalizeSchema).parse(req.body);
+    const commercialFinalizeSchema = academicFinalizeSchema.extend({ entityType: entityType.optional(), accessType: z.enum(["FREE", "PAID"]).optional(), price: z.number().positive().max(9_999_999).optional(), accessDurationValue: z.number().int().positive().max(3650).nullable().optional(), accessDurationUnit: z.enum(["DAYS", "WEEKS", "MONTHS"]).nullable().optional() }).strict();
+    const body = kind === "academy"
+      ? { ...academicFinalizeSchema.parse(req.body), accessType: "FREE" as const, price: null, accessDurationValue: null, accessDurationUnit: null }
+      : commercialFinalizeSchema.parse(req.body);
     res.status(201).json(await content.finalizeUpload(scope(req), uuid.parse(req.params.uploadId), body));
   }));
   router.get("/locations", asyncRoute(async (req, res) => { const query = z.object({ courseId: uuid, folderId: uuid.nullish() }).parse(req.query); res.json(await content.getLocation(scope(req), query.courseId, query.folderId)); }));
   router.patch("/locations", asyncRoute(async (req, res) => { const body = z.object({ courseId: uuid, folderId: uuid.nullish(), pageHeading: z.string().trim().min(1).max(160) }).strict().parse(req.body); res.json(await content.updateLocation(scope(req), body.courseId, body.folderId ?? null, body.pageHeading)); }));
   // Static routes must precede /:contentId or Express will treat "display-orders" as an item id.
   router.patch("/display-orders", asyncRoute(async (req, res) => { const body = z.object({ courseId: uuid, folderId: uuid.nullish(), itemIds: z.array(uuid) }).strict().parse(req.body); await content.updateDisplayOrders(scope(req), body.courseId, body.folderId ?? null, body.itemIds); res.json({ success: true }); }));
+  router.get("/:contentId/links", asyncRoute(async (req, res) => {
+    res.json(await attachedLinks.listContentAttachedLinks(scope(req), uuid.parse(req.params.contentId)));
+  }));
+  router.post("/:contentId/links", asyncRoute(async (req, res) => {
+    res.status(201).json(await attachedLinks.createContentAttachedLink(scope(req), uuid.parse(req.params.contentId), attachedLinkBody.parse(req.body)));
+  }));
+  router.patch("/:contentId/links/:linkId", asyncRoute(async (req, res) => {
+    res.json(await attachedLinks.updateContentAttachedLink(scope(req), uuid.parse(req.params.contentId), uuid.parse(req.params.linkId), attachedLinkBody.parse(req.body)));
+  }));
+  router.delete("/:contentId/links/:linkId", asyncRoute(async (req, res) => {
+    res.json(await attachedLinks.deleteContentAttachedLink(scope(req), uuid.parse(req.params.contentId), uuid.parse(req.params.linkId)));
+  }));
   router.get("/:contentId", asyncRoute(async (req, res) => { res.json(await content.getContent(scope(req), uuid.parse(req.params.contentId))); }));
   if (kind === "admin") {
     router.post("/:contentId/sample-images/upload-intent", asyncRoute(async (req, res) => { const body = z.object({ fileName: z.string().min(1).max(180), mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"]), sizeBytes: z.number().int().positive().max(10 * 1024 * 1024), checksumSha256: z.string().regex(/^[a-f0-9]{64}$/i) }).strict().parse(req.body); res.status(201).json(await content.createSampleImageUpload(scope(req), uuid.parse(req.params.contentId), body)); }));
@@ -54,8 +83,10 @@ export function createContentRouter(kind: "admin" | "academy") {
   router.get("/:contentId/preview", asyncRoute(async (req, res) => { res.json(await content.getContentAccessUrl(scope(req), uuid.parse(req.params.contentId), "preview")); }));
   router.patch("/:contentId", asyncRoute(async (req, res) => {
     const baseUpdate = z.object({ name: z.string().min(1).max(180).optional(), description: z.string().max(2_000).optional(), entityType: entityType.exclude(["PREMIUM_NOTE"]).optional(), status: z.enum(["PUBLISHED", "ARCHIVED"]).optional(), displayOrder: z.number().int().min(0).max(1_000_000).optional() });
-    const adminUpdate = baseUpdate.extend({ entityType: entityType.optional(), accessType: z.enum(["FREE", "PAID"]).optional(), price: z.number().positive().max(9_999_999).nullable().optional(), validityMode: z.enum(["PERMANENT", "EXAM_DATE_OFFSET"]).optional(), validityOffsetDays: z.number().int().min(0).max(3650).nullable().optional(), applyToChildren: z.boolean().optional(), storeSections: z.array(z.object({ id: z.string().optional(), heading: z.string().max(200), content: z.string().max(2_000), displayOrder: z.number().int().optional() })).optional() });
-    const body = (kind === "academy" ? baseUpdate : adminUpdate).strict().refine((value) => Object.keys(value).length > 0).parse(req.body);
+    const commercialUpdate = baseUpdate.extend({ entityType: entityType.optional(), accessType: z.enum(["FREE", "PAID"]).optional(), price: z.number().positive().max(9_999_999).nullable().optional(), accessDurationValue: z.number().int().positive().max(3650).nullable().optional(), accessDurationUnit: z.enum(["DAYS", "WEEKS", "MONTHS"]).nullable().optional(), applyToChildren: z.boolean().optional(), storeSections: z.array(z.object({ id: z.string().optional(), heading: z.string().max(200), content: z.string().max(2_000), displayOrder: z.number().int().optional() })).optional() });
+    const body = kind === "academy"
+      ? baseUpdate.strict().refine((value) => Object.keys(value).length > 0).parse(req.body)
+      : commercialUpdate.strict().refine((value) => Object.keys(value).length > 0).parse(req.body);
     res.json(await content.updateContent(scope(req), uuid.parse(req.params.contentId), body));
   }));
   router.post("/:contentId/move", asyncRoute(async (req, res) => { const body = z.object({ parentId: uuid.nullable() }).strict().parse(req.body); res.json(await content.moveContent(scope(req), uuid.parse(req.params.contentId), body.parentId)); }));

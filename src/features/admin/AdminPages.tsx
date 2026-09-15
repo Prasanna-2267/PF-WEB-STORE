@@ -1,3 +1,5 @@
+import { AppSelect } from '@/components/ui/AppSelect';
+import { AdminDateTimePicker } from './AdminDateTimePicker';
 import {
   type FormEvent,
   type ReactNode,
@@ -285,7 +287,20 @@ const MetricCard = ({ label, value, summary, icon, helper, badgeLabel = 'Live', 
   );
 };
 
-const REVENUE_COLORS = ['#315bce', '#4f7fe8', '#70a0f1', '#8ab7f5', '#6680d9', '#9baff2'];
+const REVENUE_COLORS = [
+  '#2563eb', // Royal Blue
+  '#059669', // Emerald Green
+  '#d97706', // Amber Gold
+  '#0284c7', // Sky Blue
+  '#0d9488', // Deep Teal
+  '#ea580c', // Bright Orange
+  '#0891b2', // Ocean Cyan
+  '#16a34a', // Leaf Green
+  '#475569', // Slate
+  '#1e40af', // Deep Navy
+];
+
+const DONUT_ITEMS_PER_PAGE = 5;
 
 interface RevenueSegment {
   id: string;
@@ -297,12 +312,35 @@ interface RevenueSegment {
 
 const RevenueDonut = ({ segments, scopeLabel }: { segments: RevenueSegment[]; scopeLabel: string }) => {
   const reducedMotion = useReducedMotion();
-  const totalRevenue = segments.reduce((sum, segment) => sum + segment.revenueMinor, 0);
-  const totalPurchases = segments.reduce((sum, segment) => sum + segment.purchases, 0);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+    setHoveredId(null);
+  }, [scopeLabel, segments.length]);
+
+  const totalRevenue = useMemo(() => segments.reduce((sum, s) => sum + s.revenueMinor, 0), [segments]);
+  const totalPurchases = useMemo(() => segments.reduce((sum, s) => sum + s.purchases, 0), [segments]);
   const usePurchases = totalRevenue === 0;
   const chartTotal = usePurchases ? totalPurchases : totalRevenue;
+
   const radius = 42;
   const circumference = 2 * Math.PI * radius;
+
+  const totalPages = Math.max(1, Math.ceil(segments.length / DONUT_ITEMS_PER_PAGE));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safePage - 1) * DONUT_ITEMS_PER_PAGE;
+  const visibleSegments = useMemo(
+    () => segments.slice(startIndex, startIndex + DONUT_ITEMS_PER_PAGE),
+    [segments, startIndex]
+  );
+
+  const hoveredSegment = useMemo(
+    () => (hoveredId ? segments.find((s) => s.id === hoveredId) ?? null : null),
+    [hoveredId, segments]
+  );
+
   let consumed = 0;
 
   return (
@@ -310,48 +348,135 @@ const RevenueDonut = ({ segments, scopeLabel }: { segments: RevenueSegment[]; sc
       <figure className="pf-admin-donut" aria-label={`Revenue distribution for ${scopeLabel}`}>
         <svg viewBox="0 0 120 120" role="img">
           <circle className="pf-admin-donut__track" cx="60" cy="60" r={radius} />
-          {chartTotal > 0 ? segments.map((segment) => {
-            const value = usePurchases ? segment.purchases : segment.revenueMinor;
-            const length = (value / chartTotal) * circumference;
-            const offset = -consumed;
-            consumed += length;
-            return value > 0 ? (
-              <motion.circle
-                key={segment.id}
-                className="pf-admin-donut__segment"
-                cx="60"
-                cy="60"
-                r={radius}
-                stroke={segment.color}
-                strokeDasharray={`${length} ${circumference - length}`}
-                strokeDashoffset={offset}
-                initial={reducedMotion ? false : { opacity: 0, scale: 0.94 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.38, ease: ADMIN_EASE }}
-              />
-            ) : null;
-          }) : null}
+          {chartTotal > 0
+            ? segments.map((segment) => {
+                const value = usePurchases ? segment.purchases : segment.revenueMinor;
+                const length = (value / chartTotal) * circumference;
+                const offset = -consumed;
+                consumed += length;
+                if (value <= 0) return null;
+                const isHovered = hoveredId === segment.id;
+                return (
+                  <motion.circle
+                    key={segment.id}
+                    className={`pf-admin-donut__segment${isHovered ? ' is-hovered' : ''}`}
+                    cx="60"
+                    cy="60"
+                    r={radius}
+                    stroke={segment.color}
+                    strokeDasharray={`${length} ${circumference - length}`}
+                    strokeDashoffset={offset}
+                    strokeWidth={isHovered ? 17 : 14}
+                    style={{
+                      cursor: 'pointer',
+                      transition: 'stroke-width 0.2s ease, opacity 0.2s ease',
+                      opacity: hoveredId && !isHovered ? 0.45 : 1,
+                    }}
+                    onMouseEnter={() => setHoveredId(segment.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                    initial={reducedMotion ? false : { opacity: 0, scale: 0.94 }}
+                    animate={{ opacity: hoveredId && !isHovered ? 0.45 : 1, scale: 1 }}
+                    transition={{ duration: 0.38, ease: ADMIN_EASE }}
+                  />
+                );
+              })
+            : null}
         </svg>
         <figcaption>
-          <span>{scopeLabel}</span>
-          <strong>{formatCurrency(totalRevenue)}</strong>
-          <small>{totalPurchases} purchase{totalPurchases === 1 ? '' : 's'}</small>
+          {hoveredSegment ? (
+            <>
+              <span style={{ color: hoveredSegment.color, fontWeight: 700 }} title={hoveredSegment.label}>
+                {hoveredSegment.label}
+              </span>
+              <strong>{formatCurrency(hoveredSegment.revenueMinor)}</strong>
+              <small>
+                {hoveredSegment.purchases} sold (
+                {chartTotal ? Math.round(((usePurchases ? hoveredSegment.purchases : hoveredSegment.revenueMinor) / chartTotal) * 100) : 0}
+                %)
+              </small>
+            </>
+          ) : (
+            <>
+              <span>{scopeLabel}</span>
+              <strong>{formatCurrency(totalRevenue)}</strong>
+              <small>
+                {totalPurchases} purchase{totalPurchases === 1 ? '' : 's'}
+              </small>
+            </>
+          )}
         </figcaption>
       </figure>
 
       <div className="pf-admin-donut-legend">
-        {segments.length ? segments.map((segment) => {
-          const denominator = totalRevenue || totalPurchases;
-          const numerator = totalRevenue ? segment.revenueMinor : segment.purchases;
-          const percentage = denominator ? Math.round((numerator / denominator) * 100) : 0;
-          return (
-            <div key={segment.id} className="pf-admin-donut-legend__item">
-              <span className="pf-admin-donut-legend__swatch" style={{ backgroundColor: segment.color }} aria-hidden="true" />
-              <div><strong title={segment.label}>{segment.label}</strong><small>{segment.purchases} sold</small></div>
-              <div><strong>{formatCurrency(segment.revenueMinor)}</strong><small>{percentage}%</small></div>
+        {segments.length ? (
+          <>
+            <div className="pf-admin-donut-legend__list">
+              {visibleSegments.map((segment) => {
+                const denominator = totalRevenue || totalPurchases;
+                const numerator = totalRevenue ? segment.revenueMinor : segment.purchases;
+                const percentage = denominator ? Math.round((numerator / denominator) * 100) : 0;
+                const isHovered = hoveredId === segment.id;
+                return (
+                  <div
+                    key={segment.id}
+                    className={`pf-admin-donut-legend__item${isHovered ? ' is-hovered' : ''}`}
+                    style={{
+                      backgroundColor: isHovered ? 'rgba(49, 91, 206, 0.08)' : undefined,
+                      borderRadius: '8px',
+                    }}
+                    onMouseEnter={() => setHoveredId(segment.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                  >
+                    <span className="pf-admin-donut-legend__swatch" style={{ backgroundColor: segment.color }} aria-hidden="true" />
+                    <div>
+                      <strong title={segment.label}>{segment.label}</strong>
+                      <small>{segment.purchases} sold</small>
+                    </div>
+                    <div>
+                      <strong>{formatCurrency(segment.revenueMinor)}</strong>
+                      <small>{percentage}%</small>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        }) : <p className="pf-admin-donut-legend__empty">No completed purchases in this course yet.</p>}
+
+            {totalPages > 1 ? (
+              <div className="pf-admin-donut-pagination">
+                <span>
+                  Showing <strong>{startIndex + 1}–{Math.min(startIndex + DONUT_ITEMS_PER_PAGE, segments.length)}</strong> of <strong>{segments.length}</strong>
+                </span>
+                <div className="pf-admin-donut-pagination__actions">
+                  <button
+                    className="pf-admin-icon-btn"
+                    type="button"
+                    disabled={safePage <= 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    title="Previous page"
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <small style={{ fontWeight: 600, padding: '0 4px' }}>
+                    {safePage} / {totalPages}
+                  </small>
+                  <button
+                    className="pf-admin-icon-btn"
+                    type="button"
+                    disabled={safePage >= totalPages}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    title="Next page"
+                    aria-label="Next page"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <p className="pf-admin-donut-legend__empty">No completed purchases in this course yet.</p>
+        )}
       </div>
     </div>
   );
@@ -496,7 +621,7 @@ const LegacyAdminOverviewPage = () => {
           <label className="pf-admin-icon-button" title="Filter overview by course" style={{ position: 'relative', overflow: 'hidden', cursor: 'pointer' }}>
             <SlidersHorizontal size={18} aria-hidden="true" style={{ margin: 'auto' }} />
             <span className="pf-admin-sr-only">Filter overview by course</span>
-            <select 
+            <AppSelect
               value={selectedCourseId} 
               onChange={(event) => setSelectedCourseId(event.target.value)} 
               aria-label="Filter overview by course"
@@ -504,7 +629,7 @@ const LegacyAdminOverviewPage = () => {
             >
               <option value="ALL">All courses</option>
               {activeCourses.map((course) => <option value={course.id} key={course.id}>{course.name}</option>)}
-            </select>
+            </AppSelect>
           </label>
         )}
       />
@@ -633,18 +758,43 @@ export const AdminOverviewPage = () => {
     accessGranted: total.accessGranted + course.accessGranted,
   }), { revenueMinor: 0, students: 0, paidOrders: 0, failedOrders: 0, refundedOrders: 0, accessGranted: 0 });
 
-  const revenueSegments: RevenueSegment[] = data.courseMetrics
-    .map((course, index) => {
-      const match = coursesList.find((c) => c.id === course.courseId);
-      return {
-        id: course.courseId ?? `course-${index}`,
-        label: match ? match.name : `Course ${index + 1}`,
-        revenueMinor: course.revenueMinor,
-        purchases: course.paidOrders,
+  const revenueSegments: RevenueSegment[] = (() => {
+    if (selectedCourseId !== 'ALL' && selectedCourse) {
+      const courseMetric = data.courseMetrics.find((c) => c.courseId === selectedCourseId);
+      if (courseMetric && courseMetric.resources && courseMetric.resources.length > 0) {
+        return courseMetric.resources
+          .map((res, index) => ({
+            id: res.productId || `res-${index}`,
+            label: res.title,
+            revenueMinor: res.revenueMinor,
+            purchases: res.purchases,
+            color: '',
+          }))
+          .sort((a, b) => b.revenueMinor - a.revenueMinor || b.purchases - a.purchases)
+          .map((segment, index) => ({
+            ...segment,
+            color: REVENUE_COLORS[index % REVENUE_COLORS.length],
+          }));
+      }
+    }
+
+    return data.courseMetrics
+      .map((course, index) => {
+        const match = coursesList.find((c) => c.id === course.courseId);
+        return {
+          id: course.courseId ?? `course-${index}`,
+          label: match ? match.name : `Course ${index + 1}`,
+          revenueMinor: course.revenueMinor,
+          purchases: course.paidOrders,
+          color: '',
+        };
+      })
+      .sort((a, b) => b.revenueMinor - a.revenueMinor || b.purchases - a.purchases)
+      .map((segment, index) => ({
+        ...segment,
         color: REVENUE_COLORS[index % REVENUE_COLORS.length],
-      };
-    })
-    .sort((a, b) => b.revenueMinor - a.revenueMinor || b.purchases - a.purchases);
+      }));
+  })();
 
   const displayTotalRevenue = selectedCourseId === 'ALL' ? data.metrics.totalRevenueMinor : scopedMetrics.revenueMinor;
   const displayStudents = selectedCourseId === 'ALL' ? data.users : scopedMetrics.students;
@@ -794,21 +944,21 @@ export const AdminStudentsPage = () => {
           </div>
           <label className="pf-admin-field">
             <span>Role</span>
-            <select className="pf-admin-select" value={role} onChange={(event) => setRole(event.target.value as StudentRole | 'ALL')}>
+            <AppSelect className="pf-admin-select" value={role} onChange={(event) => setRole(event.target.value as StudentRole | 'ALL')}>
               <option value="ALL">All roles</option><option value="STUDENT">Students</option><option value="ADMIN">Admins</option><option value="SUPER_ADMIN">Super admins</option>
-            </select>
+            </AppSelect>
           </label>
           <label className="pf-admin-field">
             <span>Status</span>
-            <select className="pf-admin-select" value={studentStatus} onChange={(event) => setStudentStatus(event.target.value as StudentStatus | 'ALL')}>
+            <AppSelect className="pf-admin-select" value={studentStatus} onChange={(event) => setStudentStatus(event.target.value as StudentStatus | 'ALL')}>
               <option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="DISABLED">Disabled</option>
-            </select>
+            </AppSelect>
           </label>
           <label className="pf-admin-field">
             <span>Sort</span>
-            <select className="pf-admin-select" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}>
+            <AppSelect className="pf-admin-select" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)}>
               <option value="joined-desc">Newest first</option><option value="joined-asc">Oldest first</option><option value="name-asc">Name A–Z</option><option value="spent-desc">Highest spend</option>
-            </select>
+            </AppSelect>
           </label>
         </div>
 
@@ -1071,11 +1221,11 @@ export const AdminStudentDetailsPage = () => {
         footer={<><button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={closeDialog} disabled={busy}>Cancel</button><button className="pf-admin-button" type="submit" form="pf-admin-grant-form" disabled={busy}>{busy ? 'Granting…' : 'Grant access'}</button></>}
       >
         <form id="pf-admin-grant-form" className="pf-admin-form-grid" onSubmit={submitGrant}>
-          <label className="pf-admin-field"><span>Resource type</span><select className="pf-admin-select" value={grant.resourceType} onChange={(event) => setGrant((value) => ({ ...value, resourceType: event.target.value as LearningResourceType }))}><option value="PREMIUM_NOTES">Premium notes</option><option value="LESSON">Lesson</option><option value="PACKAGE">Package</option><option value="COURSE">Course</option><option value="SUBJECT">Subject</option><option value="OTHER">Other</option></select></label>
+          <label className="pf-admin-field"><span>Resource type</span><AppSelect className="pf-admin-select" value={grant.resourceType} onChange={(event) => setGrant((value) => ({ ...value, resourceType: event.target.value as LearningResourceType }))}><option value="PREMIUM_NOTES">Premium notes</option><option value="LESSON">Lesson</option><option value="PACKAGE">Package</option><option value="COURSE">Course</option><option value="SUBJECT">Subject</option><option value="OTHER">Other</option></AppSelect></label>
           <label className="pf-admin-field"><span>Resource ID</span><input className="pf-admin-input" required value={grant.resourceId} placeholder="e.g. pf-ca-int-aa-01" onChange={(event) => setGrant((value) => ({ ...value, resourceId: event.target.value }))} /></label>
           <label className="pf-admin-field pf-admin-field--wide"><span>Resource title</span><input className="pf-admin-input" required value={grant.resourceTitle} placeholder="Advanced Accounting" onChange={(event) => setGrant((value) => ({ ...value, resourceTitle: event.target.value }))} /></label>
-          <label className="pf-admin-field"><span>Access</span><select className="pf-admin-select" value={grant.accessType} onChange={(event) => setGrant((value) => ({ ...value, accessType: event.target.value as AccessGrantInput['accessType'] }))}><option value="PERMANENT">Permanent</option><option value="TIME_LIMITED">Time limited</option></select></label>
-          {grant.accessType === 'TIME_LIMITED' ? <label className="pf-admin-field"><span>Expires</span><input className="pf-admin-input" required type="datetime-local" value={grant.expiresAt ?? ''} onChange={(event) => setGrant((value) => ({ ...value, expiresAt: event.target.value }))} /></label> : null}
+          <label className="pf-admin-field"><span>Access</span><AppSelect className="pf-admin-select" value={grant.accessType} onChange={(event) => setGrant((value) => ({ ...value, accessType: event.target.value as AccessGrantInput['accessType'] }))}><option value="PERMANENT">Permanent</option><option value="TIME_LIMITED">Time limited</option></AppSelect></label>
+          {grant.accessType === 'TIME_LIMITED' ? <label className="pf-admin-field"><span>Expires</span><AdminDateTimePicker value={grant.expiresAt ?? null} min={new Date().toISOString()} onChange={(expiresAt) => setGrant((value) => ({ ...value, expiresAt }))} /></label> : null}
           <label className="pf-admin-field pf-admin-field--wide"><span>Reason</span><textarea className="pf-admin-textarea" required value={grant.reason} placeholder="Explain why this access is being granted" onChange={(event) => setGrant((value) => ({ ...value, reason: event.target.value }))} /></label>
         </form>
       </AdminDialog>
@@ -1089,7 +1239,7 @@ export const AdminStudentDetailsPage = () => {
         footer={<><button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={closeDialog} disabled={busy}>Cancel</button><button className="pf-admin-button" type="submit" form="pf-admin-role-form" disabled={busy || role === student.role}>{busy ? 'Saving…' : 'Save role'}</button></>}
       >
         <form id="pf-admin-role-form" className="pf-admin-form-stack" onSubmit={submitRole}>
-          <label className="pf-admin-field"><span>Role</span><select className="pf-admin-select" value={role} onChange={(event) => setRole(event.target.value as StudentRole)}><option value="STUDENT">Student</option><option value="ADMIN">Admin</option><option value="SUPER_ADMIN">Super admin</option></select></label>
+          <label className="pf-admin-field"><span>Role</span><AppSelect className="pf-admin-select" value={role} onChange={(event) => setRole(event.target.value as StudentRole)}><option value="STUDENT">Student</option><option value="ADMIN">Admin</option><option value="SUPER_ADMIN">Super admin</option></AppSelect></label>
           <label className="pf-admin-field"><span>Reason</span><textarea className="pf-admin-textarea" value={reason} placeholder="Reason for this change" onChange={(event) => setReason(event.target.value)} /></label>
         </form>
       </AdminDialog>

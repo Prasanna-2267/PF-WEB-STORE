@@ -1,7 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { prisma } from "../db/prisma.js";
 import { badRequest, conflict, notFound } from "../errors/api-error.js";
-import { getPaymentProvider } from "../integrations/provider-registry.js";
 import { changeUserRole, changeUserStatus } from "../auth/user-governance.js";
+import { getStudentConceptInsights } from "./studentPerformanceService.js";
+import { enqueueUserLifecycleEmail } from "./userLifecycleEmailService.js";
+import { createLearnerNotification } from "./learnerNotificationService.js";
+import { enqueueJob } from "./backgroundJobService.js";
 
 // A user becomes academy-owned through AcademyMembership.  The global Students
 // workspace is deliberately limited to direct Parallax Flow student accounts.
@@ -83,6 +87,15 @@ export async function getAdminOverview(courseId?: string) {
             id: true,
             totalAmount: true,
             status: true,
+            items: {
+              select: {
+                titleSnapshot: true,
+                totalPrice: true,
+                unitPrice: true,
+                contentItemId: true,
+                packageId: true,
+              },
+            },
           },
         },
       },
@@ -91,12 +104,39 @@ export async function getAdminOverview(courseId?: string) {
 
   const courseMetrics = courseRows.map((course: {
     id: string;
-    orders: Array<{ id: string; totalAmount: unknown; status: string }>;
+    orders: Array<{
+      id: string;
+      totalAmount: unknown;
+      status: string;
+      items?: Array<{ titleSnapshot?: string; totalPrice?: unknown; unitPrice?: unknown; contentItemId?: string | null; packageId?: string | null }>;
+    }>;
   }) => {
     const paidOrds = course.orders.filter((o) => o.status === "PAID");
     const failedOrds = course.orders.filter((o) => o.status === "FAILED");
     const refundedOrds = course.orders.filter((o) => o.status === "REFUNDED");
     const revenueMinor = paidOrds.reduce((sum: number, o: { totalAmount: unknown }) => sum + Number(o.totalAmount ?? 0), 0);
+
+    const resourceMap = new Map<string, { productId: string; title: string; revenueMinor: number; purchases: number }>();
+    for (const ord of paidOrds) {
+      if (ord.items && ord.items.length > 0) {
+        for (const item of ord.items) {
+          const title = item.titleSnapshot?.trim() || "Learning Resource";
+          const key = title;
+          const itemRevenue = Number(item.totalPrice ?? item.unitPrice ?? 0);
+          const existing = resourceMap.get(key) ?? {
+            productId: item.contentItemId ?? item.packageId ?? key,
+            title,
+            revenueMinor: 0,
+            purchases: 0,
+          };
+          existing.revenueMinor += itemRevenue;
+          existing.purchases += 1;
+          resourceMap.set(key, existing);
+        }
+      }
+    }
+    const resources = Array.from(resourceMap.values()).sort((a, b) => b.revenueMinor - a.revenueMinor || b.purchases - a.purchases);
+
     return {
       courseId: course.id,
       revenueMinor,
@@ -105,7 +145,7 @@ export async function getAdminOverview(courseId?: string) {
       failedOrders: failedOrds.length,
       refundedOrders: refundedOrds.length,
       accessGranted: paidOrds.length,
-      resources: [] as Array<{ productId: string; title: string; revenueMinor: number; purchases: number }>,
+      resources,
     };
   });
 
@@ -239,10 +279,14 @@ export async function getAdminUser(userId: string) {
     id: true, email: true, fullName: true, phone: true, status: true, lastLoginAt: true, createdAt: true, updatedAt: true,
     role: { select: { key: true, name: true, rolePermissions: { select: { permission: { select: { key: true } } } } } },
     sessions: { orderBy: { lastSeenAt: "desc" }, take: 25, select: { id: true, deviceName: true, platform: true, createdAt: true, lastSeenAt: true, expiresAt: true, revokedAt: true } },
+    deviceBinding: { select: { deviceName: true, platform: true, boundAt: true, lastVerifiedAt: true, bindingVersion: true, resetApprovedAt: true, resetConsumedAt: true } },
     academyMemberships: { take: 50, select: { id: true, academyId: true, role: true, status: true, academy: { select: { name: true, slug: true } } } },
   } });
   if (!user) throw notFound("USER_NOT_FOUND", "The user was not found.");
-  return user;
+  return {
+    ...user,
+    performanceInsights: await getStudentConceptInsights(userId, { academyId: null }),
+  };
 }
 
 export async function updateAdminUserRole(actorId: string, userId: string, role: string) {
@@ -348,23 +392,37 @@ export async function getAdminOrder(orderId: string) {
   return { ...order, auditLogs };
 }
 
-export async function refundAdminOrder(actorId: string, orderId: string, input: { amount?: number; reason: string; idempotencyKey: string }) {
-  const existingRefund = await prisma.paymentRefund.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-  if (existingRefund) return existingRefund;
-  const payment = await prisma.payment.findFirst({ where: { orderId, status: "SUCCESS", providerPaymentId: { not: null } }, include: { order: true, refunds: true } });
-  if (!payment?.providerPaymentId || payment.order.status !== "PAID") throw conflict("ORDER_NOT_REFUNDABLE", "The order has no successful refundable payment.");
-  const alreadyRefunded = payment.refunds.reduce((sum, refund) => sum + Number(refund.amount), 0);
-  const remaining = Number(payment.amount) - alreadyRefunded;
-  const amount = input.amount ?? remaining;
-  if (amount <= 0 || amount > remaining) throw badRequest("INVALID_REFUND_AMOUNT", "The refund amount must be positive and cannot exceed the remaining paid amount.");
-  const providerRefund = await getPaymentProvider().refund(payment.providerPaymentId, Math.round(amount * 100), input.idempotencyKey);
+export async function refundAdminOrder(actorId: string, orderId: string, input: { amount: number; reason: string; idempotencyKey: string }) {
   return prisma.$transaction(async (tx) => {
-    const refund = await tx.paymentRefund.create({ data: { paymentId: payment.id, providerRefundId: providerRefund.providerRefundId, amount, reason: input.reason, idempotencyKey: input.idempotencyKey } });
-    const full = alreadyRefunded + amount >= Number(payment.amount);
-    await tx.payment.update({ where: { id: payment.id }, data: full ? { status: "REFUNDED" } : {} });
-    await tx.order.update({ where: { id: orderId }, data: { refundStatus: full ? "FULL" : "PARTIAL", ...(full ? { status: "REFUNDED", refundedAt: new Date(), accessStatus: "REVOKED" } : {}) } });
-    if (full) await tx.entitlement.updateMany({ where: { orderId, status: "ACTIVE" }, data: { status: "REVOKED", revokedAt: new Date(), reason: `Payment refund: ${input.reason}` } });
-    await tx.systemAuditLog.create({ data: { actorId, action: "ORDER_REFUNDED", entityType: "Order", entityId: orderId, description: `${full ? "Fully" : "Partially"} refunded order ${payment.order.orderNumber}.`, metadata: { amount, providerRefundId: providerRefund.providerRefundId, reason: input.reason } } });
+    const existingRefund = await tx.paymentRefund.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+    if (existingRefund) return existingRefund;
+    const payment = await tx.payment.findFirst({ where: { orderId, status: "SUCCESS" }, include: { order: { include: { user: { select: { id: true, email: true, fullName: true } } } }, refunds: true } });
+    if (!payment || payment.order.status !== "PAID") throw conflict("ORDER_NOT_REFUNDABLE", "Only a paid order can be marked as manually refunded.");
+    const alreadyRefunded = payment.refunds.reduce((sum, refund) => sum + Number(refund.amount), 0);
+    const remaining = Number((Number(payment.amount) - alreadyRefunded).toFixed(2));
+    if (remaining <= 0) throw conflict("ORDER_ALREADY_REFUNDED", "This order has already been fully refunded.");
+    const amount = Number(input.amount.toFixed(2));
+    if (amount <= 0 || amount > remaining) throw badRequest("INVALID_REFUND_AMOUNT", `The refund amount must be between 0.01 and ${remaining.toFixed(2)}.`);
+    const fullyRefunded = Number((alreadyRefunded + amount).toFixed(2)) >= Number(payment.amount);
+    const isFullRefundAction = amount >= Number(payment.amount);
+    const now = new Date();
+    const providerRefundId = `MANUAL-${randomUUID()}`;
+    const refund = await tx.paymentRefund.create({ data: { paymentId: payment.id, providerRefundId, amount, reason: input.reason, idempotencyKey: input.idempotencyKey } });
+    if (fullyRefunded) await tx.payment.update({ where: { id: payment.id }, data: { status: "REFUNDED" } });
+    await tx.order.update({ where: { id: orderId }, data: { refundStatus: fullyRefunded ? "FULL" : "PARTIAL", ...(fullyRefunded ? { status: "REFUNDED", refundedAt: now, accessStatus: "REVOKED" } : {}) } });
+    if (fullyRefunded) await tx.entitlement.updateMany({ where: { orderId, status: "ACTIVE" }, data: { status: "REVOKED", revokedAt: now, reason: `Manual refund confirmed: ${input.reason}` } });
+    await tx.systemAuditLog.create({ data: { actorId, action: "ORDER_REFUNDED", entityType: "Order", entityId: orderId, description: `Confirmed ${isFullRefundAction ? "full" : "partial"} manual refund for order ${payment.order.orderNumber}.`, metadata: { amount, refundType: isFullRefundAction ? "FULL" : "PARTIAL", orderRefundStatus: fullyRefunded ? "FULL" : "PARTIAL", remainingAfterRefund: Math.max(0, Number((remaining - amount).toFixed(2))), providerRefundId, reason: input.reason, processing: "MANUAL_EXTERNAL" } } });
+    await enqueueUserLifecycleEmail(tx, {
+      deduplicationKey: `refund:${refund.id}`,
+      recipientEmail: payment.order.user.email,
+      userName: payment.order.user.fullName,
+      event: "REFUND_ISSUED",
+      occurredAt: refund.createdAt.toISOString(),
+      details: { amount: amount.toFixed(2), currency: payment.order.currency, reason: input.reason, orderNumber: payment.order.orderNumber, refundType: isFullRefundAction ? "Full refund" : "Partial refund" },
+    });
+    const sourceKey = `order-refund:${refund.id}`;
+    await createLearnerNotification({ userId: payment.order.user.id, category: "ACCOUNT", title: isFullRefundAction ? "Order refunded" : "Partial refund confirmed", body: `${isFullRefundAction ? "A full refund" : "A partial refund"} of ${payment.order.currency} ${amount.toFixed(2)} for order ${payment.order.orderNumber} has been confirmed.${fullyRefunded && !isFullRefundAction ? " The order is now fully refunded." : ""}`, sourceKey, data: { url: `/receipt/${orderId}`, orderId, status: fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED", refundType: isFullRefundAction ? "FULL" : "PARTIAL", amount, currency: payment.order.currency }, required: true }, tx);
+    await enqueueJob({ kind: "LEARNER_PUSH_DELIVERY", payload: { sourceKey }, deduplicationKey: sourceKey }, tx);
     return refund;
   }, { isolationLevel: "Serializable" });
 }

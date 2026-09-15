@@ -231,7 +231,7 @@ export const AdminDialog: React.FC<AdminDialogProps> = ({
     releaseInteractionRef.current = () => {
       window.cancelAnimationFrame(focusFrame);
       window.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = previousOverflow;
+      document.body.style.overflow = previousOverflow === 'hidden' ? '' : previousOverflow;
       previousFocusRef.current?.focus({ preventScroll: true });
       releaseInteractionRef.current = null;
     };

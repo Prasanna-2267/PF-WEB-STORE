@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -17,12 +18,14 @@ import {
   LockKeyhole,
   LogOut,
   PackageCheck,
+  ReceiptText,
   Search,
   ShieldCheck,
   ShoppingBag,
   SlidersHorizontal,
   Sparkles,
   Trash2,
+  X,
 } from 'lucide-react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '@/app/store/useAuthStore';
@@ -38,20 +41,27 @@ import {
 import {
   courseCategories,
   formatPrice,
-  getProductBySlug,
   getProductsByCourse,
-  storeProducts,
 } from './data/catalog';
 import {
   usePublicCatalog,
   usePublicCatalogPackage,
+  usePublicCatalogQuestionBank,
   usePublicCatalogContent,
   usePublicCatalogCollection,
   usePublicCatalogUserCourses,
   adaptCatalogPackageToProduct,
+  adaptCatalogQuestionBankToProduct,
   adaptCatalogItemToProduct,
 } from './data/publicCatalogApi';
 import { useStoreContextStore } from './data/useStoreContext';
+import {
+  courseIdentityKeys,
+  findCourseByIdentity,
+  normalizeCourseKey,
+  preferredCourseKey,
+  productMatchesCourse,
+} from './utils/courseIdentity';
 import type { CourseCategory, StoreProduct, StoreProductType } from './types/catalog';
 import {
   getProductTypeLabel,
@@ -67,9 +77,75 @@ import {
   completeFakePayment,
   createStoreCheckout,
   useStoreEntitlements,
+  useStoreOrders,
   useStoreReceipt,
   type CheckoutResponse,
+  type StoreReceipt,
 } from './data/checkoutApi';
+
+const readablePaymentMethod = (value: string | null) => value
+  ? value.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
+  : 'Not recorded';
+const receiptResourceLabel = (value: string) => ({
+  PACKAGE: 'Study package',
+  PREMIUM_NOTES: 'Premium note',
+  QUESTION_BANK: 'Question Bank',
+  MONTHLY_REPORT: 'Monthly report',
+}[value] ?? value.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()));
+
+const customerOrderStatus = (status: string, refundStatus?: string) => {
+  if (refundStatus === 'FULL' || status === 'REFUNDED') return 'Refunded';
+  if (refundStatus === 'PARTIAL') return 'Partially Refunded';
+  return status.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const StoreReceiptDetails: React.FC<{ receipt: StoreReceipt; heading?: string }> = ({ receipt, heading = 'Order receipt' }) => {
+  const discount = receipt.totals.discount.amount;
+  const payment = receipt.payments[0];
+  const refunds = receipt.payments.flatMap((entry) => entry.refunds);
+  const refundedTotal = refunds.reduce((sum, refund) => sum + refund.amount.amount, 0);
+  const netPaid = Math.max(0, receipt.totals.total.amount - refundedTotal);
+  const statusLabel = customerOrderStatus(receipt.status, receipt.refundStatus);
+  const statusClass = statusLabel.toLowerCase().replaceAll(' ', '-');
+  return (
+    <section className="pf-store-receipt" aria-label={heading}>
+      <header>
+        <div className="pf-store-receipt__mark"><ReceiptText size={22} /></div>
+        <div><p>Parallax Flow</p><h2>{heading}</h2><span>{receipt.course.name}</span></div>
+        <strong className={`pf-store-receipt__status is-${statusClass}`}>{statusLabel}</strong>
+      </header>
+      <dl className="pf-store-receipt__meta">
+        <div><dt>Billed to</dt><dd>{receipt.customer.fullName}</dd></div>
+        <div><dt>Email</dt><dd>{receipt.customer.email}</dd></div>
+        <div><dt>Order number</dt><dd>{receipt.orderNumber}</dd></div>
+        <div><dt>Receipt number</dt><dd>{receipt.receiptNumber ?? 'Issued after payment'}</dd></div>
+        <div><dt>Order date</dt><dd>{new Date(receipt.createdAt).toLocaleString('en-IN')}</dd></div>
+        <div><dt>Payment</dt><dd>{readablePaymentMethod(receipt.paymentMethod ?? payment?.paymentMethod ?? null)}</dd></div>
+        <div><dt>Transaction reference</dt><dd>{payment?.providerPaymentId ?? (receipt.paidAt ? receipt.receiptNumber : 'Pending')}</dd></div>
+      </dl>
+      <div className="pf-store-receipt__items">
+        <div className="pf-store-receipt__item pf-store-receipt__item--heading"><span>Item</span><span>Qty</span><span>Unit price</span><span>Amount</span></div>
+        {receipt.items.map((item) => (
+          <div className="pf-store-receipt__item" key={item.id}>
+            <span><strong>{item.titleSnapshot}</strong><small>{receiptResourceLabel(item.resourceType)}</small></span>
+            <span>{item.quantity}</span>
+            <span>{formatPrice(item.unitPrice.amount)}</span>
+            <strong>{formatPrice(item.totalPrice.amount)}</strong>
+          </div>
+        ))}
+      </div>
+      <div className="pf-store-receipt__totals">
+        <div><span>Actual amount</span><strong>{formatPrice(receipt.totals.subtotal.amount)}</strong></div>
+        <div className={discount > 0 ? 'is-discount' : ''}><span>Coupon discount{receipt.coupons[0] ? ` (${receipt.coupons[0].code})` : ''}</span><strong>{discount > 0 ? `−${formatPrice(discount)}` : formatPrice(0)}</strong></div>
+        <div className="is-grand-total"><span>{receipt.paidAt ? 'Total paid' : 'Amount payable'}</span><strong>{formatPrice(receipt.totals.total.amount)}</strong></div>
+        {refundedTotal > 0 ? <div className="is-discount"><span>Total refunded</span><strong>−{formatPrice(refundedTotal)}</strong></div> : null}
+        {refundedTotal > 0 ? <div className="is-grand-total"><span>Net amount after refund</span><strong>{formatPrice(netPaid)}</strong></div> : null}
+      </div>
+      {refunds.length ? <div className="pf-store-receipt__refunds"><h3>Refund details</h3>{refunds.map((refund) => <div key={refund.id}><span><strong>{formatPrice(refund.amount.amount)} refunded</strong><small>{refund.reason} · {new Date(refund.createdAt).toLocaleString('en-IN')}</small></span><code>{refund.providerRefundId}</code></div>)}</div> : null}
+      <footer><span>Access status: <strong>{receipt.accessStatus}</strong></span>{receipt.paidAt ? <span>Paid on: <strong>{new Date(receipt.paidAt).toLocaleString('en-IN')}</strong></span> : <span>Payment pending</span>}</footer>
+    </section>
+  );
+};
 
 const collectionLabels = {
   'best-sellers': 'Best Sellers',
@@ -80,19 +156,16 @@ const collectionLabels = {
   subscription: 'Subscriptions',
 } as const;
 
-const noteTypes: StoreProductType[] = ['visual-notes', 'mind-maps', 'revision-notes', 'question-bank', 'formula-sheet', 'mock-test'];
-const featuredHeroProduct = getProductBySlug('advanced-accounting') ?? storeProducts[0];
-
+const noteTypes: StoreProductType[] = ['visual-notes', 'mind-maps', 'revision-notes', 'formula-sheet', 'mock-test', 'monthly-report'];
 const useCompleteStoreCatalog = () => {
   const query = usePublicCatalog({ page: 1, limit: 100 });
   const products = useMemo(() => {
     const live = [
       ...(query.data?.packages ?? []).map(adaptCatalogPackageToProduct),
+      ...(query.data?.questionBanks ?? []).map(adaptCatalogQuestionBankToProduct),
       ...(query.data?.paidItems ?? []).map(adaptCatalogItemToProduct),
     ];
-    const byId = new Map<string, StoreProduct>();
-    [...storeProducts, ...live].forEach((product) => byId.set(product.id, product));
-    return [...byId.values()];
+    return live;
   }, [query.data]);
   return { ...query, products };
 };
@@ -213,28 +286,46 @@ export const StoreHomePage: React.FC = () => {
   const type = searchParams.get('type');
 
   const catalogQuery = usePublicCatalog({ search: query || undefined });
+  const userCoursesQuery = usePublicCatalogUserCourses(Boolean(user?.id));
+  const displayedCourses = useMemo(() => {
+    const courses = catalogQuery.data?.courses || [];
+    if (!user?.id) return courses;
+    const allowed = new Set((userCoursesQuery.data?.courses || []).flatMap(courseIdentityKeys));
+    return courses.filter((course) => courseIdentityKeys(course).some((key) => allowed.has(key)));
+  }, [catalogQuery.data?.courses, user?.id, userCoursesQuery.data?.courses]);
+  const allowedCourseKeys = useMemo(() => new Set(
+    (userCoursesQuery.data?.courses || []).flatMap(courseIdentityKeys),
+  ), [userCoursesQuery.data?.courses]);
   const liveProducts = useMemo(() => {
     const pkgs = (catalogQuery.data?.packages || []).map(adaptCatalogPackageToProduct);
+    const questionBanks = (catalogQuery.data?.questionBanks || []).map(adaptCatalogQuestionBankToProduct);
     const items = (catalogQuery.data?.paidItems || []).map(adaptCatalogItemToProduct);
-    return [...pkgs, ...items];
+    return [...pkgs, ...questionBanks, ...items];
   }, [catalogQuery.data]);
 
   const visibleProducts = useMemo(() => {
-    const pool = liveProducts.length ? liveProducts : storeProducts;
+    const pool = liveProducts;
     const realDbCourses = catalogQuery.data?.courses || [];
-    const matchedCourse = realDbCourses.find((c) => c.slug === selectedCourseSlug || c.id === selectedCourseSlug);
+    const matchedCourse = findCourseByIdentity(realDbCourses, selectedCourseSlug);
+    const normalizedSelectedCourse = normalizeCourseKey(selectedCourseSlug);
 
-    let products = pool.filter(
-      (product) =>
-        product.isActive &&
-        (selectedCourseSlug === 'all' ||
-          product.course === selectedCourseSlug ||
-          product.courseId === selectedCourseSlug ||
-          (matchedCourse && (product.course === matchedCourse.slug || product.courseId === matchedCourse.id)))
-    );
+    let products = pool.filter((product) => {
+      const productCourseKeys = [product.courseId, product.course]
+        .map(normalizeCourseKey)
+        .filter(Boolean);
+      const isAllowedForUser = !user?.id || productCourseKeys.some((key) => allowedCourseKeys.has(key));
+      const isSelectedCourse = selectedCourseSlug === 'all'
+        || (matchedCourse
+          ? productMatchesCourse(product, matchedCourse)
+          : productCourseKeys.includes(normalizedSelectedCourse));
+
+      return product.isActive && isAllowedForUser && isSelectedCourse;
+    });
 
     if (type === 'notes') {
-      products = products.filter((product) => product.productType !== 'bundle' && product.productType !== 'subscription');
+      products = products.filter((product) => product.productType !== 'bundle' && product.productType !== 'subscription' && product.productType !== 'question-bank');
+    } else if (type === 'question-bank') {
+      products = products.filter((product) => product.productType === 'question-bank');
     } else if (type === 'bundle') {
       products = products.filter((product) => product.productType === 'bundle');
     } else if (type === 'subscription') {
@@ -250,7 +341,8 @@ export const StoreHomePage: React.FC = () => {
       );
     }
     return products;
-  }, [liveProducts, query, selectedCourseSlug, type, catalogQuery.data?.courses]);
+  }, [liveProducts, query, selectedCourseSlug, type, catalogQuery.data?.courses, user?.id, allowedCourseKeys]);
+  const featuredHeroProduct = visibleProducts[0];
 
   const location = useLocation();
   const isBrowsing = Boolean(query || type);
@@ -309,7 +401,7 @@ export const StoreHomePage: React.FC = () => {
             <section className="pf-store-section" id="courses">
               <StoreSectionHeading eyebrow="Public catalogue" title="Choose your learning path." copy="Browsing is open. Sign in is only required when you decide to purchase." />
               <div className="pf-store-course-grid">
-                {(catalogQuery.data?.courses || []).map((course, index) => {
+                {displayedCourses.map((course, index) => {
                   const packageCount = course._count?.packages ?? 0;
                   const subjectCount = course._count?.subjects ?? 0;
                   const countLabel = `${packageCount} package${packageCount === 1 ? '' : 's'} · ${subjectCount} subject${subjectCount === 1 ? '' : 's'}`;
@@ -331,7 +423,7 @@ export const StoreHomePage: React.FC = () => {
         )}
 
         <section className="pf-store-section" id="featured" style={isBrowsing ? { paddingTop: 40 } : undefined}>
-          <StoreSectionHeading eyebrow={selectedCourseSlug !== 'all' ? ((catalogQuery.data?.courses || []).find(c => c.slug === selectedCourseSlug || c.id === selectedCourseSlug)?.name || 'Course Scoped') : 'Curated collections'} title={isBrowsing ? (query ? `Results for “${query}”` : type === 'bundle' ? 'Learning bundles.' : type === 'subscription' ? 'Subscriptions.' : 'Premium notes.') : 'A better shelf for better preparation.'} copy={isBrowsing ? `${visibleProducts.length} resource${visibleProducts.length === 1 ? '' : 's'} available.` : 'Organised around how students actually prepare—not around a retail catalogue.'} />
+          <StoreSectionHeading eyebrow={selectedCourseSlug !== 'all' ? ((catalogQuery.data?.courses || []).find(c => c.slug === selectedCourseSlug || c.id === selectedCourseSlug)?.name || 'Course Scoped') : 'Curated collections'} title={isBrowsing ? (query ? `Results for “${query}”` : type === 'question-bank' ? 'Question Banks.' : type === 'bundle' ? 'Learning bundles.' : type === 'subscription' ? 'Subscriptions.' : 'Premium notes.') : 'A better shelf for better preparation.'} copy={isBrowsing ? `${visibleProducts.length} resource${visibleProducts.length === 1 ? '' : 's'} available.` : 'Organised around how students actually prepare—not around a retail catalogue.'} />
           {isBrowsing ? (
             <StoreProductGrid products={[...visibleProducts]} compact />
           ) : (
@@ -366,8 +458,8 @@ interface CategoryFiltersProps {
 
 const CategoryFilters: React.FC<CategoryFiltersProps> = ({ subjects, subject, setSubject, productType, setProductType }) => (
   <div className="pf-store-filters__fields">
-    <label>Subject<select value={subject} onChange={(event) => setSubject(event.target.value)}><option value="">All subjects</option>{subjects.map((item) => <option value={item} key={item}>{item}</option>)}</select></label>
-    <label>Resource type<select value={productType} onChange={(event) => setProductType(event.target.value)}><option value="">All formats</option>{noteTypes.map((item) => <option value={item} key={item}>{getProductTypeLabel(item)}</option>)}<option value="bundle">Learning Bundle</option><option value="subscription">Subscription</option></select></label>
+    <label>Subject<AppSelect value={subject} onChange={(event) => setSubject(event.target.value)}><option value="">All subjects</option>{subjects.map((item) => <option value={item} key={item}>{item}</option>)}</AppSelect></label>
+    <label>Resource type<AppSelect value={productType} onChange={(event) => setProductType(event.target.value)}><option value="">All formats</option>{noteTypes.map((item) => <option value={item} key={item}>{getProductTypeLabel(item)}</option>)}<option value="bundle">Learning Bundle</option><option value="subscription">Subscription</option></AppSelect></label>
     <div className="pf-store-filter-note"><ShieldCheck size={17} /><p><strong>Course focused</strong><span>Every resource shown belongs to this learning path.</span></p></div>
   </div>
 );
@@ -421,19 +513,18 @@ export const StoreCategoryPage: React.FC = () => {
 
   const liveProducts = useMemo(() => {
     const pkgs = (catalogQuery.data?.packages || []).map(adaptCatalogPackageToProduct);
+    const questionBanks = (catalogQuery.data?.questionBanks || []).map(adaptCatalogQuestionBankToProduct);
     const items = (catalogQuery.data?.paidItems || []).map(adaptCatalogItemToProduct);
-    return [...pkgs, ...items];
+    return [...pkgs, ...questionBanks, ...items];
   }, [catalogQuery.data]);
 
   const courseProducts = useMemo(() => {
-    const pool = liveProducts.length ? liveProducts : storeProducts;
-    return pool.filter(
+    return liveProducts.filter(
       (product) =>
         product.isActive &&
         product.productType !== 'bundle' &&
         product.productType !== 'subscription' &&
-        (selectedCourseSlug === 'all' ||
-          product.course === requestedCourse.slug ||
+        (product.course === requestedCourse.slug ||
           product.courseId === requestedCourse.id ||
           product.course === requestedCourse.id ||
           product.courseId === requestedCourse.slug)
@@ -464,7 +555,7 @@ export const StoreCategoryPage: React.FC = () => {
         <div className="pf-store-catalog-layout">
           <aside className="pf-store-filters"><p><SlidersHorizontal size={16} /> Refine collection</p><CategoryFilters subjects={subjects} subject={subject} setSubject={setSubject} productType={productType} setProductType={setProductType} /></aside>
           <section className="pf-store-catalog-results">
-            <div className="pf-store-results-bar"><span>{products.length} resources</span><label>Sort by<select value={sort} onChange={(event) => setSort(event.target.value)}><option value="featured">Featured</option><option value="newest">Newest</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option></select></label></div>
+            <div className="pf-store-results-bar"><span>{products.length} resources</span><label>Sort by<AppSelect value={sort} onChange={(event) => setSort(event.target.value)}><option value="featured">Featured</option><option value="newest">Newest</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option></AppSelect></label></div>
             <StoreProductGrid products={products} />
           </section>
         </div>
@@ -473,11 +564,13 @@ export const StoreCategoryPage: React.FC = () => {
   );
 };
 
-const ProductPreview: React.FC<{ product: StoreProduct; previewIndex: number }> = ({ product, previewIndex }) => {
-  const preview = product.previewImages[previewIndex];
+const ProductPreview: React.FC<{ product: StoreProduct; previews: StoreProduct['previewImages']; previewIndex: number }> = ({ product, previews, previewIndex }) => {
+  const preview = previews[previewIndex];
   return (
     <motion.div key={preview?.id || 'cover'} className="pf-store-product-preview" initial={{ opacity: 0, scale: .985 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .42 }}>
-      {preview?.src ? (
+      {preview?.kind === 'cover' ? (
+        <StoreProductCover product={product} size="large" />
+      ) : preview?.src ? (
         <div className="pf-store-sample-preview" style={{ padding: 0, overflow: 'hidden', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <img src={preview.src} alt={preview.alt || product.title} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
         </div>
@@ -490,7 +583,10 @@ const ProductPreview: React.FC<{ product: StoreProduct; previewIndex: number }> 
 
 export const StoreProductPage: React.FC = () => {
   const { productSlug = '' } = useParams();
+  const [productSearchParams] = useSearchParams();
+  const productTypeHint = productSearchParams.get('type');
   const [previewIndex, setPreviewIndex] = useState(0);
+  useEffect(() => setPreviewIndex(0), [productSlug]);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const entitlements = useStoreEntitlements(isAuthenticated);
 
@@ -498,34 +594,33 @@ export const StoreProductPage: React.FC = () => {
   const catalogQuery = usePublicCatalog({ page: 1, limit: 100 });
   const liveProducts = useMemo(() => {
     const pkgs = (catalogQuery.data?.packages || []).map(adaptCatalogPackageToProduct);
+    const questionBanks = (catalogQuery.data?.questionBanks || []).map(adaptCatalogQuestionBankToProduct);
     const items = (catalogQuery.data?.paidItems || []).map(adaptCatalogItemToProduct);
-    return [...pkgs, ...items];
+    return [...pkgs, ...questionBanks, ...items];
   }, [catalogQuery.data]);
 
   // Find the base product from list
   const baseProduct = useMemo(() => {
-    const found = liveProducts.find((p) => p.slug === productSlug || p.id === productSlug);
-    if (found) return found;
-    return getProductBySlug(productSlug);
+    return liveProducts.find((p) => p.slug === productSlug || p.id === productSlug);
   }, [liveProducts, productSlug]);
 
   // Determine if this is a content item or package
-  const isContentItem = baseProduct?.productType !== 'bundle' && baseProduct?.productType !== 'subscription';
-  const isPackage = baseProduct?.productType === 'bundle' || baseProduct?.productType === 'subscription';
+  const isQuestionBank = baseProduct?.productType === 'question-bank' || (!baseProduct && productTypeHint === 'question-bank');
+  const isContentItem = productTypeHint === 'notes' || (Boolean(baseProduct) && baseProduct?.productType !== 'bundle' && baseProduct?.productType !== 'subscription' && !isQuestionBank);
+  const isPackage = productTypeHint === 'package' || baseProduct?.productType === 'bundle' || baseProduct?.productType === 'subscription';
 
   // Fetch full detail with signed image URLs
-  const contentDetailQuery = usePublicCatalogContent(isContentItem ? baseProduct?.id : undefined);
-  const packageDetailQuery = usePublicCatalogPackage(isPackage ? baseProduct?.id : undefined);
+  const contentDetailQuery = usePublicCatalogContent(isContentItem ? (baseProduct?.id ?? productSlug) : undefined);
+  const packageDetailQuery = usePublicCatalogPackage(isPackage ? (baseProduct?.id ?? productSlug) : undefined);
+  const questionBankDetailQuery = usePublicCatalogQuestionBank(isQuestionBank ? (baseProduct?.id ?? productSlug) : undefined);
 
   // Build the enriched product with signed preview images from detail API
   const product = useMemo(() => {
-    if (!baseProduct) return null;
-
     if (isContentItem && contentDetailQuery.data) {
       const detail = contentDetailQuery.data;
       return adaptCatalogItemToProduct({
         ...detail,
-        courseId: detail.courseId || baseProduct.courseId || baseProduct.id,
+        courseId: detail.courseId || baseProduct?.courseId || baseProduct?.id || detail.id,
       } as any);
     }
 
@@ -533,8 +628,13 @@ export const StoreProductPage: React.FC = () => {
       return adaptCatalogPackageToProduct(packageDetailQuery.data);
     }
 
+    if (isQuestionBank && questionBankDetailQuery.data) {
+      return adaptCatalogQuestionBankToProduct(questionBankDetailQuery.data);
+    }
+
+    if (!baseProduct) return null;
     return baseProduct;
-  }, [baseProduct, isContentItem, isPackage, contentDetailQuery.data, packageDetailQuery.data]);
+  }, [baseProduct, isContentItem, isPackage, isQuestionBank, contentDetailQuery.data, packageDetailQuery.data, questionBankDetailQuery.data]);
 
   const catalogCourses = catalogQuery.data?.courses || [];
   const course = useMemo(() => {
@@ -546,7 +646,7 @@ export const StoreProductPage: React.FC = () => {
     return { id: '', name: 'Course', shortName: 'Course', slug: 'all' };
   }, [catalogCourses, product]);
 
-  const isLoading = catalogQuery.isLoading || (isContentItem && contentDetailQuery.isLoading) || (isPackage && packageDetailQuery.isLoading);
+  const isLoading = catalogQuery.isLoading || (isContentItem && contentDetailQuery.isLoading) || (isPackage && packageDetailQuery.isLoading) || (isQuestionBank && questionBankDetailQuery.isLoading);
 
   if (!product || !product.isActive) {
     if (isLoading) {
@@ -573,12 +673,17 @@ export const StoreProductPage: React.FC = () => {
   const realChapters = product.chapters?.filter((c) => c?.trim()) || [];
   const realAudience = product.audience?.filter((a) => a?.trim()) || [];
   const realIncluded = product.included?.filter((i) => i?.trim()) || [];
-  const hasPreviewImages = product.previewImages.some((img) => img.src);
   const alreadyOwned = Boolean(entitlements.data?.items.some((item) => item.resourceId === product.id));
 
-  const previewList = hasPreviewImages
-    ? product.previewImages.slice(0, 4)
-    : [{ id: 'cover', kind: 'cover' as const, src: '', alt: product.title }];
+  const availablePreviews = product.previewImages.filter((image) => image.src);
+  const firstPagePreview = availablePreviews.find((image) => image.role === 'PDF_FIRST_PAGE' || image.kind === 'cover');
+  const additionalPreviews = availablePreviews
+    .filter((image) => image.id !== firstPagePreview?.id && image.role !== 'PDF_FIRST_PAGE')
+    .slice(0, 3);
+  const previewList = [
+    firstPagePreview ?? { id: 'cover', kind: 'cover' as const, role: 'PDF_FIRST_PAGE' as const, src: product.coverImage || '', alt: `${product.title} first page` },
+    ...additionalPreviews,
+  ];
 
   return (
     <>
@@ -587,13 +692,13 @@ export const StoreProductPage: React.FC = () => {
         <StoreBreadcrumbs items={[{ label: 'Store', to: ROUTES.STORE }, { label: course.shortName, to: buildStoreCategoryPath(course.slug) }, { label: product.title }]} />
         <div className="pf-store-product-intro">
           <section className="pf-store-product-gallery" aria-label="Product previews">
-            <ProductPreview product={product} previewIndex={previewIndex} />
+            <ProductPreview product={product} previews={previewList} previewIndex={previewIndex} />
             {previewList.length > 1 && (
               <div className="pf-store-product-thumbnails">
                 {previewList.map((preview, index) => (
-                  <button key={preview.id} className={previewIndex === index ? 'is-active' : ''} onClick={() => setPreviewIndex(index)}>
-                    <span>{String(index + 1).padStart(2, '0')}</span>
-                    {index === 0 ? 'Cover' : `Preview ${index}`}
+                  <button key={preview.id} className={previewIndex === index ? 'is-active' : ''} onClick={() => setPreviewIndex(index)} aria-label={index === 0 ? 'Show item cover or first page' : `Show additional image ${index}`}>
+                    {preview.src ? <img src={preview.src} alt="" /> : null}
+                    <span>{index === 0 ? 'Cover / page 1' : `Image ${index}`}</span>
                   </button>
                 ))}
               </div>
@@ -628,23 +733,13 @@ export const StoreProductPage: React.FC = () => {
         {(realSections.length > 0 || realChapters.length > 0 || realIncluded.length > 0 || realAudience.length > 0) && (
           <div className="pf-store-product-story">
 
-            {realSections.length > 0 && (
-              <section>
-                <h3>Highlights</h3>
-                <ul>
-                  {realSections.map((section) => (
-                    <li key={section.id}>
-                      <CheckCircle2 size={17} />
-                      <span>
-                        {section.heading?.trim() ? <strong>{section.heading}</strong> : null}
-                        {section.heading?.trim() && section.content?.trim() ? ' — ' : null}
-                        {section.content?.trim() ? section.content : null}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+            {realSections.map((section, index) => (
+              <section className="pf-store-information-box" key={section.id}>
+                <p className="pf-store-kicker">Information {String(index + 1).padStart(2, '0')}</p>
+                {section.heading?.trim() ? <h3>{section.heading}</h3> : null}
+                {section.content?.trim() ? <p>{section.content}</p> : null}
               </section>
-            )}
+            ))}
 
             {realIncluded.length > 0 && (
               <section>
@@ -710,13 +805,19 @@ export const StoreCartPage: React.FC = () => {
   const products = itemIds.map((id) => catalogById.get(id)).filter((product): product is StoreProduct => Boolean(product));
   const subtotal = products.reduce((sum, product) => sum + product.price, 0);
 
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timeout = window.setTimeout(() => setNotice(''), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
+
   return (
     <>
       <SeoHead title="Your Cart | Parallax Flow Store" description="Review the Parallax Flow learning resources in your cart." canonicalPath={ROUTES.STORE_CART} robots="noindex, nofollow" />
       <PageReveal className="pf-store-transaction-page">
         <StoreBreadcrumbs items={[{ label: 'Store', to: ROUTES.STORE }, { label: 'Cart' }]} />
         <header className="pf-store-transaction-header"><p className="pf-store-kicker">Your selection</p><h1>Learning resources,<br /><em>ready when you are.</em></h1></header>
-        {notice && <div className="pf-store-notice" role="status"><CheckCircle2 size={18} />{notice}</div>}
+        {notice && <div className="pf-store-notice" role="status" aria-live="polite"><CheckCircle2 size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice('')} aria-label="Dismiss notification"><X size={16} /></button></div>}
         {!products.length ? (
           <div className="pf-store-cart-empty"><ShoppingBag size={30} /><h2>Your cart is quiet.</h2><p>Explore the Store and add a resource when it feels right.</p><Link className="pf-store-button pf-store-button--dark" to={notesCategoryPath}>Browse Resources <ArrowRight size={16} /></Link></div>
         ) : (
@@ -751,6 +852,10 @@ export const StoreCheckoutPage: React.FC = () => {
   const products = directProduct ? [directProduct] : itemIds.map((id) => catalogById.get(id)).filter((product): product is StoreProduct => Boolean(product));
   const validProducts = products.filter((product) => !user?.enrolledCourse || product.course === user.enrolledCourse.slug);
   const total = validProducts.reduce((sum, product) => sum + product.price, 0);
+  const pendingReceipt = useStoreReceipt(createdOrder?.orderId ?? '');
+  const checkoutSubtotal = createdOrder?.subtotal ?? total;
+  const checkoutDiscount = createdOrder?.discountAmount ?? 0;
+  const checkoutTotal = createdOrder?.totalAmount ?? total;
 
   const submitCheckout = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -771,6 +876,7 @@ export const StoreCheckoutPage: React.FC = () => {
       } else {
         await completeFakePayment(createdOrder.orderId);
         await queryClient.invalidateQueries({ queryKey: checkoutKeys.entitlements });
+        await queryClient.invalidateQueries({ queryKey: checkoutKeys.orders });
         clearCart();
         navigate(`/store/checkout/success/${createdOrder.orderId}`);
       }
@@ -794,7 +900,19 @@ export const StoreCheckoutPage: React.FC = () => {
               <section><span className="pf-store-checkout-step">02</span><div><h2>Order details</h2><p>Your receipt and access are attached to this account. A coupon is optional.</p><div className="pf-store-form-grid"><label>Full name<input value={user?.fullName ?? ''} readOnly /></label><label>Email address<input value={user?.email ?? ''} readOnly /></label><label className="is-wide">Coupon code<input value={couponCode} onChange={(event) => setCouponCode(event.target.value.toUpperCase())} disabled={Boolean(createdOrder)} placeholder="Optional" /></label><label className="is-wide"><span><input type="checkbox" required /> I confirm this is a test purchase with no real payment.</span></label></div></div></section>
               <section><span className="pf-store-checkout-step">03</span><div><h2>{createdOrder ? 'Test payment' : 'Create order'}</h2><p>{createdOrder ? 'The order is stored. Complete the simulated paid transition to grant app access.' : 'The server verifies current prices before creating the order.'}</p><div className="pf-store-payment-placeholder"><CreditCard size={22} /><p><strong>{createdOrder ? 'Parallax test payment' : 'Server-verified order'}</strong><span>{createdOrder ? `${createdOrder.orderNumber} · ${formatPrice(createdOrder.totalAmount)}` : 'No card or banking details are collected.'}</span></p><ShieldCheck size={20} /></div>{integrationMessage && <div className="pf-store-integration-message" role="status">{integrationMessage}</div>}<button className="pf-store-button pf-store-button--dark pf-store-button--wide" type="submit" disabled={submitting}>{submitting ? 'Processing…' : createdOrder ? 'Complete fake payment' : 'Place test order'} <ArrowRight size={16} /></button></div></section>
             </form>
-            <aside className="pf-store-checkout-summary"><p>Purchase summary</p>{validProducts.map((product) => <article key={product.id}><StoreProductCover product={product} size="mini" /><div><strong>{product.title}</strong><span>{product.subject}</span></div><b>{formatPrice(product.price)}</b></article>)}<hr /><div><span>Total</span><strong>{createdOrder ? formatPrice(createdOrder.totalAmount) : formatPrice(total)}</strong></div><small>Test mode only. Access is granted by the server after simulated payment succeeds.</small></aside>
+            <aside className="pf-store-checkout-summary">
+              <header><div className="pf-store-receipt__mark"><ReceiptText size={19} /></div><div><p>Order bill</p><strong>{createdOrder?.orderNumber ?? 'Review before payment'}</strong></div></header>
+              <div className="pf-store-checkout-summary__labels"><span>Item</span><span>Qty</span><span>Price</span></div>
+              {pendingReceipt.data ? pendingReceipt.data.items.map((item) => (
+                <article key={item.id}><div><strong>{item.titleSnapshot}</strong><span>{receiptResourceLabel(item.resourceType)}</span></div><span>×{item.quantity}</span><b>{formatPrice(item.totalPrice.amount)}</b></article>
+              )) : validProducts.map((product) => <article key={product.id}><div><strong>{product.title}</strong><span>{product.subject} · {getProductTypeLabel(product.productType)}</span></div><span>×1</span><b>{formatPrice(product.price)}</b></article>)}
+              <div className="pf-store-checkout-summary__totals">
+                <div><span>Actual amount</span><strong>{formatPrice(checkoutSubtotal)}</strong></div>
+                <div className={checkoutDiscount > 0 ? 'is-discount' : ''}><span>Coupon discount{createdOrder && couponCode ? ` (${couponCode})` : ''}</span><strong>{checkoutDiscount > 0 ? `−${formatPrice(checkoutDiscount)}` : formatPrice(0)}</strong></div>
+                <div className="is-total"><span>Amount payable</span><strong>{formatPrice(checkoutTotal)}</strong></div>
+              </div>
+              <small><LockKeyhole size={13} /> {createdOrder ? 'Prices and coupon discount verified by the server.' : 'Place the order to validate current prices and coupon discount before payment.'}</small>
+            </aside>
           </div>
         )}
       </PageReveal>
@@ -804,13 +922,40 @@ export const StoreCheckoutPage: React.FC = () => {
 
 export const StorePurchasesPage: React.FC = () => {
   const entitlements = useStoreEntitlements();
+  const orders = useStoreOrders();
   const products = entitlements.data?.items ?? [];
   return (
     <>
       <SeoHead title="My Purchases | Parallax Flow Store" description="View learning resources unlocked for your Parallax Flow account." canonicalPath={ROUTES.STORE_PURCHASES} robots="noindex, nofollow" />
       <PageReveal className="pf-store-account-page">
         <header className="pf-store-page-hero"><div><p className="pf-store-kicker">Your library</p><h1>Purchased.<br /><em>Ready in the app.</em></h1></div><p>Only server-verified entitlements belong here.<span>{products.length} unlocked resources</span></p></header>
-        {entitlements.isLoading ? <div className="pf-store-cart-empty"><BookOpen size={30} /><h2>Opening your purchases…</h2></div> : products.length ? <div className="pf-store-purchase-library">{products.map((product) => <article key={product.id}><div className="pf-store-success-mark is-verified"><Check size={22} /></div><div><span>{product.status === 'EXPIRING_SOON' ? 'Expiring soon' : 'Unlocked'}</span><h2>{product.title}</h2><p>{product.resourceType === 'PACKAGE' ? 'Study package' : 'Premium note'} · {product.order?.orderNumber ?? 'Access grant'}</p></div><a className="pf-store-button" href={`parallaxflow://${product.resourceType === 'PACKAGE' ? 'packages' : 'content'}/${product.resourceId}`}>Open in app <ExternalLink size={15} /></a></article>)}</div> : <div className="pf-store-cart-empty"><BookOpen size={30} /><h2>No verified purchases yet.</h2><p>Resources appear here after the payment server grants access.</p><Link className="pf-store-button pf-store-button--dark" to={ROUTES.STORE}>Explore the Store</Link></div>}
+        <section className="pf-store-order-history">
+          <div className="pf-store-order-history__heading"><div><p className="pf-store-kicker">Complete history</p><h2>All orders</h2></div><span>{orders.data?.data.length ?? 0} orders</span></div>
+          {orders.isLoading ? <div className="pf-store-order-history__state">Loading your order history…</div> : orders.data?.data.length ? <div className="pf-store-order-history__list">{orders.data.data.map((order) => (
+            <Link key={order.id} to={`/store/purchases/${encodeURIComponent(order.id)}`}><span className="pf-store-order-history__icon"><ReceiptText size={19} /></span><span><strong>{order.orderNumber}</strong><small>{new Date(order.paidAt ?? order.createdAt).toLocaleDateString('en-IN')} · {customerOrderStatus(order.status, order.refundStatus)}</small></span><span><strong>{formatPrice(order.totalAmount)}</strong><small>{order.receiptNumber ?? 'Receipt pending'}</small></span><ChevronRight size={18} /></Link>
+          ))}</div> : <div className="pf-store-order-history__state">No orders have been placed yet.</div>}
+        </section>
+        <div className="pf-store-order-history__heading"><div><p className="pf-store-kicker">Library access</p><h2>Unlocked resources</h2></div><span>{products.length} items</span></div>
+        {entitlements.isLoading ? <div className="pf-store-cart-empty"><BookOpen size={30} /><h2>Opening your purchases…</h2></div> : products.length ? <div className="pf-store-purchase-library">{products.map((product) => {
+          const isReport = product.resourceType === 'MONTHLY_REPORT';
+          const resourceLabel = isReport ? 'Monthly report' : product.resourceType === 'PACKAGE' ? 'Study package' : 'Premium note';
+          const appLink = isReport ? 'parallaxflow://monthly-reports' : `parallaxflow://${product.resourceType === 'PACKAGE' ? 'packages' : 'content'}/${product.resourceId}`;
+          return <article key={product.id}><div className="pf-store-success-mark is-verified"><Check size={22} /></div><div><span>{product.status === 'EXPIRING_SOON' ? 'Expiring soon' : 'Unlocked'}</span><h2>{product.title}</h2><p>{resourceLabel} · {product.order?.orderNumber ?? 'Access grant'}</p></div><a className="pf-store-button" href={appLink}>Open in app <ExternalLink size={15} /></a></article>;
+        })}</div> : <div className="pf-store-cart-empty"><BookOpen size={30} /><h2>No verified purchases yet.</h2><p>Resources appear here after the payment server grants access.</p><Link className="pf-store-button pf-store-button--dark" to={ROUTES.STORE}>Explore the Store</Link></div>}
+      </PageReveal>
+    </>
+  );
+};
+
+export const StorePurchaseReceiptPage: React.FC = () => {
+  const { orderId = '' } = useParams();
+  const receipt = useStoreReceipt(orderId);
+  return (
+    <>
+      <SeoHead title="Order Receipt | Parallax Flow Store" description="Review your complete Parallax Flow Store order receipt." canonicalPath={`/store/purchases/${encodeURIComponent(orderId)}`} robots="noindex, nofollow" />
+      <PageReveal className="pf-store-account-page pf-store-receipt-page">
+        <StoreBreadcrumbs items={[{ label: 'Store', to: ROUTES.STORE }, { label: 'My Purchases', to: ROUTES.STORE_PURCHASES }, { label: 'Receipt' }]} />
+        {receipt.isLoading ? <div className="pf-store-cart-empty"><ReceiptText size={30} /><h2>Preparing your receipt…</h2></div> : receipt.data ? <StoreReceiptDetails receipt={receipt.data} heading="Purchase receipt" /> : <div className="pf-store-cart-empty"><ReceiptText size={30} /><h2>Receipt unavailable.</h2><p>This order could not be loaded for your account.</p><Link className="pf-store-button" to={ROUTES.STORE_PURCHASES}>Back to My Purchases</Link></div>}
       </PageReveal>
     </>
   );

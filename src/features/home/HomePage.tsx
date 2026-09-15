@@ -23,6 +23,7 @@ import { ROUTES } from '@/config/routes';
 import { useThemeStore } from '@/app/store/useThemeStore';
 import { useAuthStore } from '@/app/store/useAuthStore';
 import { SeoHead } from '@/seo/SeoHead';
+import { PoweredByNeuralWebLabs } from '@/components/branding/PoweredByNeuralWebLabs';
 import './theme.css';
 import './navbar.css';
 import './hero.css';
@@ -44,6 +45,13 @@ const AndroidIcon: React.FC = () => (
       fill="currentColor"
       d="M15.53 2.16 16.84.85a.5.5 0 0 0-.71-.71l-1.48 1.48A5.94 5.94 0 0 0 12 1c-.96 0-1.86.23-2.66.63L7.85.14a.5.5 0 0 0-.7.71l1.31 1.31A5.98 5.98 0 0 0 6 7h12c0-2-1-3.75-2.47-4.84ZM10 5H9V4h1v1Zm5 0h-1V4h1v1Zm5.5 3A1.5 1.5 0 0 0 19 9.5v7a1.5 1.5 0 0 0 3 0v-7A1.5 1.5 0 0 0 20.5 8Zm-17 0A1.5 1.5 0 0 0 2 9.5v7a1.5 1.5 0 0 0 3 0v-7A1.5 1.5 0 0 0 3.5 8ZM6 18c0 .55.45 1 1 1h1v3.5a1.5 1.5 0 0 0 3 0V19h2v3.5a1.5 1.5 0 0 0 3 0V19h1c.55 0 1-.45 1-1V8H6v10Z"
     />
+  </svg>
+);
+
+const WhatsAppIcon: React.FC = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.45L3.5 20.5l1.4-4.25A8.5 8.5 0 1 1 20.5 11.7Z" />
+    <path d="M8.25 7.5c.45 4.2 3.55 7.3 7.75 7.75l1.15-1.6-2.6-1.2-.95 1.05a7.6 7.6 0 0 1-3.1-3.1l1.05-.95-1.2-2.6-1.6 1.15Z" />
   </svg>
 );
 
@@ -727,6 +735,21 @@ export const HomePage: React.FC = () => {
                 <a href="https://www.instagram.com/parallaxflow.in?utm_source=qr&igsh=N2U1YWh5Yzlud2Jn" target="_blank" rel="noreferrer" aria-label="Instagram profile" title="Instagram profile">
                   <Instagram aria-hidden="true" />
                 </a>
+                <a href="https://wa.me/916369484337" target="_blank" rel="noreferrer" aria-label="Chat with Parallax Flow on WhatsApp" title="WhatsApp">
+                  <WhatsAppIcon />
+                </a>
+              </div>
+              <div className="pf-contact__office">
+                <p className="pf-eyebrow">Office Address</p>
+                <address>WeWork Block 10, DLF Cybercity, 124, Mount Poonamallee Rd, Manapakkam,<br /><br />Chennai, Tamil Nadu 600089</address>
+              </div>
+              <div className="pf-contact__map">
+                <iframe
+                  title="Parallax Flow office location"
+                  src="https://www.google.com/maps?q=Block%2010%2C%20WeWork%20DLF%20Cybercity%2C%20124%2C%20Mount%20Poonamallee%20Rd%2C%20Manapakkam%2C%20Chennai%2C%20Tamil%20Nadu%20600089&amp;output=embed"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
               </div>
             </motion.aside>
           </div>
@@ -838,10 +861,7 @@ export const HomePage: React.FC = () => {
           </div>
         </div>
         <div className="pf-powered-by">
-          <span>Powered by</span>
-          <a href="http://neuralweblabs.com/" target="_blank" rel="noopener noreferrer">
-            NeuralWeb Labs
-          </a>
+          <PoweredByNeuralWebLabs />
         </div>
       </footer>
     </div>

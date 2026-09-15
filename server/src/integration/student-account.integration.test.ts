@@ -51,22 +51,26 @@ test("student account persists owned profile settings and rejects course mutatio
   assert.equal((await account.updateAppearance(userId, "LIGHT")).preferredTheme, "LIGHT");
 });
 
-test("verified mobile change is single-use and server-authoritative", { skip: !enabled }, async () => {
-  const requested = await account.requestVerification(userId, "MOBILE_CHANGE", "+919876543219");
-  await assert.rejects(() => account.verifyChange(userId, requested.challengeId, "MOBILE_CHANGE", "1111"), /incorrect/i);
-  const verified = await account.verifyChange(userId, requested.challengeId, "MOBILE_CHANGE", "0000");
+test("email-verified mobile change is single-use and server-authoritative", { skip: !enabled }, async () => {
+  const challengeId = randomUUID(); const code = "1357";
+  await prisma.accountVerificationChallenge.create({ data: { id: challengeId, userId, purpose: "MOBILE_CHANGE", targetValue: "+919876543219", otpHash: hash(challengeId, code), sentAt: new Date(), expiresAt: new Date(Date.now() + 60_000) } });
+  await assert.rejects(() => account.verifyChange(userId, challengeId, "MOBILE_CHANGE", "1111"), /incorrect/i);
+  const verified = await account.verifyChange(userId, challengeId, "MOBILE_CHANGE", code);
   assert.equal("user" in verified && verified.user?.phone, "+919876543219");
-  await assert.rejects(() => account.verifyChange(userId, requested.challengeId, "MOBILE_CHANGE", "0000"), /already been used/i);
+  await assert.rejects(() => account.verifyChange(userId, challengeId, "MOBILE_CHANGE", code), /already been used/i);
 });
 
 test("verified email becomes the login identity and revokes stale sessions", { skip: !enabled }, async () => {
   await prisma.userSession.create({ data: { userId: emailUserId, authSessionId: randomUUID(), refreshTokenHash: "b".repeat(64), expiresAt: new Date(Date.now() + 86_400_000) } });
-  const challengeId = randomUUID(); const code = "1357"; const nextEmail = `email-new-${suffix}@test.local`;
-  await prisma.accountVerificationChallenge.create({ data: { id: challengeId, userId: emailUserId, purpose: "EMAIL_CHANGE", targetValue: nextEmail, otpHash: hash(challengeId, code), sentAt: new Date(), expiresAt: new Date(Date.now() + 60_000) } });
-  await account.verifyChange(emailUserId, challengeId, "EMAIL_CHANGE", code);
+  const challengeId = randomUUID(); const currentCode = "1357"; const replacementCode = "2468";
+  const oldEmail = `email-old-${suffix}@test.local`; const nextEmail = `email-new-${suffix}@test.local`;
+  await prisma.accountVerificationChallenge.create({ data: { id: challengeId, userId: emailUserId, purpose: "EMAIL_CHANGE", previousValue: oldEmail, targetValue: nextEmail, otpHash: hash(challengeId, currentCode), sentAt: new Date(), expiresAt: new Date(Date.now() + 60_000) } });
+  await assert.rejects(() => account.confirmEmailChange(emailUserId, challengeId, currentCode), /current email/i);
+  await prisma.accountVerificationChallenge.update({ where: { id: challengeId }, data: { currentVerifiedAt: new Date(), otpHash: hash(challengeId, replacementCode), attempts: 0 } });
+  await account.confirmEmailChange(emailUserId, challengeId, replacementCode);
   assert.equal(await prisma.userSession.count({ where: { userId: emailUserId, revokedAt: null } }), 0);
-  await assert.rejects(() => loginWithPassword(`email-old-${suffix}@test.local`, password, { platform: "ANDROID" }), /incorrect/i);
-  const login = await loginWithPassword(nextEmail, password, { platform: "ANDROID", deviceName: "Integration device" });
+  await assert.rejects(() => loginWithPassword(oldEmail, password, { platform: "ANDROID" }), /incorrect/i);
+  const login = await loginWithPassword(nextEmail, password, { platform: "WEB", deviceName: "Integration browser" });
   assert.equal(login.user.email, nextEmail);
 });
 

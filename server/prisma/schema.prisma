@@ -78,10 +78,15 @@ model User {
   studyPlans                     LearnerStudyPlan[]
   studyTasks                     LearnerStudyTask[]
   monthlyReports                 LearnerMonthlyReport[]
+  monthlyReportViewerSessions    MonthlyReportViewerSession[]
   mobilePushTokens               MobilePushToken[]
   learnerNotificationPreference  LearnerNotificationPreference?
   learnerNotifications           LearnerNotification[]
   accountVerificationChallenges  AccountVerificationChallenge[]
+  academyProfilesCreated         AcademyProfile[]               @relation("AcademyProfileCreator")
+  deviceBinding                  StudentDeviceBinding?          @relation("BoundStudentDevice")
+  deviceResetApprovals           StudentDeviceBinding[]         @relation("DeviceResetApprover")
+  contentAttachedLinksCreated    ContentAttachedLink[]          @relation("ContentAttachedLinkCreator")
 
   @@index([roleId])
   @@index([status, createdAt])
@@ -125,23 +130,26 @@ model RolePermission {
 }
 
 model UserSession {
-  id                 String              @id @default(uuid()) @db.Uuid
-  userId             String              @db.Uuid
-  authSessionId      String              @unique
-  deviceName         String?
-  platform           SessionPlatform     @default(UNKNOWN)
-  userAgent          String?
-  ipAddress          String?
-  location           String?
-  createdAt          DateTime            @default(now())
-  lastSeenAt         DateTime            @default(now())
-  expiresAt          DateTime
-  revokedAt          DateTime?
-  refreshTokenHash   String?             @db.VarChar(64)
-  rotationCounter    Int                 @default(0)
-  lastRotatedAt      DateTime?
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  noteViewerSessions NoteViewerSession[]
+  id                          String                       @id @default(uuid()) @db.Uuid
+  userId                      String                       @db.Uuid
+  authSessionId               String                       @unique
+  deviceName                  String?
+  platform                    SessionPlatform              @default(UNKNOWN)
+  userAgent                   String?
+  ipAddress                   String?
+  location                    String?
+  createdAt                   DateTime                     @default(now())
+  lastSeenAt                  DateTime                     @default(now())
+  expiresAt                   DateTime
+  revokedAt                   DateTime?
+  refreshTokenHash            String?                      @db.VarChar(64)
+  rotationCounter             Int                          @default(0)
+  lastRotatedAt               DateTime?
+  deviceIdHash                String?                      @db.VarChar(64)
+  deviceBindingVersion        Int?
+  user                        User                         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  noteViewerSessions          NoteViewerSession[]
+  monthlyReportViewerSessions MonthlyReportViewerSession[]
 
   @@index([userId, revokedAt])
   @@index([expiresAt])
@@ -158,29 +166,55 @@ model PasswordCredential {
 }
 
 model RegistrationChallenge {
-  id                String    @id @default(uuid()) @db.Uuid
-  email             String
-  phone             String
-  fullName          String
-  passwordHash      String?
-  emailOtpHash      String?   @db.VarChar(64)
-  mobileOtpHash     String?   @db.VarChar(64)
-  emailAttempts     Int       @default(0)
-  mobileAttempts    Int       @default(0)
-  emailResendCount  Int       @default(0)
-  mobileResendCount Int       @default(0)
-  emailSentAt       DateTime?
-  mobileSentAt      DateTime?
-  emailVerifiedAt   DateTime?
-  mobileVerifiedAt  DateTime?
-  expiresAt         DateTime
-  completedAt       DateTime?
-  cancelledAt       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                     String          @id @default(uuid()) @db.Uuid
+  email                  String
+  phone                  String
+  fullName               String
+  passwordHash           String?
+  emailOtpHash           String?         @db.VarChar(64)
+  mobileOtpHash          String?         @db.VarChar(64)
+  emailAttempts          Int             @default(0)
+  mobileAttempts         Int             @default(0)
+  emailResendCount       Int             @default(0)
+  mobileResendCount      Int             @default(0)
+  emailSentAt            DateTime?
+  mobileSentAt           DateTime?
+  emailVerifiedAt        DateTime?
+  mobileVerifiedAt       DateTime?
+  deviceIdHash           String?         @db.VarChar(64)
+  deviceSecretHash       String?         @db.VarChar(64)
+  deviceName             String?
+  platform               SessionPlatform @default(UNKNOWN)
+  devicePolicyAcceptedAt DateTime?
+  expiresAt              DateTime
+  completedAt            DateTime?
+  cancelledAt            DateTime?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
 
   @@index([email, completedAt, cancelledAt])
   @@index([expiresAt])
+}
+
+model StudentDeviceBinding {
+  userId            String          @id @db.Uuid
+  deviceIdHash      String          @db.VarChar(64)
+  deviceSecretHash  String          @db.VarChar(64)
+  deviceName        String?
+  platform          SessionPlatform @default(UNKNOWN)
+  bindingVersion    Int             @default(1)
+  boundAt           DateTime        @default(now())
+  lastVerifiedAt    DateTime        @default(now())
+  resetApprovedAt   DateTime?
+  resetApprovedById String?         @db.Uuid
+  resetConsumedAt   DateTime?
+  updatedAt         DateTime        @updatedAt
+
+  user            User  @relation("BoundStudentDevice", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  resetApprovedBy User? @relation("DeviceResetApprover", fields: [resetApprovedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([deviceIdHash])
+  @@index([resetApprovedAt, resetConsumedAt])
 }
 
 enum ExamDatePrecision {
@@ -225,6 +259,8 @@ model AccountVerificationChallenge {
   userId      String                     @db.Uuid
   purpose     AccountVerificationPurpose
   targetValue String                     @db.VarChar(320)
+  previousValue String?                  @db.VarChar(320)
+  currentVerifiedAt DateTime?
   otpHash     String?                    @db.VarChar(64)
   attempts    Int                        @default(0)
   resendCount Int                        @default(0)
@@ -499,6 +535,7 @@ enum StudyPlanTaskType {
   READ_NOTE
   CONTINUE_NOTE
   REVISE_NOTE
+  PRACTICE_WEAK_CONCEPT
   MANUAL
 }
 
@@ -507,6 +544,7 @@ enum StudyPlanTaskSource {
   REVISION_DUE
   CONTINUE_RESOURCE
   CARRY_OVER
+  WEAK_CONCEPT
   MANUAL
 }
 
@@ -594,41 +632,90 @@ model StudyWorkloadEstimate {
 }
 
 model LearnerMonthlyReport {
-  id                  String   @id @default(uuid()) @db.Uuid
-  userId              String   @db.Uuid
-  courseId            String   @db.Uuid
-  yearMonth           String   @db.VarChar(7)
-  timezone            String   @db.VarChar(80)
-  courseCodeSnapshot  String   @db.VarChar(80)
-  courseNameSnapshot  String   @db.VarChar(180)
-  periodStart         DateTime @db.Date
-  periodEndExclusive  DateTime @db.Date
-  totalStudySeconds   Int
-  focusSeconds        Int
-  readingSeconds      Int
-  practiceSeconds     Int
-  revisionSeconds     Int
-  activeDays          Int
-  goalDays            Int
-  streakDays          Int
-  protectedDays       Int
-  notesCompleted      Int
-  revisionsCompleted  Int
-  studyTasksCompleted Int
-  totalNotes          Int
-  syllabusCompleted   Int
-  syllabusPercent     Int
-  weeklyStudySeconds  Json
-  algorithmVersion    String   @db.VarChar(80)
-  generatedAt         DateTime @default(now())
-  createdAt           DateTime @default(now())
+  id                   String              @id @default(uuid()) @db.Uuid
+  userId               String              @db.Uuid
+  courseId             String              @db.Uuid
+  yearMonth            String              @db.VarChar(7)
+  timezone             String              @db.VarChar(80)
+  courseCodeSnapshot   String              @db.VarChar(80)
+  courseNameSnapshot   String              @db.VarChar(180)
+  periodStart          DateTime            @db.Date
+  periodEndExclusive   DateTime            @db.Date
+  totalStudySeconds    Int
+  focusSeconds         Int
+  readingSeconds       Int
+  practiceSeconds      Int
+  revisionSeconds      Int
+  activeDays           Int
+  goalDays             Int
+  streakDays           Int
+  protectedDays        Int
+  notesCompleted       Int
+  revisionsCompleted   Int
+  studyTasksCompleted  Int
+  totalNotes           Int
+  syllabusCompleted    Int
+  syllabusPercent      Int
+  weeklyStudySeconds   Json
+  algorithmVersion     String              @db.VarChar(80)
+  productContentItemId String?             @db.Uuid
+  entitlementId        String?             @db.Uuid
+  orderId              String?             @db.Uuid
+  status               MonthlyReportStatus @default(PENDING)
+  snapshotJson         Json?
+  sourceDataHash       String?             @db.VarChar(64)
+  storageKey           String?
+  pdfChecksumSha256    String?             @db.VarChar(64)
+  pdfSizeBytes         BigInt?
+  version              Int                 @default(1)
+  failureCode          String?             @db.VarChar(80)
+  generatedAt          DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  course Course @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user           User                         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  course         Course                       @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  product        ContentItem?                 @relation("MonthlyReportProduct", fields: [productContentItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  entitlement    Entitlement?                 @relation(fields: [entitlementId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  order          Order?                       @relation(fields: [orderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  viewerSessions MonthlyReportViewerSession[]
 
   @@unique([userId, yearMonth])
   @@index([userId, periodStart])
   @@index([courseId, periodStart])
+  @@index([userId, status, periodStart])
+  @@index([entitlementId])
+  @@index([orderId])
+}
+
+enum MonthlyReportStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
+model MonthlyReportViewerSession {
+  id            String                  @id @default(uuid()) @db.Uuid
+  userId        String                  @db.Uuid
+  userSessionId String                  @db.Uuid
+  reportId      String                  @db.Uuid
+  traceId       String                  @unique @db.VarChar(32)
+  status        NoteViewerSessionStatus @default(ACTIVE)
+  openedAt      DateTime                @default(now())
+  lastSeenAt    DateTime                @default(now())
+  expiresAt     DateTime
+  closedAt      DateTime?
+  updatedAt     DateTime                @updatedAt
+
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  userSession UserSession          @relation(fields: [userSessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  report      LearnerMonthlyReport @relation(fields: [reportId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userId, status, lastSeenAt])
+  @@index([reportId, openedAt])
+  @@index([userSessionId, status])
+  @@index([expiresAt, status])
 }
 
 model LearnerStreakState {
@@ -768,6 +855,7 @@ model Course {
   learnerMonthlyReports LearnerMonthlyReport[]
   contentLocations      ContentLocationSetting[]
   packages              Package[]
+  questionBanks         QuestionBank[]
   taxonomyChapters      TaxonomyChapter[]
   questions             Question[]
   caseSubQuestions      CaseSubQuestion[]
@@ -819,6 +907,12 @@ enum ContentValidityMode {
   EXAM_DATE_OFFSET
 }
 
+enum AccessDurationUnit {
+  DAYS
+  WEEKS
+  MONTHS
+}
+
 enum ContentEntityType {
   EXAM
   STAGE
@@ -832,6 +926,7 @@ enum ContentEntityType {
   QUESTION_PAPER
   REFERENCE_MATERIAL
   PREMIUM_NOTE
+  MONTHLY_REPORT
   MEDIA
   OTHER
 }
@@ -865,6 +960,11 @@ model ContentItem {
   validityMode       ContentValidityMode @default(PERMANENT)
   validityOffsetDays Int?
 
+  // Commercial access policy for future purchases. A null value/unit pair
+  // means permanent access. Expiry is snapshotted onto Entitlement when paid.
+  accessDurationValue Int?
+  accessDurationUnit  AccessDurationUnit?
+
   status ContentStatus @default(PUBLISHED)
 
   displayOrder Int @default(0)
@@ -878,22 +978,43 @@ model ContentItem {
   course Course       @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   parent ContentItem? @relation("ContentHierarchy", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  children         ContentItem[]            @relation("ContentHierarchy")
-  sampleImages     ContentSampleImage[]
-  storeSections    ContentStoreSection[]
-  locations        ContentLocationSetting[]
-  packageItems     PackageItem[]
-  orderItems       OrderItem[]
-  entitlements     Entitlement[]
-  viewerSessions   NoteViewerSession[]
-  learnerStates    LearnerNoteState[]
-  studyTasks       LearnerStudyTask[]
-  workloadEstimate StudyWorkloadEstimate?
+  children                 ContentItem[]             @relation("ContentHierarchy")
+  sampleImages             ContentSampleImage[]
+  storeSections            ContentStoreSection[]
+  locations                ContentLocationSetting[]
+  packageItems             PackageItem[]
+  orderItems               OrderItem[]
+  entitlements             Entitlement[]
+  viewerSessions           NoteViewerSession[]
+  learnerStates            LearnerNoteState[]
+  studyTasks               LearnerStudyTask[]
+  workloadEstimate         StudyWorkloadEstimate?
+  questionLinks            QuestionContentLink[]
+  practiceSessionMaterials PracticeSessionMaterial[]
+  monthlyReportsAsProduct  LearnerMonthlyReport[]    @relation("MonthlyReportProduct")
+  attachedLinks            ContentAttachedLink[]
 
   @@index([courseId, parentId, deletedAt, displayOrder])
   @@index([kind, accessType])
   @@index([status])
   @@index([storagePath])
+}
+
+model ContentAttachedLink {
+  id            String    @id @default(uuid()) @db.Uuid
+  contentItemId String    @db.Uuid
+  url           String    @db.VarChar(2048)
+  description   String    @db.VarChar(2000)
+  createdById   String    @db.Uuid
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdBy   User        @relation("ContentAttachedLinkCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([contentItemId, deletedAt, createdAt])
+  @@index([createdById])
 }
 
 model ContentLocationSetting {
@@ -982,13 +1103,17 @@ enum PackageStatus {
 }
 
 model Package {
-  id          String        @id @default(uuid()) @db.Uuid
-  courseId    String        @db.Uuid
-  title       String
-  slug        String
-  description String        @default("")
-  price       Decimal       @default(0.00) @db.Decimal(10, 2)
-  status      PackageStatus @default(DRAFT)
+  id                  String              @id @default(uuid()) @db.Uuid
+  courseId            String              @db.Uuid
+  title               String
+  slug                String
+  description         String              @default("")
+  price               Decimal             @default(0.00) @db.Decimal(10, 2)
+  status              PackageStatus       @default(DRAFT)
+  // Packages (including Question Bank products) use the same purchase-time
+  // duration policy as individually sold content.
+  accessDurationValue Int?
+  accessDurationUnit  AccessDurationUnit?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -996,13 +1121,53 @@ model Package {
 
   course           Course                   @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   items            PackageItem[]
+  questionBanks    PackageQuestionBank[]
   orderItems       OrderItem[]
   couponTargets    CouponTarget[]
   entitlements     Entitlement[]
   broadcastTargets BroadcastPackageTarget[]
+  questionBank     QuestionBank?
 
   @@index([courseId, status, deletedAt])
   @@index([createdAt])
+}
+
+// A Question Bank is the durable practice-product container. Excel remains
+// only an import mechanism, while Package remains the existing Store product
+// and Entitlement source. This keeps commercial access and question grouping
+// separate without duplicating the established purchase system.
+model QuestionBank {
+  id                  String              @id @default(uuid()) @db.Uuid
+  academyId           String?             @db.Uuid
+  courseId            String              @db.Uuid
+  packageId           String?             @unique @db.Uuid
+  name                String
+  slug                String
+  description         String              @default("")
+  accessType          ContentAccessType   @default(FREE)
+  price               Decimal             @default(0.00) @db.Decimal(10, 2)
+  accessDurationValue Int?
+  accessDurationUnit  AccessDurationUnit?
+  // A bank can contain both normal and case-based MCQs. Question kind belongs
+  // to Question, never to the commercial/container record.
+  status              PackageStatus       @default(DRAFT)
+  createdById         String?             @db.Uuid
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  deletedAt           DateTime?
+
+  academy          Academy?              @relation(fields: [academyId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  course           Course                @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  package          Package?              @relation(fields: [packageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  packages         PackageQuestionBank[]
+  questions        Question[]
+  practiceSessions PracticeSession[]
+  orderItems       OrderItem[]
+  entitlements     Entitlement[]
+
+  @@unique([courseId, slug])
+  @@index([academyId, status, deletedAt])
+  @@index([courseId, accessType, status, deletedAt])
 }
 
 model PackageItem {
@@ -1018,6 +1183,24 @@ model PackageItem {
   @@unique([packageId, contentItemId])
   @@index([packageId, displayOrder])
   @@index([contentItemId])
+}
+
+// Explicit package membership for practice products. A Question Bank remains
+// an independent product/container and is never duplicated when included in a
+// mixed learning package.
+model PackageQuestionBank {
+  id             String   @id @default(uuid()) @db.Uuid
+  packageId      String   @db.Uuid
+  questionBankId String   @db.Uuid
+  displayOrder   Int      @default(0)
+  addedAt        DateTime @default(now())
+
+  package      Package      @relation(fields: [packageId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  questionBank QuestionBank @relation(fields: [questionBankId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([packageId, questionBankId])
+  @@index([packageId, displayOrder])
+  @@index([questionBankId])
 }
 
 model TaxonomyChapter {
@@ -1094,6 +1277,7 @@ enum PracticeCollection {
   RTP
   MTP
   ORIGINAL
+  QUESTION_BANK
 }
 
 enum CaseClassificationMode {
@@ -1122,7 +1306,11 @@ model Question {
   lessonId           String?            @db.Uuid
   topicId            String?            @db.Uuid
   practiceCollection PracticeCollection @default(ORIGINAL)
+  questionBankId     String?            @db.Uuid
   practiceYear       Int?
+  examName           String             @default("")
+  chapterName        String             @default("")
+  conceptName        String             @default("")
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -1137,6 +1325,8 @@ model Question {
   options                  QuestionOption[]
   subQuestions             CaseSubQuestion[]
   practiceSessionQuestions PracticeSessionQuestion[]
+  contentLinks             QuestionContentLink[]
+  questionBank             QuestionBank?             @relation(fields: [questionBankId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([academyId, status, deletedAt])
   @@index([courseId, subjectId, chapterId, lessonId, topicId])
@@ -1144,6 +1334,22 @@ model Question {
   @@index([caseId])
   @@index([createdAt])
   @@index([courseId, practiceCollection, practiceYear, status])
+  @@index([questionBankId, status, deletedAt])
+}
+
+// Questions are intentionally linked to the same course content files that
+// drive Notes and Store entitlements. Access is derived from these links; a
+// question never carries an independent paid/free flag.
+model QuestionContentLink {
+  questionId    String   @db.Uuid
+  contentItemId String   @db.Uuid
+  createdAt     DateTime @default(now())
+
+  question    Question    @relation(fields: [questionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@id([questionId, contentItemId])
+  @@index([contentItemId, questionId])
 }
 
 model QuestionOption {
@@ -1171,11 +1377,14 @@ model CaseSubQuestion {
   answerHtml                         String  @default("")
   displayOrder                       Int     @default(0)
 
-  courseId  String? @db.Uuid
-  subjectId String? @db.Uuid
-  chapterId String? @db.Uuid
-  lessonId  String? @db.Uuid
-  topicId   String? @db.Uuid
+  courseId    String? @db.Uuid
+  subjectId   String? @db.Uuid
+  chapterId   String? @db.Uuid
+  lessonId    String? @db.Uuid
+  topicId     String? @db.Uuid
+  examName    String  @default("")
+  chapterName String  @default("")
+  conceptName String  @default("")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1194,6 +1403,14 @@ model CaseSubQuestion {
 
 enum PracticeSourceKind {
   ARCHIVE
+}
+
+enum PracticeMode {
+  MCQ
+  CASE_STUDY
+  QUESTION_BANK
+  WRONG_ANSWERS
+  REVISIT
 }
 
 enum PracticeAnswerFormat {
@@ -1224,42 +1441,60 @@ enum PracticeNavigatorState {
 }
 
 model PracticeSession {
-  id                String                @id @default(uuid()) @db.Uuid
-  userId            String                @db.Uuid
-  courseId          String                @db.Uuid
-  sourceKind        PracticeSourceKind
-  subjectId         String?               @db.Uuid
-  chapterId         String?               @db.Uuid
-  lessonId          String?               @db.Uuid
-  topicId           String?               @db.Uuid
-  collection        PracticeCollection?
-  year              Int?
-  answerFormat      PracticeAnswerFormat
-  accessPolicy      PracticeAccessPolicy
-  timerSeconds      Int?
-  questionCount     Int
-  answeredCount     Int                   @default(0)
-  correctCount      Int                   @default(0)
-  wrongCount        Int                   @default(0)
-  markedReviewCount Int                   @default(0)
-  status            PracticeSessionStatus @default(ACTIVE)
-  startedAt         DateTime              @default(now())
-  expiresAt         DateTime?
-  completedAt       DateTime?
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
+  id                 String                @id @default(uuid()) @db.Uuid
+  userId             String                @db.Uuid
+  courseId           String                @db.Uuid
+  sourceKind         PracticeSourceKind
+  mode               PracticeMode          @default(MCQ)
+  subjectId          String?               @db.Uuid
+  chapterId          String?               @db.Uuid
+  lessonId           String?               @db.Uuid
+  topicId            String?               @db.Uuid
+  collection         PracticeCollection?
+  questionBankId     String?               @db.Uuid
+  year               Int?
+  answerFormat       PracticeAnswerFormat
+  accessPolicy       PracticeAccessPolicy
+  timerSeconds       Int?
+  questionCount      Int
+  unlimitedQuestions Boolean               @default(false)
+  answeredCount      Int                   @default(0)
+  correctCount       Int                   @default(0)
+  wrongCount         Int                   @default(0)
+  markedReviewCount  Int                   @default(0)
+  status             PracticeSessionStatus @default(ACTIVE)
+  startedAt          DateTime              @default(now())
+  expiresAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
-  user      User                      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  course    Course                    @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  subject   Subject?                  @relation(fields: [subjectId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  chapter   TaxonomyChapter?          @relation(fields: [chapterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  lesson    TaxonomyLesson?           @relation(fields: [lessonId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  topic     TaxonomyTopic?            @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  questions PracticeSessionQuestion[]
+  user         User                      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  course       Course                    @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  subject      Subject?                  @relation(fields: [subjectId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  chapter      TaxonomyChapter?          @relation(fields: [chapterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  lesson       TaxonomyLesson?           @relation(fields: [lessonId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  topic        TaxonomyTopic?            @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  questionBank QuestionBank?             @relation(fields: [questionBankId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  questions    PracticeSessionQuestion[]
+  materials    PracticeSessionMaterial[]
 
   @@index([userId, status, startedAt])
   @@index([courseId, subjectId, chapterId, startedAt])
+  @@index([questionBankId, status, startedAt])
   @@index([expiresAt, status])
+}
+
+model PracticeSessionMaterial {
+  sessionId     String   @db.Uuid
+  contentItemId String   @db.Uuid
+  createdAt     DateTime @default(now())
+
+  session     PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  contentItem ContentItem     @relation(fields: [contentItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@id([sessionId, contentItemId])
+  @@index([contentItemId, sessionId])
 }
 
 model PracticeSessionQuestion {
@@ -1281,6 +1516,9 @@ model PracticeSessionQuestion {
   chapterId                   String?                @db.Uuid
   lessonId                    String?                @db.Uuid
   topicId                     String?                @db.Uuid
+  examName                    String                 @default("")
+  chapterName                 String                 @default("")
+  conceptName                 String                 @default("")
   navigatorState              PracticeNavigatorState @default(UNANSWERED)
   attemptCount                Int                    @default(0)
   final                       Boolean                @default(false)
@@ -1365,8 +1603,10 @@ enum CouponScope {
 enum LearningResourceType {
   COURSE
   PACKAGE
+  QUESTION_BANK
   LESSON
   PREMIUM_NOTES
+  MONTHLY_REPORT
   SUBJECT
   OTHER
 }
@@ -1419,12 +1659,13 @@ model Order {
   refundedAt DateTime?
   updatedAt  DateTime  @updatedAt
 
-  user         User               @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  course       Course?            @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  items        OrderItem[]
-  payments     Payment[]
-  redemptions  CouponRedemption[]
-  entitlements Entitlement[]
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  course         Course?                @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  items          OrderItem[]
+  payments       Payment[]
+  redemptions    CouponRedemption[]
+  entitlements   Entitlement[]
+  monthlyReports LearnerMonthlyReport[]
 
   @@index([userId, status])
   @@index([courseId, status])
@@ -1432,23 +1673,26 @@ model Order {
 }
 
 model OrderItem {
-  id            String               @id @default(uuid()) @db.Uuid
-  orderId       String               @db.Uuid
-  contentItemId String?              @db.Uuid
-  packageId     String?              @db.Uuid
-  resourceType  LearningResourceType
-  titleSnapshot String
-  unitPrice     Decimal              @db.Decimal(10, 2)
-  quantity      Int                  @default(1)
-  totalPrice    Decimal              @db.Decimal(10, 2)
+  id             String               @id @default(uuid()) @db.Uuid
+  orderId        String               @db.Uuid
+  contentItemId  String?              @db.Uuid
+  packageId      String?              @db.Uuid
+  questionBankId String?              @db.Uuid
+  resourceType   LearningResourceType
+  titleSnapshot  String
+  unitPrice      Decimal              @db.Decimal(10, 2)
+  quantity       Int                  @default(1)
+  totalPrice     Decimal              @db.Decimal(10, 2)
 
-  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  contentItem ContentItem? @relation(fields: [contentItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  package     Package?     @relation(fields: [packageId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  contentItem  ContentItem?  @relation(fields: [contentItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  package      Package?      @relation(fields: [packageId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  questionBank QuestionBank? @relation(fields: [questionBankId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([orderId])
   @@index([contentItemId])
   @@index([packageId])
+  @@index([questionBankId])
 }
 
 model Payment {
@@ -1542,6 +1786,7 @@ model Entitlement {
   resourceType     LearningResourceType
   contentItemId    String?               @db.Uuid
   packageId        String?               @db.Uuid
+  questionBankId   String?               @db.Uuid
   subjectId        String?               @db.Uuid
   courseId         String?               @db.Uuid
   resourceTitle    String
@@ -1550,22 +1795,27 @@ model Entitlement {
   accessType       EntitlementAccessType @default(PERMANENT)
   status           EntitlementStatus     @default(ACTIVE)
   grantedAt        DateTime              @default(now())
+  purchasedAt      DateTime?
+  startsAt         DateTime              @default(now())
   expiresAt        DateTime?
   grantedByAdminId String?               @db.Uuid
   reason           String?
   revokedAt        DateTime?
 
-  user           User         @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  contentItem    ContentItem? @relation(fields: [contentItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  package        Package?     @relation(fields: [packageId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  subject        Subject?     @relation(fields: [subjectId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  course         Course?      @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  order          Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  grantedByAdmin User?        @relation("AdminGrants", fields: [grantedByAdminId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  contentItem    ContentItem?           @relation(fields: [contentItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  package        Package?               @relation(fields: [packageId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  questionBank   QuestionBank?          @relation(fields: [questionBankId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  subject        Subject?               @relation(fields: [subjectId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  course         Course?                @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  order          Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  grantedByAdmin User?                  @relation("AdminGrants", fields: [grantedByAdminId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  monthlyReports LearnerMonthlyReport[]
 
   @@index([userId, status])
   @@index([contentItemId, status])
   @@index([packageId, status])
+  @@index([questionBankId, status])
   @@index([orderId])
 }
 
@@ -1895,20 +2145,25 @@ enum AcademyInvitationStatus {
 // ==================================================
 
 model Academy {
-  id          String        @id @default(uuid()) @db.Uuid
-  slug        String        @unique
-  name        String
-  email       String        @unique
-  phone       String
-  address     String
-  city        String
-  state       String
-  country     String        @default("India")
-  postalCode  String
-  website     String        @default("")
-  description String        @default("")
-  logoUrl     String?       @default("")
-  status      AcademyStatus @default(PENDING)
+  id              String        @id @default(uuid()) @db.Uuid
+  slug            String        @unique
+  name            String
+  email           String        @unique
+  phone           String
+  address         String
+  city            String
+  state           String
+  country         String        @default("India")
+  postalCode      String
+  website         String        @default("")
+  description     String        @default("")
+  logoUrl         String?       @default("")
+  status          AcademyStatus @default(PENDING)
+  academyCode     String?       @unique
+  displayName     String?
+  academyType     String        @default("OTHER")
+  establishedYear Int?
+  socialLinks     Json?
 
   adminName  String
   adminEmail String
@@ -1934,6 +2189,7 @@ model Academy {
   courses                       AcademyCourse[]
   tenantCourses                 Course[]
   questions                     Question[]
+  questionBanks                 QuestionBank[]
   broadcasts                    Broadcast[]
   enrollments                   AcademyCourseEnrollment[]
   broadcastTargets              BroadcastAcademyTarget[]
@@ -1951,9 +2207,167 @@ model Academy {
   contactSubmissions            ContactSubmission[]
   activeUserPreferences         UserAcademyPreference[]
   notificationDeliveries        NotificationDelivery[]
+  profile                       AcademyProfile?
+  legalProfile                  AcademyLegalProfile?
+  billingProfile                AcademyBillingProfile?
+  commercialProfile             AcademyCommercialProfile?
+  integrationProfile            AcademyIntegrationProfile?
+  contacts                      AcademyContact[]
+  addresses                     AcademyAddress[]
+  academicOfferings             AcademyAcademicOffering[]
 
   @@index([status, deletedAt])
   @@index([email])
+  @@index([academyCode])
+}
+
+model AcademyProfile {
+  id               String   @id @default(uuid()) @db.Uuid
+  academyId        String   @unique @db.Uuid
+  onboardingStatus String   @default("SETUP_PENDING")
+  createdById      String   @db.Uuid
+  logoStoragePath  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  academy   Academy @relation(fields: [academyId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdBy User    @relation("AcademyProfileCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([createdById])
+  @@index([onboardingStatus])
+}
+
+model AcademyContact {
+  id        String   @id @default(uuid()) @db.Uuid
+  academyId String   @db.Uuid
+  role      String
+  fullName  String
+  email     String?
+  phone     String?
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([academyId, role])
+  @@index([academyId, isPrimary])
+}
+
+model AcademyLegalProfile {
+  id                        String    @id @default(uuid()) @db.Uuid
+  academyId                 String    @unique @db.Uuid
+  legalName                 String?
+  entityType                String    @default("NOT_APPLICABLE")
+  panStatus                 String    @default("NOT_APPLICABLE")
+  pan                       String?
+  tan                       String?
+  gstStatus                 String    @default("NOT_APPLICABLE")
+  gstin                     String?
+  gstState                  String?
+  gstRegistrationType       String?
+  gstRegistrationDate       DateTime?
+  gstCertificateStoragePath String?
+  placeOfSupply             String?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([gstin])
+  @@index([pan])
+}
+
+model AcademyAddress {
+  id           String   @id @default(uuid()) @db.Uuid
+  academyId    String   @db.Uuid
+  kind         String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  country      String   @default("India")
+  postalCode   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([academyId, kind])
+  @@index([academyId, state])
+}
+
+model AcademyBillingProfile {
+  id                    String   @id @default(uuid()) @db.Uuid
+  academyId             String   @unique @db.Uuid
+  invoiceDisplayName    String?
+  invoiceEmail          String?
+  billingContactName    String?
+  billingContactPhone   String?
+  purchaseOrderRequired Boolean  @default(false)
+  currency              String   @default("INR")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model AcademyAcademicOffering {
+  id        String   @id @default(uuid()) @db.Uuid
+  academyId String   @db.Uuid
+  category  String
+  program   String?
+  branch    String?
+  batch     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([academyId, category, program, branch, batch])
+  @@index([academyId, category])
+}
+
+model AcademyCommercialProfile {
+  id                 String    @id @default(uuid()) @db.Uuid
+  academyId          String    @unique @db.Uuid
+  planKey            String
+  subscriptionStatus String
+  startDate          DateTime
+  endDate            DateTime?
+  studentSeatLimit   Int
+  purchasedSeats     Int       @default(0)
+  activeSeats        Int       @default(0)
+  additionalSeats    Int       @default(0)
+  billingCycle       String    @default("ANNUAL")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([subscriptionStatus, endDate])
+}
+
+model AcademyIntegrationProfile {
+  id                 String    @id @default(uuid()) @db.Uuid
+  academyId          String    @unique @db.Uuid
+  zohoOrganizationId String?
+  zohoCustomerId     String?
+  zohoCustomerNumber String?
+  zohoContactId      String?
+  zohoCustomerName   String?
+  zohoSyncStatus     String    @default("NOT_CONFIGURED")
+  zohoLastSyncedAt   DateTime?
+  zohoLastSyncError  String?
+  zohoSyncVersion    Int       @default(0)
+  paymentCustomerId  String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  academy Academy @relation(fields: [academyId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([zohoCustomerId])
+  @@index([zohoSyncStatus])
 }
 
 enum EnrollmentStatus {

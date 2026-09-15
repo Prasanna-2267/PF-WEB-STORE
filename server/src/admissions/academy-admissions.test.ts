@@ -153,6 +153,9 @@ async function runAdmissionsTestSuite() {
       where: { userId_academyId: { userId: user!.id, academyId: academyAId } },
     });
     assert.ok(membership);
+    assert.strictEqual(await prisma.backgroundJob.count({
+      where: { kind: 'ACCOUNT_CREATED_EMAIL', deduplicationKey: user!.id },
+    }), 1);
   });
 
   await test('5. Re-importing existing student flags ALREADY_ADMITTED', async () => {
@@ -187,6 +190,9 @@ async function runAdmissionsTestSuite() {
       where: { userId_academyId: { userId: user.id, academyId: academyAId } },
     });
     assert.ok(membership);
+    assert.strictEqual(await prisma.backgroundJob.count({
+      where: { kind: 'ACCOUNT_CREATED_EMAIL', deduplicationKey: user.id },
+    }), 0, 'Existing users must not receive a new-account email when only membership is added');
   });
 
   await test('7. Empty import file returns 0 valid rows', async () => {

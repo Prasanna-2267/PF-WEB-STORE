@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { OAuth2Client } from "google-auth-library";
 import { createLearnerNotification } from "../services/learnerNotificationService.js";
+import { enqueueAccountCreatedEmail } from "../services/accountCreatedEmailService.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import { getConfig } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
@@ -15,6 +16,7 @@ import {
   refreshTokenMatches,
 } from "./tokens.js";
 import type { AuthContext, AuthResult, PublicUser, RequestMetadata } from "./types.js";
+import { verifyOrBindStudentDevice } from "./device-binding.js";
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
@@ -40,12 +42,13 @@ const publicUser = (user: {
   email: string;
   fullName: string;
   role: { key: string; rolePermissions: Array<{ permission: { key: string } }> };
-}): PublicUser => ({
+}, isFirstLogin = false): PublicUser => ({
   id: user.id,
   email: user.email,
   fullName: user.fullName,
   role: publicRoleKey(user.role.key),
   permissions: user.role.rolePermissions.map(({ permission }) => permission.key).sort(),
+  isFirstLogin,
 });
 
 const cleanMetadata = (metadata: RequestMetadata) => ({
@@ -91,7 +94,8 @@ export const createSession = async (
   const expiresAt = new Date(Date.now() + config.auth.refreshTokenTtlSeconds * 1_000);
   const requestMetadata = cleanMetadata(metadata);
 
-  await prisma.$transaction(async (transaction) => {
+  const sessionState = await prisma.$transaction(async (transaction) => {
+    const binding = user.role.key === "student" ? await verifyOrBindStudentDevice(transaction, user.id, metadata) : null;
     const session = await transaction.userSession.create({
       data: {
         userId: user.id,
@@ -102,10 +106,19 @@ export const createSession = async (
         ipAddress: requestMetadata.ipAddress,
         deviceName: requestMetadata.deviceName,
         platform: requestMetadata.platform,
+        deviceIdHash: binding?.deviceIdHash,
+        deviceBindingVersion: binding?.bindingVersion,
       },
       select: { id: true },
     });
-    await transaction.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    const loginAt = new Date();
+    const firstLoginClaim = await transaction.user.updateMany({
+      where: { id: user.id, lastLoginAt: null },
+      data: { lastLoginAt: loginAt },
+    });
+    if (firstLoginClaim.count === 0) {
+      await transaction.user.update({ where: { id: user.id }, data: { lastLoginAt: loginAt } });
+    }
     await transaction.securityEvent.createMany({
       data: [
         {
@@ -130,6 +143,7 @@ export const createSession = async (
         },
       ],
     });
+    return { isFirstLogin: firstLoginClaim.count === 1 };
   });
 
   return {
@@ -137,7 +151,7 @@ export const createSession = async (
     refreshToken,
     tokenType: "Bearer",
     expiresIn: config.auth.accessTokenTtlSeconds,
-    user: publicUser(user),
+    user: publicUser(user, sessionState.isFirstLogin),
   };
 };
 
@@ -195,7 +209,7 @@ export const registerWithPassword = async (
     user = await prisma.$transaction(async (transaction) => {
       const role = await transaction.role.findUnique({ where: { key: "student" }, select: { id: true, isActive: true } });
       if (!role?.isActive) throw serviceUnavailable("IDENTITY_CONFIGURATION_ERROR", "The student role is not available.");
-      return transaction.user.create({
+      const created = await transaction.user.create({
         data: {
           id: randomUUID(),
           email,
@@ -205,6 +219,13 @@ export const registerWithPassword = async (
         },
         include: { role: { select: permissionSelect } },
       });
+      await enqueueAccountCreatedEmail(transaction, {
+        userId: created.id,
+        recipientEmail: created.email,
+        userName: created.fullName,
+        accountCreatedAt: created.createdAt.toISOString(),
+      });
+      return created;
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -249,11 +270,20 @@ export const loginWithGoogle = async (
   });
 
   if (!user && config.auth.googleRegistrationEnabled) {
-    const role = await prisma.role.findUnique({ where: { key: "student" }, select: { id: true, isActive: true } });
-    if (!role?.isActive) throw serviceUnavailable("IDENTITY_CONFIGURATION_ERROR", "The student role is not available.");
-    user = await prisma.user.create({
-      data: { id: randomUUID(), email, fullName: payload.name?.trim() || email.split("@", 1)[0]!, roleId: role.id },
-      select: { id: true, email: true, fullName: true, status: true, deletedAt: true, role: { select: permissionSelect } },
+    user = await prisma.$transaction(async (transaction) => {
+      const role = await transaction.role.findUnique({ where: { key: "student" }, select: { id: true, isActive: true } });
+      if (!role?.isActive) throw serviceUnavailable("IDENTITY_CONFIGURATION_ERROR", "The student role is not available.");
+      const created = await transaction.user.create({
+        data: { id: randomUUID(), email, fullName: payload.name?.trim() || email.split("@", 1)[0]!, roleId: role.id },
+        select: { id: true, email: true, fullName: true, status: true, deletedAt: true, createdAt: true, role: { select: permissionSelect } },
+      });
+      await enqueueAccountCreatedEmail(transaction, {
+        userId: created.id,
+        recipientEmail: created.email,
+        userName: created.fullName,
+        accountCreatedAt: created.createdAt.toISOString(),
+      });
+      return created;
     });
   }
 
@@ -274,6 +304,7 @@ export const rotateRefreshToken = async (refreshToken: string): Promise<AuthResu
       refreshTokenHash: true,
       expiresAt: true,
       revokedAt: true,
+      deviceBindingVersion: true,
       user: {
         select: {
           id: true,
@@ -282,6 +313,7 @@ export const rotateRefreshToken = async (refreshToken: string): Promise<AuthResu
           status: true,
           deletedAt: true,
           role: { select: permissionSelect },
+          deviceBinding: { select: { bindingVersion: true, deviceIdHash: true } },
         },
       },
     },
@@ -294,6 +326,7 @@ export const rotateRefreshToken = async (refreshToken: string): Promise<AuthResu
     session.user.deletedAt ||
     session.user.status !== "ACTIVE" ||
     !session.user.role.isActive ||
+    (session.deviceBindingVersion !== null && session.deviceBindingVersion !== session.user.deviceBinding?.bindingVersion) ||
     !refreshTokenMatches(refreshToken, session.refreshTokenHash)
   ) {
     throw unauthorized("The refresh token is invalid or expired.");

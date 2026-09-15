@@ -5,6 +5,8 @@ import { prisma } from "../db/prisma.js";
 import { badRequest, conflict, notFound } from "../errors/api-error.js";
 import { sanitizeRichText } from "../utils/sanitize-html.js";
 import { enqueueJob } from "./backgroundJobService.js";
+import { dispatchQueuedNotification } from "./academyNotificationService.js";
+import { getStudentConceptInsights } from "./studentPerformanceService.js";
 
 export interface PageInput { page?: number; limit?: number }
 const paging = (input: PageInput) => ({ page: input.page ?? 1, limit: input.limit ?? 25 });
@@ -90,7 +92,7 @@ export async function getAcademyStudentDetail(context: TenantContext, studentUse
     orderBy: [{ enrolledAt: "desc" }, { id: "desc" }],
     select: { id: true, courseId: true, status: true, enrolledAt: true, completedAt: true, course: { select: { name: true, code: true } } },
   });
-  return { student: { id: membership.userId, ...membership.user, membershipStatus: membership.status, joinedAt: membership.joinedAt }, enrollments };
+  return { student: { id: membership.userId, ...membership.user, membershipStatus: membership.status, joinedAt: membership.joinedAt }, enrollments, performanceInsights: await getStudentConceptInsights(studentUserId, { academyId }) };
 }
 
 export async function inviteAcademyStudent(context: TenantContext, payload: { email: string; studentName?: string }) {
@@ -354,7 +356,7 @@ export async function createAcademyBroadcast(context: TenantContext, payload: Ac
     const placements: Array<"NOTIFICATION" | "HOME" | "COURSE" | "GENERAL"> = payload.placements ?? ["NOTIFICATION"];
     const broadcast = await transaction.broadcast.create({ data: {
       academyId, title: payload.title.trim(), subtitle: payload.subtitle?.trim() ?? "", message: payload.message.trim(), type: payload.type ?? "ANNOUNCEMENT", priority: payload.priority ?? "NORMAL", status: "DRAFT", startAt, endAt,
-      platform: payload.platform ?? "BOTH", audienceKind: targetCourse ? "COURSES" : "ACADEMY_STUDENTS", frequency: payload.frequency ?? "ONCE", dismissible: payload.dismissible ?? true,
+      platform: "APP", audienceKind: targetCourse ? "COURSES" : "ACADEMY_STUDENTS", frequency: payload.frequency ?? "ONCE", dismissible: payload.dismissible ?? true,
       presentation: payload.presentation ?? "NOTIFICATION", displayOrder: payload.displayOrder ?? "AUTOMATIC", customOrderWeight: payload.customOrderWeight ?? 50,
       acknowledgementRequired: payload.acknowledgementRequired ?? false, repeatBehavior: payload.repeatBehavior ?? "NEVER", showInWhatsNew: payload.showInWhatsNew ?? false,
       placements: { create: [...new Set(placements)].map((placement) => ({ placement })) },
@@ -386,7 +388,7 @@ export async function updateAcademyBroadcast(context: TenantContext, broadcastId
     if (payload.message !== undefined) data.message = payload.message.trim();
     if (payload.type !== undefined) data.type = payload.type;
     if (payload.priority !== undefined) data.priority = payload.priority;
-    if (payload.platform !== undefined) data.platform = payload.platform;
+    data.platform = "APP";
     if (payload.frequency !== undefined) data.frequency = payload.frequency;
     if (payload.dismissible !== undefined) data.dismissible = payload.dismissible;
     if (payload.presentation !== undefined) data.presentation = payload.presentation;
@@ -435,7 +437,13 @@ export async function publishAcademyBroadcast(context: TenantContext, broadcastI
     await writeAudit(transaction, { action: "BROADCAST_PUBLISHED", entityType: "Broadcast", entityId: broadcastId, academyId, actorId: context.user.id, description: `Published broadcast ${updated.title}.` });
     return { updated, notificationId: notification.id, jobId: job.id };
   });
-  return { ...published.updated, delivery: { notificationId: published.notificationId, jobId: published.jobId, status: "QUEUED" as const } };
+  try {
+    const delivered = await dispatchQueuedNotification(published.notificationId, academyId, context.user.id);
+    return { ...published.updated, delivery: { notificationId: published.notificationId, jobId: published.jobId, status: "SENT" as const, totalRecipients: delivered.totalRecipients } };
+  } catch {
+    // The durable background job remains queued and will retry transient delivery failures.
+    return { ...published.updated, delivery: { notificationId: published.notificationId, jobId: published.jobId, status: "QUEUED" as const } };
+  }
 }
 
 export async function scheduleAcademyBroadcast(context: TenantContext, broadcastId: string, startAt: string) {

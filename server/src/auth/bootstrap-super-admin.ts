@@ -1,5 +1,6 @@
 import { UserStatus } from "../../generated/prisma/client.js";
 import { prisma } from "../db/prisma.js";
+import { enqueueAccountCreatedEmail } from "../services/accountCreatedEmailService.js";
 
 const SUPABASE_UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -42,7 +43,8 @@ export const bootstrapSuperAdmin = async (
       throw new Error("The super_admin role is inactive.");
     }
 
-    return transaction.user.upsert({
+    const existing = await transaction.user.findUnique({ where: { id: authUserId }, select: { id: true } });
+    const user = await transaction.user.upsert({
       where: { id: authUserId },
       update: {
         email,
@@ -63,5 +65,14 @@ export const bootstrapSuperAdmin = async (
         roleId: superAdminRole.id,
       },
     });
+    if (!existing) {
+      await enqueueAccountCreatedEmail(transaction, {
+        userId: user.id,
+        recipientEmail: user.email,
+        userName: user.fullName,
+        accountCreatedAt: user.createdAt.toISOString(),
+      });
+    }
+    return user;
   });
 };

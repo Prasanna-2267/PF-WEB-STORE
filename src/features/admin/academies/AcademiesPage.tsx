@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -35,6 +36,8 @@ import {
   type AdminAcademyDetailResource,
   type AdminAcademyDto,
   type AdminAcademyStatus,
+  type AcademyProvisioningInput,
+  type AcademyProvisioningResult,
   type CreateAcademyInput,
   useAcademyLifecycle,
   useAdminAcademiesReadOnly,
@@ -52,11 +55,12 @@ import {
   AdminToast,
   type AdminToastData,
 } from '../AdminUi';
+import { AcademyCreationWizard } from './AcademyCreationWizard';
 import './academies.css';
 
 const ADMIN_EASE = [0.22, 1, 0.36, 1] as const;
 type AcademySort = 'newest' | 'oldest' | 'name-asc' | 'name-desc' | 'students' | 'courses';
-type AcademyDetailTab = 'overview' | 'students' | 'courses' | 'content' | 'questions' | 'broadcasts' | 'audit';
+type AcademyDetailTab = 'overview' | 'students' | 'courses' | 'content' | 'questions' | 'broadcasts' | 'admissions' | 'audit';
 
 const blankInput = (): CreateAcademyInput => ({
   name: '',
@@ -136,6 +140,14 @@ const formatFileSize = (value: number) => {
 };
 
 const plainText = (value: string) => value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+const humanize = (value?: string | null) => value
+  ? value.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+  : 'Not provided';
+const yesNo = (value?: boolean | null) => value ? 'Yes' : 'No';
+const socialEntries = (value: unknown): Array<[string, string]> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && Boolean(entry[1]));
+};
 
 interface AcademyEditorProps {
   academy?: AdminAcademyDto | null;
@@ -295,17 +307,46 @@ const AcademyEditorDialog: React.FC<{
     }
   };
 
+  const createProvisioned = async (input: AcademyProvisioningInput): Promise<AcademyProvisioningResult> => {
+    setError(null);
+    try {
+      const result = await createMutation.mutateAsync(input) as AcademyProvisioningResult;
+      onSaved(input.academy.displayName);
+      return result;
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : 'Academy could not be created.';
+      setError(message);
+      throw reason;
+    }
+  };
+
+  if (!academy) {
+    return (
+      <AdminDialog
+        open={open}
+        onClose={onClose}
+        size="wide"
+        title="Create Academy"
+        description="Provision a complete, isolated Academy tenant."
+        bodyClassName="pf-academy-create-dialog"
+      >
+        <AcademyCreationWizard
+          saving={saving}
+          error={error}
+          onCancel={onClose}
+          onCreate={createProvisioned}
+        />
+      </AdminDialog>
+    );
+  }
+
   return (
     <AdminDialog
       open={open}
       onClose={onClose}
       size="large"
-      title={academy ? 'Edit Academy' : 'New Academy'}
-      description={
-        academy
-          ? 'Update the organization details and primary administrator.'
-          : 'Create an independent tenant organization on Parallax Flow.'
-      }
+      title="Edit Academy"
+      description="Update the organization details and primary administrator."
       footer={
         <>
           <button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={onClose} disabled={saving}>
@@ -499,7 +540,7 @@ export const AcademiesPage: React.FC = () => {
           </label>
           <label className="pf-admin-field pf-academy-toolbar__select">
             <span className="pf-admin-sr-only">Status</span>
-            <select
+            <AppSelect
               className="pf-admin-select"
               value={statusFilter}
               onChange={(event) => {
@@ -512,11 +553,11 @@ export const AcademiesPage: React.FC = () => {
               <option value="PENDING">Pending</option>
               <option value="SUSPENDED">Suspended</option>
               <option value="ARCHIVED">Archived</option>
-            </select>
+            </AppSelect>
           </label>
           <label className="pf-admin-field pf-academy-toolbar__select">
             <span className="pf-admin-sr-only">Sort</span>
-            <select
+            <AppSelect
               className="pf-admin-select"
               value={sort}
               onChange={(event) => {
@@ -530,7 +571,7 @@ export const AcademiesPage: React.FC = () => {
               <option value="name-desc">Name Z–A</option>
               <option value="students">Most students</option>
               <option value="courses">Most courses</option>
-            </select>
+            </AppSelect>
           </label>
           <button className="pf-admin-button pf-academy-toolbar__add" type="button" onClick={() => setEditor(null)}>
             <Plus size={16} /> Add Academy
@@ -733,6 +774,7 @@ export const AcademyDetailsPage: React.FC = () => {
     content: 1,
     questions: 1,
     broadcasts: 1,
+    admissions: 1,
     audit: 1,
   });
 
@@ -781,6 +823,13 @@ export const AcademyDetailsPage: React.FC = () => {
     );
 
   const academy = academyQuery.data;
+  // Keep the detail page compatible with records created before the expanded
+  // provisioning projection, and with deliberately minimal API/test fixtures.
+  // The production API supplies these arrays, but a partial relation must never
+  // make the entire Academy inspection screen crash.
+  const academyAddresses = academy.addresses ?? [];
+  const academyAcademicOfferings = academy.academicOfferings ?? [];
+  const academyContacts = academy.contacts ?? [];
   const metrics = academy.metrics || {
     studentsCount: academy.studentCount,
     activeStudentsCount: academy.activeStudentCount,
@@ -809,6 +858,9 @@ export const AcademyDetailsPage: React.FC = () => {
     : [];
   const academyBroadcasts: AdminAcademyDetailDto['broadcasts'] = activeResource === 'broadcasts'
     ? (academyResourceQuery.data?.data ?? []) as AdminAcademyDetailDto['broadcasts']
+    : [];
+  const academyAdmissions: AdminAcademyDetailDto['admissions'] = activeResource === 'admissions'
+    ? (academyResourceQuery.data?.data ?? []) as AdminAcademyDetailDto['admissions']
     : [];
   const academyAuditLogs: NonNullable<AdminAcademyDetailDto['systemAuditLogs']> = activeResource === 'audit'
     ? (academyResourceQuery.data?.data ?? []) as NonNullable<AdminAcademyDetailDto['systemAuditLogs']>
@@ -924,6 +976,7 @@ export const AcademyDetailsPage: React.FC = () => {
           { key: 'content', label: `Content (${formatNumber(metrics.contentCount)})` },
           { key: 'questions', label: `Questions (${formatNumber(metrics.questionsCount)})` },
           { key: 'broadcasts', label: `Broadcasts (${formatNumber(metrics.broadcastCount)})` },
+          { key: 'admissions', label: 'Admissions' },
           { key: 'audit', label: `Audit Log (${formatNumber(metrics.auditLogCount ?? academy.systemAuditLogs?.length ?? 0)})` },
         ].map((tab) => (
           <button
@@ -952,6 +1005,10 @@ export const AcademyDetailsPage: React.FC = () => {
             </header>
             <div className="pf-academy-information-grid">
               <DetailValue label="Academy Name">{academy.name}</DetailValue>
+              <DetailValue label="Display Name">{academy.displayName}</DetailValue>
+              <DetailValue label="Academy Code">{academy.academyCode || 'Not generated'}</DetailValue>
+              <DetailValue label="Academy Type">{humanize(academy.academyType)}</DetailValue>
+              <DetailValue label="Established Year">{academy.establishedYear || 'Not provided'}</DetailValue>
               <DetailValue label="Email">
                 <a href={`mailto:${academy.email}`}>{academy.email}</a>
               </DetailValue>
@@ -972,11 +1029,88 @@ export const AcademyDetailsPage: React.FC = () => {
               <DetailValue label="State">{academy.state}</DetailValue>
               <DetailValue label="Country">{academy.country}</DetailValue>
               <DetailValue label="Postal Code">{academy.postalCode}</DetailValue>
+              <DetailValue label="Description">{academy.description || 'Not provided'}</DetailValue>
+              <DetailValue label="Logo">{academy.profile?.logoStoragePath ? 'Uploaded' : 'Not uploaded'}</DetailValue>
+              <DetailValue label="Onboarding Status">{humanize(academy.profile?.onboardingStatus)}</DetailValue>
+              {socialEntries(academy.socialLinks).map(([network, url]) => (
+                <DetailValue key={network} label={humanize(network)}>
+                  <a href={url} target="_blank" rel="noreferrer">Open profile <ExternalLink size={12} /></a>
+                </DetailValue>
+              ))}
               <DetailValue label="Academy ID">
                 <code>{academy.id}</code>
               </DetailValue>
               <DetailValue label="Created At">{formatDate(academy.createdAt, true)}</DetailValue>
               <DetailValue label="Last Updated">{formatDate(academy.updatedAt, true)}</DetailValue>
+            </div>
+
+            <div className="pf-academy-record-section">
+              <h3>Registered addresses</h3>
+              {academyAddresses.length ? academyAddresses.map((address) => (
+                <article className="pf-academy-record-item" key={address.id}>
+                  <strong>{humanize(address.kind)}</strong>
+                  <p>{[address.addressLine1, address.addressLine2, address.city, address.state, address.country, address.postalCode].filter(Boolean).join(', ')}</p>
+                </article>
+              )) : <p className="pf-academy-record-empty">No relational address record is available.</p>}
+            </div>
+
+            <div className="pf-academy-record-section">
+              <h3>Legal &amp; tax profile</h3>
+              <div className="pf-academy-information-grid">
+                <DetailValue label="Legal Name">{academy.legalProfile?.legalName || 'Not provided'}</DetailValue>
+                <DetailValue label="Entity Type">{humanize(academy.legalProfile?.entityType)}</DetailValue>
+                <DetailValue label="PAN Status">{humanize(academy.legalProfile?.panStatus)}</DetailValue>
+                <DetailValue label="PAN">{academy.legalProfile?.pan || 'Not provided'}</DetailValue>
+                <DetailValue label="TAN">{academy.legalProfile?.tan || 'Not provided'}</DetailValue>
+                <DetailValue label="GST Status">{humanize(academy.legalProfile?.gstStatus)}</DetailValue>
+                <DetailValue label="GSTIN">{academy.legalProfile?.gstin || 'Not provided'}</DetailValue>
+                <DetailValue label="GST State">{academy.legalProfile?.gstState || 'Not provided'}</DetailValue>
+                <DetailValue label="GST Registration Type">{humanize(academy.legalProfile?.gstRegistrationType)}</DetailValue>
+                <DetailValue label="GST Registration Date">{formatDate(academy.legalProfile?.gstRegistrationDate)}</DetailValue>
+                <DetailValue label="GST Certificate">{academy.legalProfile?.gstCertificateStoragePath ? 'Uploaded' : 'Not uploaded'}</DetailValue>
+                <DetailValue label="Place of Supply">{academy.legalProfile?.placeOfSupply || 'Not provided'}</DetailValue>
+              </div>
+            </div>
+
+            <div className="pf-academy-record-section">
+              <h3>Billing profile</h3>
+              <div className="pf-academy-information-grid">
+                <DetailValue label="Invoice Display Name">{academy.billingProfile?.invoiceDisplayName || 'Not provided'}</DetailValue>
+                <DetailValue label="Invoice Email">{academy.billingProfile?.invoiceEmail || 'Not provided'}</DetailValue>
+                <DetailValue label="Billing Contact">{academy.billingProfile?.billingContactName || 'Not provided'}</DetailValue>
+                <DetailValue label="Billing Phone">{academy.billingProfile?.billingContactPhone || 'Not provided'}</DetailValue>
+                <DetailValue label="Purchase Order Required">{yesNo(academy.billingProfile?.purchaseOrderRequired)}</DetailValue>
+                <DetailValue label="Currency">{academy.billingProfile?.currency || 'Not provided'}</DetailValue>
+              </div>
+            </div>
+
+            <div className="pf-academy-record-section">
+              <h3>Academic setup</h3>
+              {academyAcademicOfferings.length ? (
+                <div className="pf-academy-offerings">
+                  {academyAcademicOfferings.map((offering) => (
+                    <article key={offering.id}>
+                      <strong>{offering.category}</strong>
+                      <span>{[offering.program, offering.branch, offering.batch].filter(Boolean).join(' · ') || 'Category-wide offering'}</span>
+                    </article>
+                  ))}
+                </div>
+              ) : <p className="pf-academy-record-empty">No academic offerings were configured.</p>}
+            </div>
+
+            <div className="pf-academy-record-section">
+              <h3>Commercial terms</h3>
+              <div className="pf-academy-information-grid">
+                <DetailValue label="Plan">{humanize(academy.commercialProfile?.planKey)}</DetailValue>
+                <DetailValue label="Subscription Status">{humanize(academy.commercialProfile?.subscriptionStatus)}</DetailValue>
+                <DetailValue label="Start Date">{formatDate(academy.commercialProfile?.startDate)}</DetailValue>
+                <DetailValue label="End Date">{formatDate(academy.commercialProfile?.endDate)}</DetailValue>
+                <DetailValue label="Student Seat Limit">{academy.commercialProfile?.studentSeatLimit ?? 'Not provided'}</DetailValue>
+                <DetailValue label="Purchased Seats">{academy.commercialProfile?.purchasedSeats ?? 0}</DetailValue>
+                <DetailValue label="Active Seats">{academy.commercialProfile?.activeSeats ?? 0}</DetailValue>
+                <DetailValue label="Additional Seats">{academy.commercialProfile?.additionalSeats ?? 0}</DetailValue>
+                <DetailValue label="Billing Cycle">{humanize(academy.commercialProfile?.billingCycle)}</DetailValue>
+              </div>
             </div>
           </section>
 
@@ -1018,6 +1152,20 @@ export const AcademyDetailsPage: React.FC = () => {
               </ul>
             </section>
 
+            <section className="pf-academy-panel pf-academy-admin-card">
+              <header><div><p>Provisioning Contacts</p><h2>Academy Contacts</h2></div><UsersRound size={20} /></header>
+              <div className="pf-academy-contact-list">
+                {academyContacts.length ? academyContacts.map((contact) => (
+                  <article key={contact.id}>
+                    <strong>{contact.fullName}{contact.isPrimary ? ' · Primary' : ''}</strong>
+                    <small>{humanize(contact.role)}</small>
+                    <span>{contact.email || 'Email not provided'}</span>
+                    <span>{contact.phone || 'Phone not provided'}</span>
+                  </article>
+                )) : <p className="pf-academy-record-empty">No additional contacts were provided.</p>}
+              </div>
+            </section>
+
             <section className="pf-academy-panel pf-academy-status-card">
               <header>
                 <div>
@@ -1033,8 +1181,18 @@ export const AcademyDetailsPage: React.FC = () => {
                 </div>
                 <div>
                   <dt>Type</dt>
-                  <dd>Independent Academy</dd>
+                  <dd>{humanize(academy.academyType)}</dd>
                 </div>
+              </dl>
+            </section>
+
+            <section className="pf-academy-panel pf-academy-status-card">
+              <header><div><p>Platform Metadata</p><h2>Integrations</h2></div><ShieldCheck size={20} /></header>
+              <dl>
+                <div><dt>Zoho Sync</dt><dd>{humanize(academy.integrationProfile?.zohoSyncStatus)}</dd></div>
+                <div><dt>Zoho Customer</dt><dd>{academy.integrationProfile?.zohoCustomerNumber || 'Not connected'}</dd></div>
+                <div><dt>Payment Customer</dt><dd>{academy.integrationProfile?.paymentCustomerId ? 'Connected' : 'Not connected'}</dd></div>
+                <div><dt>Last Synced</dt><dd>{formatDate(academy.integrationProfile?.zohoLastSyncedAt, true)}</dd></div>
               </dl>
             </section>
           </aside>
@@ -1249,6 +1407,34 @@ export const AcademyDetailsPage: React.FC = () => {
             <p className="pf-academy-panel__empty">No broadcasts dispatched for this academy.</p>
           )}
           {resourcePagination('broadcasts')}
+        </section>
+      )}
+
+      {/* Admissions are deliberately read-only in the platform console. */}
+      {activeTab === 'admissions' && (
+        <section className="pf-academy-panel">
+          <header>
+            <div><p>Read-only operations</p><h2>Admissions</h2></div>
+            <UsersRound size={20} />
+          </header>
+          {academyResourceQuery.isPending ? <AdminSkeleton rows={3} label="Loading academy admissions" /> : academyResourceQuery.isError ? (
+            <ReadOnlyQueryState error={academyResourceQuery.error} onRetry={() => void academyResourceQuery.refetch()} resource="Academy admissions" />
+          ) : academyAdmissions.length ? (
+            <div className="pf-admin-table-wrap">
+              <table className="pf-admin-table">
+                <thead><tr><th>Student</th><th>Method</th><th>Status</th><th>Recorded</th></tr></thead>
+                <tbody>{academyAdmissions.map((admission) => (
+                  <tr key={admission.id}>
+                    <td data-label="Student"><strong>{admission.studentName || admission.student?.fullName || 'Student'}</strong><small>{admission.email}</small></td>
+                    <td data-label="Method">{admission.method.replaceAll('_', ' ')}</td>
+                    <td data-label="Status"><AdminStatusBadge tone={admission.status === 'SUCCESS' || admission.status === 'ALREADY_ADMITTED' ? 'success' : 'danger'}>{admission.status.replaceAll('_', ' ')}</AdminStatusBadge></td>
+                    <td data-label="Recorded">{formatDate(admission.completedAt || admission.createdAt, true)}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          ) : <p className="pf-academy-panel__empty">No admissions have been recorded for this Academy.</p>}
+          {resourcePagination('admissions')}
         </section>
       )}
 

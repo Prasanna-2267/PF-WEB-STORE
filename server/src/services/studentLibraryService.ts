@@ -1,7 +1,6 @@
 import type { EntitlementStatus, Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../db/prisma.js";
 import { conflict, forbidden, notFound } from "../errors/api-error.js";
-import { earliestExpiry, resolveResourceExpiry } from "./resourceValidityService.js";
 import { expandedPackageContentIds, packageRootIds, publishedCourseContent, type PackageContentRecord } from "./packageContentService.js";
 
 const EXPIRING_SOON_MS = 30 * 24 * 60 * 60_000;
@@ -53,8 +52,8 @@ const entitlementSelect = {
   reason: true,
   orderId: true,
   order: { select: { orderNumber: true, isComplimentary: true, totalAmount: true, currency: true, paidAt: true, receiptNumber: true } },
-  package: { select: { id: true, title: true, slug: true, courseId: true, status: true, deletedAt: true, items: { orderBy: { displayOrder: "asc" as const }, take: 5000, select: { contentItemId: true } } } },
-  contentItem: { select: { id: true, name: true, courseId: true, status: true, deletedAt: true, mimeType: true, kind: true, validityMode: true, validityOffsetDays: true } },
+  package: { select: { id: true, title: true, slug: true, courseId: true, status: true, deletedAt: true, items: { orderBy: { displayOrder: "asc" as const }, take: 5000, select: { contentItemId: true } }, questionBanks: { take: 5000, select: { questionBankId: true } } } },
+  contentItem: { select: { id: true, name: true, courseId: true, status: true, deletedAt: true, mimeType: true, kind: true, accessDurationValue: true, accessDurationUnit: true } },
   course: { select: { id: true, name: true, code: true, status: true, deletedAt: true } },
 } satisfies Prisma.EntitlementSelect;
 
@@ -115,7 +114,28 @@ const packageInclude = {
     select: {
       id: true,
       displayOrder: true,
-      contentItem: { select: { id: true, name: true, description: true, entityType: true, kind: true, mimeType: true, size: true, accessType: true, validityMode: true, validityOffsetDays: true, status: true, deletedAt: true } },
+      contentItem: { select: { id: true, name: true, description: true, entityType: true, kind: true, mimeType: true, size: true, accessType: true, accessDurationValue: true, accessDurationUnit: true, status: true, deletedAt: true } },
+    },
+  },
+  questionBanks: {
+    orderBy: { displayOrder: "asc" as const },
+    take: 5000,
+    select: {
+      id: true,
+      displayOrder: true,
+      questionBank: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          accessType: true,
+          price: true,
+          status: true,
+          deletedAt: true,
+          _count: { select: { questions: { where: { status: "PUBLISHED", deletedAt: null } } } },
+        },
+      },
     },
   },
 } satisfies Prisma.PackageInclude;
@@ -124,6 +144,7 @@ type PackageRecord = Prisma.PackageGetPayload<{ include: typeof packageInclude }
 
 function presentPackage(item: PackageRecord, access: { owned: boolean; source: string | null; expiresAt: Date | null }) {
   const publishedItems = item.items.filter((entry) => entry.contentItem.status === "PUBLISHED" && !entry.contentItem.deletedAt);
+  const publishedQuestionBanks = item.questionBanks.filter((entry) => entry.questionBank.status === "PUBLISHED" && !entry.questionBank.deletedAt);
   return {
     id: item.id,
     courseId: item.courseId,
@@ -133,6 +154,9 @@ function presentPackage(item: PackageRecord, access: { owned: boolean; source: s
     price: money(item.price),
     course: item.course,
     itemCount: publishedItems.length,
+    noteCount: publishedItems.length,
+    questionBankCount: publishedQuestionBanks.length,
+    resourceCount: publishedItems.length + publishedQuestionBanks.length,
     access,
     items: publishedItems.map(({ contentItem, displayOrder }) => ({
       id: contentItem.id,
@@ -144,7 +168,19 @@ function presentPackage(item: PackageRecord, access: { owned: boolean; source: s
       mimeType: contentItem.mimeType,
       sizeBytes: contentItem.size.toString(),
       accessType: contentItem.accessType,
-      validity: { mode: contentItem.validityMode, offsetDays: contentItem.validityOffsetDays },
+      accessDuration: { value: contentItem.accessDurationValue, unit: contentItem.accessDurationUnit },
+    })),
+    questionBanks: publishedQuestionBanks.map(({ questionBank, displayOrder }) => ({
+      id: questionBank.id,
+      title: questionBank.name,
+      slug: questionBank.slug,
+      description: questionBank.description,
+      displayOrder,
+      accessType: questionBank.accessType,
+      price: money(questionBank.price),
+      questionCount: questionBank._count.questions,
+      includedByPackage: access.owned,
+      practicePath: `/practice?mode=QUESTION_BANK&questionBankId=${encodeURIComponent(questionBank.id)}`,
     })),
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
@@ -183,7 +219,9 @@ export async function listPackages(userId: string, input: { search?: string; own
       return {
         ...presented,
         itemCount: included.filter((entry) => entry.kind === "FILE").length,
+        noteCount: included.filter((entry) => entry.kind === "FILE").length,
         folderCount: included.filter((entry) => entry.kind === "FOLDER").length,
+        resourceCount: included.filter((entry) => entry.kind === "FILE").length + presented.questionBankCount,
       };
     }),
     pagination: { page: input.page, limit: input.limit, total: filtered.length, pages: Math.ceil(filtered.length / input.limit) },
@@ -211,7 +249,9 @@ export async function getPackage(userId: string, packageId: string) {
   return {
     ...presented,
     itemCount: included.filter((entry) => entry.kind === "FILE").length,
+    noteCount: included.filter((entry) => entry.kind === "FILE").length,
     folderCount: included.filter((entry) => entry.kind === "FOLDER").length,
+    resourceCount: included.filter((entry) => entry.kind === "FILE").length + presented.questionBankCount,
     contentTree,
   };
 }
@@ -247,10 +287,9 @@ export async function getEntitlement(userId: string, entitlementId: string) {
 
 export async function getLibrary(userId: string, input: { page: number; limit: number }) {
   const now = new Date();
-  const [entitlements, orderCounts, preference] = await Promise.all([
+  const [entitlements, orderCounts] = await Promise.all([
     entitlementMaps(userId),
     prisma.order.groupBy({ by: ["isComplimentary"], where: { userId, status: "PAID" }, _count: { _all: true } }),
-    prisma.learnerPreference.findUnique({ where: { userId }, select: { examDate: true } }),
   ]);
   const active = entitlements.effective;
   const courseIds = active.flatMap((item) => item.courseId ? [item.courseId] : []);
@@ -270,7 +309,7 @@ export async function getLibrary(userId: string, input: { page: number; limit: n
       skip: (input.page - 1) * input.limit,
       take: input.limit,
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-      select: { id: true, courseId: true, name: true, description: true, entityType: true, mimeType: true, size: true, validityMode: true, validityOffsetDays: true, updatedAt: true, course: { select: { id: true, code: true, name: true } }, learnerStates: { where: { userId }, take: 1, select: { completed: true, favourite: true, progressPercent: true, currentPage: true, lastOpenedAt: true, revisionCount: true } } },
+      select: { id: true, courseId: true, name: true, description: true, entityType: true, mimeType: true, size: true, accessDurationValue: true, accessDurationUnit: true, updatedAt: true, course: { select: { id: true, code: true, name: true } }, learnerStates: { where: { userId }, take: 1, select: { completed: true, favourite: true, progressPercent: true, currentPage: true, lastOpenedAt: true, revisionCount: true } } },
     }),
     prisma.contentItem.count({ where }),
   ]) : [[], 0] as const;
@@ -280,10 +319,9 @@ export async function getLibrary(userId: string, input: { page: number; limit: n
     summary: { owned: total, freePurchases, paidPurchases, activeEntitlements: active.length, expiringSoon: active.filter((item) => effectiveStatus(item.status, item.expiresAt, now) === "EXPIRING_SOON").length },
     items: rows.map((item) => {
       const entitlement = entitlements.content.get(item.id) ?? active.find((entry) => entry.courseId === item.courseId);
-      const resourceExpiry = resolveResourceExpiry(item, preference?.examDate);
-      const expiresAt = earliestExpiry(entitlement?.expiresAt, resourceExpiry);
-      const status = resourceExpiry === undefined ? "EXPIRED" : entitlement ? effectiveStatus(entitlement.status, expiresAt, now) : "ACTIVE";
-      return { id: item.id, title: item.name, description: item.description, entityType: item.entityType, mimeType: item.mimeType, sizeBytes: item.size.toString(), validity: { mode: item.validityMode, offsetDays: item.validityOffsetDays }, course: item.course, state: item.learnerStates[0] ?? { completed: false, favourite: false, progressPercent: 0, currentPage: null, lastOpenedAt: null, revisionCount: 0 }, access: { source: entitlement?.source ?? "PURCHASE", expiresAt, status }, updatedAt: item.updatedAt };
+      const expiresAt = entitlement?.expiresAt ?? null;
+      const status = entitlement ? effectiveStatus(entitlement.status, expiresAt, now) : "ACTIVE";
+      return { id: item.id, title: item.name, description: item.description, entityType: item.entityType, mimeType: item.mimeType, sizeBytes: item.size.toString(), accessDuration: { value: item.accessDurationValue, unit: item.accessDurationUnit }, course: item.course, state: item.learnerStates[0] ?? { completed: false, favourite: false, progressPercent: 0, currentPage: null, lastOpenedAt: null, revisionCount: 0 }, access: { source: entitlement?.source ?? "PURCHASE", expiresAt, status }, updatedAt: item.updatedAt };
     }),
     pagination: { page: input.page, limit: input.limit, total, pages: Math.ceil(total / input.limit) },
     serverTime: now,
@@ -296,11 +334,11 @@ export async function listStoreResources(userId: string, input: { search?: strin
   const search = input.search?.trim();
   const [packages, notes] = await Promise.all([
     input.type === "note" ? Promise.resolve([]) : prisma.package.findMany({ where: { courseId: course.id, status: "PUBLISHED", deletedAt: null, ...(search ? { OR: [{ title: { contains: search, mode: "insensitive" } }, { description: { contains: search, mode: "insensitive" } }] } : {}) }, include: packageInclude, orderBy: { createdAt: "desc" }, take: 1000 }),
-    input.type === "package" ? Promise.resolve([]) : prisma.contentItem.findMany({ where: { courseId: course.id, kind: "FILE", status: "PUBLISHED", deletedAt: null, accessType: "PAID", ...(search ? { OR: [{ name: { contains: search, mode: "insensitive" } }, { description: { contains: search, mode: "insensitive" } }] } : {}) }, select: { id: true, name: true, description: true, entityType: true, mimeType: true, size: true, price: true, validityMode: true, validityOffsetDays: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 1000 }),
+    input.type === "package" ? Promise.resolve([]) : prisma.contentItem.findMany({ where: { courseId: course.id, kind: "FILE", status: "PUBLISHED", deletedAt: null, accessType: "PAID", NOT: { entityType: "MONTHLY_REPORT" }, ...(search ? { OR: [{ name: { contains: search, mode: "insensitive" } }, { description: { contains: search, mode: "insensitive" } }] } : {}) }, select: { id: true, name: true, description: true, entityType: true, mimeType: true, size: true, price: true, accessDurationValue: true, accessDurationUnit: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 1000 }),
   ]);
   const resources = [
     ...packages.map((item) => ({ type: "package" as const, id: item.id, title: item.title, description: item.description, price: money(item.price), itemCount: item.items.length, access: packageAccess(item, entitlements), createdAt: item.createdAt })),
-    ...notes.map((item) => { const owned = entitlements.ownsCourse || entitlements.content.has(item.id); const source = entitlements.content.get(item.id) ?? entitlements.effective.find((entry) => entry.courseId === course.id); return { type: "note" as const, id: item.id, title: item.name, description: item.description, price: money(item.price), entityType: item.entityType, mimeType: item.mimeType, sizeBytes: item.size.toString(), validity: { mode: item.validityMode, offsetDays: item.validityOffsetDays }, access: { owned, source: source?.source ?? null, expiresAt: source?.expiresAt ?? null }, createdAt: item.createdAt }; }),
+    ...notes.map((item) => { const owned = entitlements.ownsCourse || entitlements.content.has(item.id); const source = entitlements.content.get(item.id) ?? entitlements.effective.find((entry) => entry.courseId === course.id); return { type: "note" as const, id: item.id, title: item.name, description: item.description, price: money(item.price), entityType: item.entityType, mimeType: item.mimeType, sizeBytes: item.size.toString(), accessDuration: { value: item.accessDurationValue, unit: item.accessDurationUnit }, access: { owned, source: source?.source ?? null, expiresAt: source?.expiresAt ?? null }, createdAt: item.createdAt }; }),
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   const start = (input.page - 1) * input.limit;
   return { course: { id: course.id, code: course.code, name: course.name }, items: resources.slice(start, start + input.limit), pagination: { page: input.page, limit: input.limit, total: resources.length, pages: Math.ceil(resources.length / input.limit) } };
@@ -325,9 +363,10 @@ export async function getReceipt(userId: string, orderId: string) {
       createdAt: true,
       paidAt: true,
       refundedAt: true,
+      user: { select: { fullName: true, email: true, phone: true } },
       course: { select: { id: true, code: true, name: true } },
       items: { orderBy: { id: "asc" }, select: { id: true, resourceType: true, contentItemId: true, packageId: true, titleSnapshot: true, unitPrice: true, quantity: true, totalPrice: true } },
-      payments: { where: { status: { in: ["SUCCESS", "REFUNDED"] } }, orderBy: { createdAt: "desc" }, select: { id: true, provider: true, amount: true, currency: true, status: true, paymentMethod: true, createdAt: true } },
+      payments: { where: { status: { in: ["SUCCESS", "REFUNDED"] } }, orderBy: { createdAt: "desc" }, select: { id: true, provider: true, providerPaymentId: true, amount: true, currency: true, status: true, paymentMethod: true, createdAt: true, refunds: { orderBy: { createdAt: "desc" }, select: { id: true, providerRefundId: true, amount: true, reason: true, createdAt: true } } } },
       redemptions: { select: { discountAmount: true, coupon: { select: { code: true, discountType: true, discountValue: true } } } },
     },
   });
@@ -340,6 +379,7 @@ export async function getReceipt(userId: string, orderId: string) {
     refundStatus: order.refundStatus,
     accessStatus: order.accessStatus,
     purchaseType: order.isComplimentary ? "FREE_PURCHASE" as const : "PAID_PURCHASE" as const,
+    customer: order.user,
     course: order.course,
     totals: { subtotal: money(order.subtotal), discount: money(order.discountAmount), total: money(order.totalAmount) },
     paymentMethod: order.paymentMethod,
@@ -347,7 +387,7 @@ export async function getReceipt(userId: string, orderId: string) {
     paidAt: order.paidAt,
     refundedAt: order.refundedAt,
     items: order.items.map((item) => ({ ...item, unitPrice: money(item.unitPrice), totalPrice: money(item.totalPrice) })),
-    payments: order.payments.map((payment) => ({ ...payment, amount: money(payment.amount) })),
+    payments: order.payments.map((payment) => ({ ...payment, amount: money(payment.amount), refunds: payment.refunds.map((refund) => ({ ...refund, amount: money(refund.amount) })) })),
     coupons: order.redemptions.map((redemption) => ({ code: redemption.coupon.code, discountType: redemption.coupon.discountType, discountValue: Number(redemption.coupon.discountValue), discount: money(redemption.discountAmount) })),
   };
 }

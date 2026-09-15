@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, raw } from "express";
 import { z } from "zod";
 import { asyncRoute } from "../middleware/async-route.js";
 import * as broadcast from "../services/adminBroadcastService.js";
@@ -9,6 +9,10 @@ export const adminBroadcastRouter = Router();
 adminBroadcastRouter.get("/", asyncRoute(async (req, res) => { const query = z.object({ page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(100).default(25), status: z.enum(["DRAFT", "SCHEDULED", "ACTIVE", "EXPIRED", "ARCHIVED", "DISABLED"]).optional() }).parse(req.query); res.json(await broadcast.listBroadcasts(query)); }));
 adminBroadcastRouter.post("/", asyncRoute(async (req, res) => { res.status(201).json(await broadcast.createBroadcast(req.auth!.userId, input.parse(req.body))); }));
 adminBroadcastRouter.post("/:broadcastId/image/upload-intent", asyncRoute(async (req, res) => { const body = z.object({ fileName: z.string().trim().min(1).max(180), mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"]), sizeBytes: z.number().int().positive().max(10 * 1024 * 1024), checksumSha256: z.string().regex(/^[a-f0-9]{64}$/i) }).strict().parse(req.body); res.status(201).json(await broadcastMedia.createImageUpload({ academyId: null, actorId: req.auth!.userId }, uuid.parse(req.params.broadcastId), body)); }));
+adminBroadcastRouter.put("/:broadcastId/image/uploads/:uploadId", raw({ type: ["image/jpeg", "image/png", "image/webp", "image/gif"], limit: "10mb" }), asyncRoute(async (req, res) => {
+  if (!Buffer.isBuffer(req.body)) throw new Error("Broadcast image body was not parsed as binary data.");
+  res.json(await broadcastMedia.uploadImageBytes({ academyId: null, actorId: req.auth!.userId }, uuid.parse(req.params.broadcastId), uuid.parse(req.params.uploadId), req.body));
+}));
 adminBroadcastRouter.post("/:broadcastId/image", asyncRoute(async (req, res) => { const body = z.object({ uploadId: uuid }).strict().parse(req.body); res.json(await broadcastMedia.finalizeImage({ academyId: null, actorId: req.auth!.userId }, uuid.parse(req.params.broadcastId), body.uploadId)); }));
 adminBroadcastRouter.get("/:broadcastId/image", asyncRoute(async (req, res) => { res.json(await broadcastMedia.getImageUrl({ academyId: null, actorId: req.auth!.userId }, uuid.parse(req.params.broadcastId))); }));
 adminBroadcastRouter.delete("/:broadcastId/image", asyncRoute(async (req, res) => { res.json(await broadcastMedia.deleteImage({ academyId: null, actorId: req.auth!.userId }, uuid.parse(req.params.broadcastId))); }));

@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -10,9 +11,11 @@ import { getProductBySlug } from './data/catalog';
 import { getStoreCartGuard } from './StoreCartActions';
 import { useStoreContextStore } from './data/useStoreContext';
 import { usePublicCatalog, usePublicCatalogUserCourses } from './data/publicCatalogApi';
+import { findCourseByIdentity, preferredCourseKey } from './utils/courseIdentity';
 import './store.css';
+import { PoweredByNeuralWebLabs } from '@/components/branding/PoweredByNeuralWebLabs';
 
-export const StoreHeaderCourseSelector: React.FC = () => {
+export const StoreHeaderCourseSelector: React.FC<{ onSelect?: () => void; mobile?: boolean }> = ({ onSelect, mobile = false }) => {
   const { selectedCourseSlug, setSelectedCourseSlug, initializeForStudent } = useStoreContextStore();
   const user = useAuthStore((state) => state.user);
   const catalogQuery = usePublicCatalog();
@@ -20,7 +23,7 @@ export const StoreHeaderCourseSelector: React.FC = () => {
 
   const availableCourses = useMemo(() => {
     const userEnrolled = userCoursesQuery.data?.courses || [];
-    if (user?.id && userEnrolled.length > 0) {
+    if (user?.id) {
       return userEnrolled.map((c) => ({
         slug: c.slug || c.id,
         name: c.name,
@@ -41,24 +44,35 @@ export const StoreHeaderCourseSelector: React.FC = () => {
   useEffect(() => {
     if (availableCourses.length > 0) {
       const slugs = availableCourses.map((c) => c.slug);
-      initializeForStudent(slugs);
+      if (user?.id) {
+        initializeForStudent(slugs);
+      } else if (selectedCourseSlug !== 'all' && !slugs.includes(selectedCourseSlug)) {
+        setSelectedCourseSlug('all');
+      }
     }
-  }, [availableCourses, initializeForStudent]);
+  }, [availableCourses, initializeForStudent, selectedCourseSlug, setSelectedCourseSlug, user?.id]);
 
   return (
-    <div className="pf-store-nav-course-selector">
-      <select
+    <div className={`pf-store-nav-course-selector${mobile ? ' pf-store-nav-course-selector--mobile' : ''}`}>
+      {mobile ? <label htmlFor="store-mobile-course">Course</label> : null}
+      <AppSelect
+        id={mobile ? 'store-mobile-course' : 'store-desktop-course'}
         value={selectedCourseSlug}
-        onChange={(e) => setSelectedCourseSlug(e.target.value as any)}
+        onChange={(e) => {
+          setSelectedCourseSlug(e.target.value as any);
+          onSelect?.();
+        }}
         aria-label="Select active store course"
       >
-        <option value="all">All Courses</option>
+        {!user?.id ? <option value="all">All Courses</option> : null}
+        {user?.id && userCoursesQuery.isLoading ? <option value={selectedCourseSlug}>Loading your course...</option> : null}
+        {user?.id && !userCoursesQuery.isLoading && availableCourses.length === 0 ? <option value="all">No enrolled courses</option> : null}
         {availableCourses.map((c) => (
           <option key={c.slug} value={c.slug}>
             {c.name}
           </option>
         ))}
-      </select>
+      </AppSelect>
     </div>
   );
 };
@@ -78,8 +92,8 @@ const StoreLayout: React.FC = () => {
   const [search, setSearch] = useState('');
   const catalogQuery = usePublicCatalog();
   const activeCourse = useMemo(
-    () => (catalogQuery.data?.courses || []).find((course) => course.slug === user?.enrolledCourse?.slug),
-    [catalogQuery.data, user?.enrolledCourse?.slug],
+    () => selectedCourseSlug === 'all' ? undefined : findCourseByIdentity(catalogQuery.data?.courses || [], selectedCourseSlug),
+    [catalogQuery.data, selectedCourseSlug],
   );
 
   useEffect(() => {
@@ -124,14 +138,18 @@ const StoreLayout: React.FC = () => {
     from: { pathname: location.pathname, search: location.search, hash: location.hash },
   };
 
-  const userCourseSlug = user?.enrolledCourse?.slug || 'ca-intermediate';
+  const fallbackCourseKey = preferredCourseKey(user?.enrolledCourse)
+    || preferredCourseKey(catalogQuery.data?.courses?.[0]);
+  const notesCourseKey = selectedCourseSlug !== 'all' ? selectedCourseSlug : fallbackCourseKey;
+  const notesPath = notesCourseKey ? buildStoreCategoryPath(notesCourseKey) : `${ROUTES.STORE}?type=notes`;
   const currentType = new URLSearchParams(location.search).get('type');
   const isPurchases = location.pathname === ROUTES.STORE_PURCHASES;
   const isCategoryPage = location.pathname.startsWith('/store/category');
 
   const navigation = [
     { label: 'Featured', to: ROUTES.STORE },
-    { label: 'Notes', to: buildStoreCategoryPath(userCourseSlug) },
+    { label: 'Notes', to: notesPath },
+    { label: 'Question Banks', to: `${ROUTES.STORE}?type=question-bank` },
     { label: 'Bundles', to: `${ROUTES.STORE}?type=bundle` },
     { label: 'Subscriptions', to: `${ROUTES.STORE}?type=subscription` },
     { label: 'My Purchases', to: ROUTES.STORE_PURCHASES },
@@ -140,6 +158,7 @@ const StoreLayout: React.FC = () => {
   const isTabActive = (label: string) => {
     if (isPurchases) return label === 'My Purchases';
     if (label === 'Notes') return isCategoryPage || currentType === 'notes';
+    if (label === 'Question Banks') return currentType === 'question-bank';
     if (label === 'Bundles') return currentType === 'bundle';
     if (label === 'Subscriptions') return currentType === 'subscription';
     if (label === 'Featured') return location.pathname === ROUTES.STORE && !currentType;
@@ -241,7 +260,8 @@ const StoreLayout: React.FC = () => {
           </div>
           <div className="pf-store-nav-center">
             <Link to={ROUTES.STORE} className={isTabActive('Featured') ? 'active' : ''}>Featured</Link>
-            <Link to={buildStoreCategoryPath(selectedCourseSlug !== 'all' ? selectedCourseSlug : userCourseSlug)} className={isTabActive('Notes') ? 'active' : ''}>Notes</Link>
+            <Link to={notesPath} className={isTabActive('Notes') ? 'active' : ''}>Notes</Link>
+            <Link to={`${ROUTES.STORE}?type=question-bank`} className={isTabActive('Question Banks') ? 'active' : ''}>Question Banks</Link>
             <Link to={`${ROUTES.STORE}?type=bundle`} className={isTabActive('Bundles') ? 'active' : ''}>Bundles</Link>
             <Link to={`${ROUTES.STORE}?type=subscription`} className={isTabActive('Subscriptions') ? 'active' : ''}>Subscriptions</Link>
             <Link to={ROUTES.STORE_PURCHASES} className={isTabActive('My Purchases') ? 'active' : ''}>My Purchases</Link>
@@ -261,6 +281,7 @@ const StoreLayout: React.FC = () => {
               transition={{ duration: .25, ease: [0.22, 1, 0.36, 1] }}
             >
               <form role="search" onSubmit={submitSearch}><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search the Store" /><button>Go</button></form>
+              <StoreHeaderCourseSelector mobile onSelect={() => setMenuOpen(false)} />
               {navigation.map((item) => <Link key={item.label} to={item.to}>{item.label}<ArrowRight size={15} /></Link>)}
               <Link to={ROUTES.HOME}>Back to Parallax Flow<ArrowRight size={15} /></Link>
             </motion.nav>
@@ -284,11 +305,11 @@ const StoreLayout: React.FC = () => {
           <p>Premium educational resources designed for clarity, purchased securely on the web, and unlocked in your Parallax Flow learning space.</p>
         </div>
         <div className="pf-store-footer__links">
-          <div><h3>Store</h3><Link to={ROUTES.STORE}>Featured</Link><Link to={buildStoreCategoryPath(userCourseSlug)}>Notes</Link><Link to={`${ROUTES.STORE}?type=bundle`}>Bundles</Link></div>
+          <div><h3>Store</h3><Link to={ROUTES.STORE}>Featured</Link><Link to={notesPath}>Notes</Link><Link to={`${ROUTES.STORE}?type=question-bank`}>Question Banks</Link><Link to={`${ROUTES.STORE}?type=bundle`}>Bundles</Link></div>
           <div><h3>Account</h3><Link to={ROUTES.STORE_PURCHASES}>My Purchases</Link><Link to={ROUTES.STORE_PROFILE}>Profile</Link><Link to={ROUTES.STORE_CART}>Cart</Link></div>
           <div><h3>Parallax Flow</h3><Link to={ROUTES.HOME}>Home</Link><Link to={ROUTES.ABOUT}>About Us</Link><Link to={ROUTES.CONTACT}>Contact</Link></div>
         </div>
-        <div className="pf-store-footer__bottom"><span>© {new Date().getFullYear()} Parallax Learning Hub LLP.</span><span>Purchases unlock inside the Android application.</span></div>
+        <div className="pf-store-footer__bottom"><span>© {new Date().getFullYear()} Parallax Learning Hub LLP.</span><PoweredByNeuralWebLabs className="pf-store-footer__powered" /><span>Purchases unlock inside the Android application.</span></div>
       </footer>
       </div>
     </MotionConfig>

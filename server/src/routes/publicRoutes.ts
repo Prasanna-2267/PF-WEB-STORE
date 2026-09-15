@@ -4,12 +4,34 @@ import { createRateLimiter } from "../middleware/rate-limit.js";
 import { asyncRoute } from "../middleware/async-route.js";
 import * as publicService from "../services/publicService.js";
 import { computeCollectionProducts } from "../services/merchandisingService.js";
+import { requireAuth } from "../auth/auth-middleware.js";
 
 const uuid = z.string().uuid();
 export const catalogRouter = Router();
+const sendCatalogImage = async (res: any, image: { url: string; mimeType?: string }) => {
+  const upstream = await fetch(image.url);
+  if (!upstream.ok) {
+    res.status(502).json({ error: { code: "CATALOG_PREVIEW_FETCH_FAILED", message: "The content preview could not be loaded." } });
+    return;
+  }
+  const buffer = Buffer.from(await upstream.arrayBuffer());
+  res.set("Cache-Control", "private, max-age=300");
+  res.type(image.mimeType || upstream.headers.get("content-type") || "application/octet-stream");
+  res.send(buffer);
+};
 catalogRouter.get("/", asyncRoute(async (req, res) => { const query = z.object({ page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(100).default(25), search: z.string().trim().max(120).optional(), academyId: uuid.optional() }).parse(req.query); res.json(await publicService.listCatalog(query)); }));
 catalogRouter.get("/courses/:courseId", asyncRoute(async (req, res) => { res.json(await publicService.getCatalogCourse(uuid.parse(req.params.courseId))); }));
 catalogRouter.get("/packages/:packageId", asyncRoute(async (req, res) => { res.json(await publicService.getCatalogPackage(uuid.parse(req.params.packageId))); }));
+catalogRouter.get("/question-banks/:questionBankId", asyncRoute(async (req, res) => { res.json(await publicService.getCatalogQuestionBank(uuid.parse(req.params.questionBankId))); }));
+catalogRouter.get("/content/:contentId/cover", asyncRoute(async (req, res) => {
+  const cover = await publicService.getCatalogContentCover(uuid.parse(req.params.contentId));
+  await sendCatalogImage(res, cover);
+}));
+catalogRouter.get("/content/:contentId/previews/:imageId", asyncRoute(async (req, res) => {
+  const image = await publicService.getCatalogContentPreviewImage(uuid.parse(req.params.contentId), uuid.parse(req.params.imageId));
+  await sendCatalogImage(res, image);
+}));
+catalogRouter.get("/content/:contentId", asyncRoute(async (req, res) => { res.json(await publicService.getCatalogContent(uuid.parse(req.params.contentId))); }));
 catalogRouter.get("/collections/:key", asyncRoute(async (req: any, res) => {
   const key = z.string().trim().parse(req.params.key);
   const courseSlug = typeof req.query.courseSlug === "string" ? req.query.courseSlug : "all";
@@ -17,12 +39,8 @@ catalogRouter.get("/collections/:key", asyncRoute(async (req: any, res) => {
   res.json(await computeCollectionProducts(key, courseSlug, studentUserId));
 }));
 
-catalogRouter.get("/user-courses", asyncRoute(async (req: any, res) => {
-  if (!req.actorId) {
-    res.json({ courses: [] });
-    return;
-  }
-  const student = await publicService.getStudentUserCourses(req.actorId);
+catalogRouter.get("/user-courses", requireAuth, asyncRoute(async (req, res) => {
+  const student = await publicService.getStudentUserCourses(req.auth!.userId);
   res.json({ courses: student });
 }));
 

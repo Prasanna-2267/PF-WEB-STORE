@@ -90,7 +90,7 @@ export interface AdminOrderFilters {
 }
 
 export interface RefundOrderInput {
-  amount?: number;
+  amount: number;
   reason: string;
 }
 

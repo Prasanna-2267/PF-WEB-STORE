@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Sun, Moon, Mail, Linkedin, Instagram } from 'lucide-react';
 import { ROUTES } from '@/config/routes';
 import { useThemeStore } from '@/app/store/useThemeStore';
+import { PoweredByNeuralWebLabs } from '@/components/branding/PoweredByNeuralWebLabs';
 import '@/features/home/theme.css';
 import '@/features/home/footer.css';
 import '@/features/home/login.css';
@@ -93,10 +94,7 @@ export const AuthLayout: React.FC<{ children: React.ReactNode }> = ({ children }
           </div>
         </div>
         <div className="pf-powered-by">
-          <span>Powered by</span>
-          <a href="http://neuralweblabs.com/" target="_blank" rel="noopener noreferrer">
-            NeuralWeb Labs
-          </a>
+          <PoweredByNeuralWebLabs />
         </div>
       </footer>
     </div>

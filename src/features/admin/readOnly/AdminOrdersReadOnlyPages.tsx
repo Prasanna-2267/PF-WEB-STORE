@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -81,6 +82,11 @@ function orderStatusTone(status: AdminOrderStatus): AdminStatusTone {
     default:
       return 'neutral';
   }
+}
+
+function displayedOrderStatus(order: { status: AdminOrderStatus; refundStatus?: string }): { label: string; tone: AdminStatusTone } {
+  if (order.refundStatus === 'PARTIAL') return { label: 'Partially Refunded', tone: 'warning' };
+  return { label: humanize(order.status), tone: orderStatusTone(order.status) };
 }
 
 function formatCurrency(amount: number | string, currency = 'INR'): string {
@@ -205,7 +211,7 @@ export const AdminOrdersReadOnlyPage: React.FC = () => {
 
           <label className="pf-admin-field">
             <span>Status</span>
-            <select
+            <AppSelect
               className="pf-admin-select"
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value as AdminOrderStatus | 'ALL'); setPage(1); }}
@@ -216,7 +222,7 @@ export const AdminOrdersReadOnlyPage: React.FC = () => {
               <option value="FAILED">Failed</option>
               <option value="REFUNDED">Refunded</option>
               <option value="CANCELLED">Cancelled</option>
-            </select>
+            </AppSelect>
           </label>
         </div>
 
@@ -284,8 +290,8 @@ export const AdminOrdersReadOnlyPage: React.FC = () => {
                           </AdminStatusBadge>
                         </td>
                         <td>
-                          <AdminStatusBadge tone={orderStatusTone(order.status)}>
-                            {humanize(order.status)}
+                          <AdminStatusBadge tone={displayedOrderStatus(order).tone}>
+                            {displayedOrderStatus(order).label}
                           </AdminStatusBadge>
                         </td>
                         <td>
@@ -321,8 +327,8 @@ export const AdminOrdersReadOnlyPage: React.FC = () => {
                         <AdminStatusBadge tone={order.accessStatus === 'GRANTED' ? 'success' : order.accessStatus === 'REVOKED' ? 'danger' : 'neutral'}>
                           {humanize(order.accessStatus)}
                         </AdminStatusBadge>
-                        <AdminStatusBadge tone={orderStatusTone(order.status)}>
-                          {humanize(order.status)}
+                        <AdminStatusBadge tone={displayedOrderStatus(order).tone}>
+                          {displayedOrderStatus(order).label}
                         </AdminStatusBadge>
                       </div>
                     </div>
@@ -482,18 +488,19 @@ const AdminOrderDetailContent: React.FC<{ order: any; onRefresh: () => void }> =
 
   const handleRefundSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!refundReason.trim() || refundReason.trim().length < 3) return;
+    const amount = Number(refundAmount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > manualRefundAmount || !refundReason.trim() || refundReason.trim().length < 3) return;
     try {
       await refundMutation.mutateAsync({
         orderId: order.id,
         input: {
-          amount: refundAmount ? parseFloat(refundAmount) : undefined,
+          amount,
           reason: refundReason.trim(),
         },
       });
       setIsRefundModalOpen(false);
-      setRefundReason('');
       setRefundAmount('');
+      setRefundReason('');
       onRefresh();
     } catch {
       // Handled by mutation state
@@ -523,6 +530,9 @@ const AdminOrderDetailContent: React.FC<{ order: any; onRefresh: () => void }> =
   const entitlements: any[] = order.entitlements ?? [];
   const auditLogs: any[] = order.auditLogs ?? [];
   const refunds: any[] = payments.flatMap((p: any) => p.refunds ?? []);
+  const manualRefundAmount = Math.max(0, Number(order.totalAmount) - refunds.reduce((sum: number, refund: any) => sum + Number(refund.amount), 0));
+  const enteredRefundAmount = Number(refundAmount);
+  const refundAmountIsValid = Number.isFinite(enteredRefundAmount) && enteredRefundAmount > 0 && enteredRefundAmount <= manualRefundAmount;
   const humanPurchasedItem = resolveHumanPurchasedItem(order);
 
   const canRefund = order.status === 'PAID' && order.refundStatus !== 'FULL';
@@ -533,7 +543,7 @@ const AdminOrderDetailContent: React.FC<{ order: any; onRefresh: () => void }> =
       {/* 1. TOP ORDER SUMMARY CARD */}
       <section style={{ padding: 18, backgroundColor: 'var(--admin-bg, #f8fafc)', borderRadius: 12, border: '1px solid var(--admin-line, #e2e8f0)' }}>
         <div className="pf-admin-order-details__status" style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-          <AdminStatusBadge tone={orderStatusTone(order.status)}>{humanize(order.status)}</AdminStatusBadge>
+          <AdminStatusBadge tone={displayedOrderStatus(order).tone}>{displayedOrderStatus(order).label}</AdminStatusBadge>
           <AdminStatusBadge tone={order.accessStatus === 'GRANTED' ? 'success' : order.accessStatus === 'REVOKED' ? 'danger' : 'neutral'}>
             Access: {humanize(order.accessStatus)}
           </AdminStatusBadge>
@@ -588,7 +598,7 @@ const AdminOrderDetailContent: React.FC<{ order: any; onRefresh: () => void }> =
               onClick={() => setIsRefundModalOpen(true)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
-              <RotateCcw size={16} /> Issue Refund
+              <RotateCcw size={16} /> Record Refund
             </button>
           ) : null}
 
@@ -746,8 +756,8 @@ const AdminOrderDetailContent: React.FC<{ order: any; onRefresh: () => void }> =
         <AdminDialog
           open={true}
           onClose={() => setIsRefundModalOpen(false)}
-          title="Issue Order Refund"
-          description={`Process a full or partial refund for Order ${order.orderNumber || order.id.slice(0, 8)}.`}
+          title="Record Manual Refund"
+          description={`Record a full or partial refund for Order ${order.orderNumber || order.id.slice(0, 8)} after it has been completed manually outside Parallax Flow.`}
           icon={<RotateCcw size={22} />}
           size="small"
           footer={
@@ -759,29 +769,35 @@ const AdminOrderDetailContent: React.FC<{ order: any; onRefresh: () => void }> =
                 className="pf-admin-button"
                 type="submit"
                 form="refund-order-form"
-                disabled={refundMutation.isPending || !refundReason.trim() || refundReason.trim().length < 3}
+                disabled={refundMutation.isPending || !refundAmountIsValid || !refundReason.trim() || refundReason.trim().length < 3}
                 style={{ background: '#d97706', color: '#ffffff' }}
               >
-                {refundMutation.isPending ? 'Processing Refund…' : <><CheckCircle2 size={15} /> Confirm Refund</>}
+                {refundMutation.isPending ? 'Recording Refund…' : <><CheckCircle2 size={15} /> Record Refund</>}
               </button>
             </div>
           }
         >
           <form id="refund-order-form" onSubmit={(e) => void handleRefundSubmit(e)} className="pf-admin-dialog-form">
             <label className="pf-admin-field">
-              <span>Refund Amount ({order.currency}) — Optional</span>
+              <span>Manual refund amount ({order.currency})</span>
               <input
                 className="pf-admin-input"
                 type="number"
-                step="0.01"
+                required
                 min="0.01"
-                max={typeof order.totalAmount === 'number' ? order.totalAmount : parseFloat(order.totalAmount)}
-                placeholder={`Full Amount: ${formatCurrency(order.totalAmount, order.currency)}`}
+                max={manualRefundAmount}
+                step="0.01"
+                inputMode="decimal"
+                placeholder={manualRefundAmount.toFixed(2)}
                 value={refundAmount}
                 onChange={(e) => setRefundAmount(e.target.value)}
               />
-              <small>Leave empty for a full refund of {formatCurrency(order.totalAmount, order.currency)}.</small>
+              <small>Refundable balance: {formatCurrency(manualRefundAmount, order.currency)}. Enter the full balance or any smaller amount.</small>
             </label>
+
+            <div className="pf-admin-field">
+              <small>No payment or refund transaction will be initiated by Parallax Flow. Confirm only after the entered amount has been refunded externally.</small>
+            </div>
 
             <label className="pf-admin-field">
               <span>Mandatory Refund Reason Note</span>

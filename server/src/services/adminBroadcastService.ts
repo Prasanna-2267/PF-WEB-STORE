@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma.js";
 import { badRequest, conflict, notFound } from "../errors/api-error.js";
 import { enqueueJob } from "./backgroundJobService.js";
 import { fanoutPlatformBroadcastToUnaffiliatedLearners } from "./learnerNotificationService.js";
+import { dispatchQueuedNotification } from "./academyNotificationService.js";
 
 interface Input { title: string; subtitle?: string; message: string; type?: "ANNOUNCEMENT" | "IMPORTANT_NOTICE" | "UPDATE" | "PROMOTION" | "MAINTENANCE" | "FEATURE_UPDATE" | "ACADEMIC" | "STORE" | "GENERAL" | "CRITICAL_ALERT"; priority?: "LOW" | "NORMAL" | "HIGH" | "CRITICAL"; targetAcademyIds?: string[]; startAt?: string; endAt?: string }
 export async function listBroadcasts(input: { page: number; limit: number; status?: "DRAFT" | "SCHEDULED" | "ACTIVE" | "EXPIRED" | "ARCHIVED" | "DISABLED" }) {
@@ -15,7 +16,7 @@ export async function createBroadcast(actorId: string, input: Input) {
   const targets = [...new Set(input.targetAcademyIds ?? [])];
   if (targets.length && await prisma.academy.count({ where: { id: { in: targets }, status: "ACTIVE", deletedAt: null } }) !== targets.length) throw badRequest("INVALID_ACADEMY_TARGETS", "Every target academy must be active.");
   return prisma.$transaction(async (tx) => {
-    const broadcast = await tx.broadcast.create({ data: { title: input.title.trim(), subtitle: input.subtitle?.trim() ?? "", message: input.message.trim(), type: input.type ?? "ANNOUNCEMENT", priority: input.priority ?? "NORMAL", status: "DRAFT", audienceKind: targets.length ? "ACADEMIES" : "EVERYONE", startAt: input.startAt ? new Date(input.startAt) : null, endAt: input.endAt ? new Date(input.endAt) : null, academyTargets: targets.length ? { create: targets.map((academyId) => ({ academyId })) } : undefined, timeline: { create: { actorId, action: "CREATED", description: "Created platform broadcast." } } }, include: { academyTargets: true } });
+    const broadcast = await tx.broadcast.create({ data: { title: input.title.trim(), subtitle: input.subtitle?.trim() ?? "", message: input.message.trim(), type: input.type ?? "ANNOUNCEMENT", priority: input.priority ?? "NORMAL", status: "DRAFT", platform: "APP", audienceKind: targets.length ? "ACADEMIES" : "EVERYONE", startAt: input.startAt ? new Date(input.startAt) : null, endAt: input.endAt ? new Date(input.endAt) : null, placements: { create: [{ placement: "NOTIFICATION" }, { placement: "HOME" }] }, academyTargets: targets.length ? { create: targets.map((academyId) => ({ academyId })) } : undefined, timeline: { create: { actorId, action: "CREATED", description: "Created platform broadcast." } } }, include: { academyTargets: true } });
     await tx.systemAuditLog.create({ data: { actorId, action: "PLATFORM_BROADCAST_CREATED", entityType: "Broadcast", entityId: broadcast.id, description: `Created platform broadcast ${broadcast.title}.` } });
     return broadcast;
   });
@@ -41,8 +42,13 @@ export async function publishBroadcast(actorId: string, id: string) {
     const updated = await tx.broadcast.update({ where: { id }, data: { status: "ACTIVE", publishedAt: new Date(), startAt: current.startAt ?? new Date(), timeline: { create: { actorId, action: "PUBLISHED", description: `Published to ${academyIds.length} academies.` } } } });
     return { updated, notificationIds };
   });
+  const deliveryResults = await Promise.allSettled(result.notificationIds.map((target) => dispatchQueuedNotification(target.notificationId, target.academyId, actorId)));
   const mobileAudience = await fanoutPlatformBroadcastToUnaffiliatedLearners(id);
-  return { ...result.updated, deliveries: result.notificationIds.map((target) => ({ ...target, status: "QUEUED" as const })), mobilePush: { status: "QUEUED" as const, directLearners: mobileAudience.created } };
+  return {
+    ...result.updated,
+    deliveries: result.notificationIds.map((target, index) => ({ ...target, status: deliveryResults[index]?.status === "fulfilled" ? "SENT" as const : "QUEUED" as const })),
+    mobilePush: { status: "QUEUED" as const, directLearners: mobileAudience.created },
+  };
 }
 export async function scheduleBroadcast(actorId: string, id: string, startAt: string) { const date = new Date(startAt); if (date <= new Date()) throw badRequest("INVALID_BROADCAST_SCHEDULE", "startAt must be in the future."); return prisma.$transaction(async (tx) => { const changed = await tx.broadcast.updateMany({ where: { id, academyId: null, deletedAt: null, status: { in: ["DRAFT", "SCHEDULED"] } }, data: { status: "SCHEDULED", startAt: date } }); if (!changed.count) throw conflict("BROADCAST_NOT_SCHEDULABLE", "The broadcast is not schedulable."); await enqueueJob({ kind: "GLOBAL_BROADCAST_PUBLISH", payload: { broadcastId: id, actorId }, createdById: actorId, runAt: date, deduplicationKey: id }, tx); return tx.broadcast.findUniqueOrThrow({ where: { id } }); }); }
 export async function lifecycleBroadcast(actorId: string, id: string, action: "cancel" | "archive" | "restore" | "delete") { return prisma.$transaction(async (tx) => { const current = await tx.broadcast.findFirst({ where: { id, academyId: null, deletedAt: null } }); if (!current) throw notFound("BROADCAST_NOT_FOUND", "The platform broadcast was not found."); if (action === "cancel" && current.status !== "SCHEDULED") throw conflict("BROADCAST_NOT_CANCELLABLE", "Only scheduled broadcasts can be cancelled."); const data = action === "cancel" ? { status: "DRAFT" as const, startAt: null } : action === "archive" ? { status: "ARCHIVED" as const } : action === "restore" ? { status: "DRAFT" as const, publishedAt: null } : { status: "ARCHIVED" as const, deletedAt: new Date() }; const updated = await tx.broadcast.update({ where: { id }, data }); if (action === "cancel" || action === "delete") await tx.backgroundJob.updateMany({ where: { kind: "GLOBAL_BROADCAST_PUBLISH", deduplicationKey: id, status: { in: ["PENDING", "PROCESSING"] } }, data: { status: "CANCELLED", lockedAt: null, lockedBy: null } }); await tx.systemAuditLog.create({ data: { actorId, action: `PLATFORM_BROADCAST_${action.toUpperCase()}`, entityType: "Broadcast", entityId: id, description: `${action} platform broadcast ${current.title}.` } }); return updated; }); }

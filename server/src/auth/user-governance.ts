@@ -1,6 +1,7 @@
 import { Prisma, UserStatus } from "../../generated/prisma/client.js";
 import { prisma } from "../db/prisma.js";
 import { conflict, forbidden, notFound } from "../errors/api-error.js";
+import { enqueueUserLifecycleEmail } from "../services/userLifecycleEmailService.js";
 
 const SUPER_ADMIN_ROLE_KEY = "super_admin";
 
@@ -88,6 +89,8 @@ export const changeUserStatus = async (
         select: {
           status: true,
           deletedAt: true,
+          email: true,
+          fullName: true,
           role: { select: { key: true } },
         },
       });
@@ -102,11 +105,14 @@ export const changeUserStatus = async (
         await assertAnotherActiveSuperAdminExists(transaction);
       }
 
+      if (user.status === nextStatus) return transaction.user.findUniqueOrThrow({ where: { id: userId } });
+
       const updated = await transaction.user.update({
         where: { id: userId },
         data: { status: nextStatus },
       });
-      await transaction.systemAuditLog.create({ data: { action: nextStatus === UserStatus.ACTIVE ? "ACCOUNT_ENABLED" : "ACCOUNT_DISABLED", entityType: "User", entityId: userId, actorId, description: `Changed platform account status to ${nextStatus}.`, before: { status: user.status }, after: { status: nextStatus } } });
+      const audit = await transaction.systemAuditLog.create({ data: { action: nextStatus === UserStatus.ACTIVE ? "ACCOUNT_ENABLED" : "ACCOUNT_DISABLED", entityType: "User", entityId: userId, actorId, description: `Changed platform account status to ${nextStatus}.`, before: { status: user.status }, after: { status: nextStatus } } });
+      await enqueueUserLifecycleEmail(transaction, { deduplicationKey: `platform-account-status:${audit.id}`, recipientEmail: user.email, userName: user.fullName, event: nextStatus === UserStatus.ACTIVE ? "ACCOUNT_ENABLED" : "ACCOUNT_DISABLED", occurredAt: audit.occurredAt.toISOString() });
       return updated;
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },

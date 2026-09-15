@@ -13,6 +13,8 @@ export interface RequestMetadata {
   userAgent?: string;
   deviceName?: string;
   platform?: ClientPlatform;
+  deviceId?: string;
+  deviceSecret?: string;
 }
 
 export type ClientPlatform = "ANDROID" | "IOS" | "WEB" | "UNKNOWN";
@@ -30,6 +32,7 @@ export interface PublicUser {
   fullName: string;
   role: string;
   permissions: string[];
+  isFirstLogin: boolean;
 }
 
 export interface AuthResult {

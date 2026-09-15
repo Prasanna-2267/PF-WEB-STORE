@@ -13,12 +13,14 @@ import * as streak from "../services/streakService.js";
 import * as tracker from "../services/trackerService.js";
 import * as studyPlan from "../services/studyPlanService.js";
 import * as monthlyReports from "../services/monthlyReportService.js";
+import * as monthlyReportViewer from "../services/monthlyReportViewerService.js";
 import * as account from "../services/studentAccountService.js";
 import { badRequest } from "../errors/api-error.js";
 
 const uuid = z.string().uuid();
-const practiceSource = z.object({ sourceKind: z.literal("ARCHIVE").default("ARCHIVE") }).strict();
-const practiceFilters = practiceSource.extend({ subjectId: uuid.optional(), chapterId: uuid.optional(), lessonId: uuid.optional(), topicId: uuid.optional(), collection: z.enum(["PYQ", "RTP", "MTP", "ORIGINAL"]).optional(), year: z.number().int().min(1900).max(2100).optional(), answerFormat: z.enum(["MCQ", "DESCRIPTIVE", "CASE_STUDY"]), questionCount: z.number().int().min(1).max(100), timerSeconds: z.number().int().min(30).max(86400).optional() }).strict();
+const practiceMode = z.enum(["MCQ", "CASE_STUDY", "QUESTION_BANK", "WRONG_ANSWERS", "REVISIT"]);
+const practiceSource = z.object({ sourceKind: z.literal("ARCHIVE").default("ARCHIVE"), mode: practiceMode.optional(), questionBankId: uuid.optional() }).strict();
+const practiceFilters = z.object({ sourceKind: z.literal("ARCHIVE").default("ARCHIVE"), mode: practiceMode, questionBankId: uuid.optional(), contentItemIds: z.array(uuid).min(1).max(100).optional(), subjectId: uuid.optional(), chapterId: uuid.optional(), lessonId: uuid.optional(), topicId: uuid.optional(), collection: z.enum(["PYQ", "RTP", "MTP", "ORIGINAL", "QUESTION_BANK"]).optional(), year: z.number().int().min(1900).max(2100).optional(), answerFormat: z.enum(["MCQ", "DESCRIPTIVE", "CASE_STUDY"]), questionCount: z.number().int().min(1).max(100).optional(), timerSeconds: z.number().int().min(30).max(86400).optional() }).strict();
 export const studentDomainRouter = Router();
 studentDomainRouter.get("/bootstrap", asyncRoute(async (req, res) => { res.json(await student.getBootstrap(req.auth!.userId, req.auth!.sessionId)); }));
 const preferenceBase = z.object({ selectedCourseId: uuid, examMonth: z.number().int().min(1).max(12), examYear: z.number().int().min(2020).max(2100), examDay: z.number().int().min(1).max(31).optional(), academyReference: z.string().trim().max(120).optional(), dailyTargetMinutes: z.number().int().min(15).max(720), timezone: z.string().trim().min(1).max(80), language: z.string().trim().min(1).max(40).optional(), reminderTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(), expectedVersion: z.number().int().min(0).optional() });
@@ -30,10 +32,14 @@ studentDomainRouter.get("/me", asyncRoute(async (req, res) => { res.json(await s
 studentDomainRouter.patch("/me", asyncRoute(async (req, res) => { const body = z.object({ fullName: z.string().trim().min(2).max(120) }).strict().parse(req.body); res.json(await student.updateProfile(req.auth!.userId, body)); }));
 studentDomainRouter.get("/account", asyncRoute(async (req, res) => { res.json(await account.getStudentAccount(req.auth!.userId)); }));
 studentDomainRouter.patch("/account/name", asyncRoute(async (req, res) => { const body = z.object({ fullName: z.string().trim().min(2).max(120) }).strict().parse(req.body); res.json(await account.updateName(req.auth!.userId, body.fullName)); }));
+studentDomainRouter.patch("/account/password", asyncRoute(async (req, res) => { const body = z.object({ currentPassword: z.string().min(1).max(128), newPassword: z.string().min(12).max(128) }).strict().parse(req.body); res.json(await account.changePassword(req.auth!.userId, req.auth!.sessionId, body.currentPassword, body.newPassword)); }));
 studentDomainRouter.post("/account/mobile/change/request", asyncRoute(async (req, res) => { const body = z.object({ mobile: z.string().trim().min(7).max(30) }).strict().parse(req.body); res.json(await account.requestVerification(req.auth!.userId, "MOBILE_CHANGE", body.mobile)); }));
-studentDomainRouter.post("/account/mobile/change/verify", asyncRoute(async (req, res) => { const body = z.object({ challengeId: uuid, code: z.string().regex(/^\d{4}$/) }).strict().parse(req.body); res.json(await account.verifyChange(req.auth!.userId, body.challengeId, "MOBILE_CHANGE", body.code)); }));
-studentDomainRouter.post("/account/email/change/request", asyncRoute(async (req, res) => { const body = z.object({ email: z.string().trim().email().max(320) }).strict().parse(req.body); res.json(await account.requestVerification(req.auth!.userId, "EMAIL_CHANGE", body.email)); }));
-studentDomainRouter.post("/account/email/change/verify", asyncRoute(async (req, res) => { const body = z.object({ challengeId: uuid, code: z.string().regex(/^\d{4}$/) }).strict().parse(req.body); res.json(await account.verifyChange(req.auth!.userId, body.challengeId, "EMAIL_CHANGE", body.code)); }));
+studentDomainRouter.post("/account/mobile/change/confirm", asyncRoute(async (req, res) => { const body = z.object({ challengeId: uuid, code: z.string().regex(/^\d{4}$/) }).strict().parse(req.body); res.json(await account.verifyChange(req.auth!.userId, body.challengeId, "MOBILE_CHANGE", body.code)); }));
+studentDomainRouter.post("/account/email/change/request", asyncRoute(async (req, res) => { const body = z.object({ email: z.string().trim().email().max(320) }).strict().parse(req.body); res.json(await account.requestEmailChange(req.auth!.userId, body.email)); }));
+studentDomainRouter.post("/account/email/change/verify-current", asyncRoute(async (req, res) => { const body = z.object({ challengeId: uuid, code: z.string().regex(/^\d{4}$/) }).strict().parse(req.body); res.json(await account.verifyCurrentEmailForChange(req.auth!.userId, body.challengeId, body.code)); }));
+studentDomainRouter.post("/account/email/change/resend", asyncRoute(async (req, res) => { const body = z.object({ challengeId: uuid }).strict().parse(req.body); res.json(await account.resendEmailChangeCode(req.auth!.userId, body.challengeId)); }));
+studentDomainRouter.post("/account/email/change/confirm", asyncRoute(async (req, res) => { const body = z.object({ challengeId: uuid, code: z.string().regex(/^\d{4}$/) }).strict().parse(req.body); res.json(await account.confirmEmailChange(req.auth!.userId, body.challengeId, body.code)); }));
+studentDomainRouter.post("/account/email/change/verify", asyncRoute(async (req, res) => { const body = z.object({ challengeId: uuid, code: z.string().regex(/^\d{4}$/) }).strict().parse(req.body); res.json(await account.confirmEmailChange(req.auth!.userId, body.challengeId, body.code)); }));
 studentDomainRouter.patch("/account/exam", asyncRoute(async (req, res) => { const body = z.object({ examMonth: z.number().int().min(1).max(12), examYear: z.number().int().min(new Date().getUTCFullYear()).max(new Date().getUTCFullYear() + 10), examDay: z.number().int().min(1).max(31).optional(), expectedVersion: z.number().int().min(1).optional() }).strict().parse(req.body); res.json(await account.updateExam(req.auth!.userId, body)); }));
 studentDomainRouter.patch("/account/study-target", asyncRoute(async (req, res) => { const body = z.object({ dailyTargetMinutes: z.number().int().min(15).max(720), expectedVersion: z.number().int().min(1).optional() }).strict().parse(req.body); res.json(await account.updateStudyTarget(req.auth!.userId, body.dailyTargetMinutes, body.expectedVersion)); }));
 studentDomainRouter.patch("/account/appearance", asyncRoute(async (req, res) => { const body = z.object({ preferredTheme: z.enum(["LIGHT", "DARK"]), expectedVersion: z.number().int().min(1).optional() }).strict().parse(req.body); res.json(await account.updateAppearance(req.auth!.userId, body.preferredTheme, body.expectedVersion)); }));
@@ -71,6 +77,16 @@ studentDomainRouter.get("/store/resources", asyncRoute(async (req, res) => {
 studentDomainRouter.get("/practice/sources", asyncRoute(async (req, res) => {
   res.json(await practice.listPracticeSources(req.auth!.userId));
 }));
+studentDomainRouter.get("/practice/modes", asyncRoute(async (req, res) => {
+  res.json(await practice.listPracticeModes(req.auth!.userId));
+}));
+studentDomainRouter.get("/practice/search", asyncRoute(async (req, res) => {
+  const query = z.object({ mode: practiceMode, questionBankId: uuid.optional(), q: z.string().trim().max(160).optional(), limit: z.coerce.number().int().min(1).max(50).default(20) }).parse(req.query);
+  res.json(await practice.searchPracticeScope(req.auth!.userId, { mode: query.mode, questionBankId: query.questionBankId, query: query.q, limit: query.limit }));
+}));
+studentDomainRouter.get("/practice/question-banks", asyncRoute(async (req, res) => {
+  res.json(await practice.listQuestionBanks(req.auth!.userId));
+}));
 studentDomainRouter.get("/practice/filters", asyncRoute(async (req, res) => {
   const query = practiceSource.parse(req.query);
   res.json(await practice.getPracticeFilters(req.auth!.userId, query));
@@ -81,8 +97,14 @@ studentDomainRouter.post("/practice/sets/preview", asyncRoute(async (req, res) =
 studentDomainRouter.post("/practice/sessions", asyncRoute(async (req, res) => {
   res.status(201).json(await practice.createPracticeSession(req.auth!.userId, practiceFilters.parse(req.body)));
 }));
+studentDomainRouter.get("/practice/sessions/resume", asyncRoute(async (req, res) => {
+  res.json(await practice.getResumablePracticeSession(req.auth!.userId));
+}));
 studentDomainRouter.get("/practice/sessions/:sessionId", asyncRoute(async (req, res) => {
   res.json(await practice.getPracticeSession(req.auth!.userId, uuid.parse(req.params.sessionId)));
+}));
+studentDomainRouter.get("/practice/sessions/:sessionId/result", asyncRoute(async (req, res) => {
+  res.json(await practice.getPracticeResult(req.auth!.userId, uuid.parse(req.params.sessionId)));
 }));
 studentDomainRouter.get("/practice/sessions/:sessionId/questions", asyncRoute(async (req, res) => {
   const query = z.object({ page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(100).default(25) }).parse(req.query);
@@ -101,6 +123,10 @@ studentDomainRouter.post("/practice/sessions/:sessionId/complete", asyncRoute(as
 }));
 studentDomainRouter.get("/practice/tracker", asyncRoute(async (req, res) => {
   res.json(await practice.getPracticeTracker(req.auth!.userId));
+}));
+studentDomainRouter.get("/practice/wrong-answers", asyncRoute(async (req, res) => {
+  const query = z.object({ page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(100).default(25) }).parse(req.query);
+  res.json(await practice.listWrongAnswers(req.auth!.userId, query));
 }));
 studentDomainRouter.get("/rewards/wallet", asyncRoute(async (req, res) => {
   res.json(await rewards.getRewardWallet(req.auth!.userId));
@@ -203,6 +229,17 @@ studentDomainRouter.get("/reports/monthly/:yearMonth", asyncRoute(async (req, re
   const yearMonth = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).parse(req.params.yearMonth);
   res.json(await monthlyReports.getMonthlyReport(req.auth!.userId, yearMonth));
 }));
+studentDomainRouter.post("/reports/monthly/:yearMonth/generate", asyncRoute(async (req, res) => {
+  const yearMonth = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).parse(req.params.yearMonth);
+  res.status(202).json(await monthlyReports.requestMonthlyReportGeneration(req.auth!.userId, yearMonth));
+}));
+studentDomainRouter.post("/reports/monthly/:reportId/viewer-sessions", asyncRoute(async (req, res) => {
+  res.status(201).json(await monthlyReportViewer.createMonthlyReportViewerSession(req.auth!.userId, req.auth!.sessionId, uuid.parse(req.params.reportId)));
+}));
+studentDomainRouter.delete("/reports/monthly/viewer-sessions/:viewerSessionId", asyncRoute(async (req, res) => {
+  await monthlyReportViewer.closeMonthlyReportViewerSession(req.auth!.userId, req.auth!.sessionId, uuid.parse(req.params.viewerSessionId));
+  res.status(204).end();
+}));
 studentDomainRouter.get("/notes/tree", asyncRoute(async (req, res) => {
   res.json(await notes.listNoteTree(req.auth!.userId));
 }));
@@ -299,7 +336,7 @@ studentDomainRouter.get("/questions", asyncRoute(async (req, res) => {
     chapterId: uuid.optional(),
     lessonId: uuid.optional(),
     topicId: uuid.optional(),
-    kind: z.enum(["NORMAL_MCQ", "NORMAL_DESCRIPTIVE", "CASE_MCQ", "CASE_DESCRIPTIVE"]).optional(),
+    kind: z.enum(["NORMAL_MCQ", "CASE_MCQ"]).optional(),
     difficulty: z.enum(["FOUNDATION", "INTERMEDIATE", "ADVANCED"]).optional(),
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(25),

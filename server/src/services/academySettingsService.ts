@@ -60,6 +60,124 @@ const ACADEMY_CORE_SELECT = {
   deletedAt: true,
 };
 
+const ACADEMY_SETTINGS_SELECT = {
+  ...ACADEMY_CORE_SELECT,
+  academyCode: true,
+  displayName: true,
+  academyType: true,
+  establishedYear: true,
+  socialLinks: true,
+  profile: {
+    select: {
+      onboardingStatus: true,
+      logoStoragePath: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+  contacts: {
+    orderBy: [{ isPrimary: 'desc' as const }, { createdAt: 'asc' as const }],
+    select: {
+      id: true,
+      role: true,
+      fullName: true,
+      email: true,
+      phone: true,
+      isPrimary: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+  legalProfile: {
+    select: {
+      legalName: true,
+      entityType: true,
+      panStatus: true,
+      pan: true,
+      tan: true,
+      gstStatus: true,
+      gstin: true,
+      gstState: true,
+      gstRegistrationType: true,
+      gstRegistrationDate: true,
+      gstCertificateStoragePath: true,
+      placeOfSupply: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+  addresses: {
+    orderBy: { kind: 'asc' as const },
+    select: {
+      id: true,
+      kind: true,
+      addressLine1: true,
+      addressLine2: true,
+      city: true,
+      state: true,
+      country: true,
+      postalCode: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+  billingProfile: {
+    select: {
+      invoiceDisplayName: true,
+      invoiceEmail: true,
+      billingContactName: true,
+      billingContactPhone: true,
+      purchaseOrderRequired: true,
+      currency: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+  academicOfferings: {
+    orderBy: [{ category: 'asc' as const }, { program: 'asc' as const }],
+    select: {
+      id: true,
+      category: true,
+      program: true,
+      branch: true,
+      batch: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+  commercialProfile: {
+    select: {
+      planKey: true,
+      subscriptionStatus: true,
+      startDate: true,
+      endDate: true,
+      studentSeatLimit: true,
+      purchasedSeats: true,
+      activeSeats: true,
+      additionalSeats: true,
+      billingCycle: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+  integrationProfile: {
+    select: {
+      zohoOrganizationId: true,
+      zohoCustomerId: true,
+      zohoCustomerNumber: true,
+      zohoContactId: true,
+      zohoCustomerName: true,
+      zohoSyncStatus: true,
+      zohoLastSyncedAt: true,
+      zohoLastSyncError: true,
+      zohoSyncVersion: true,
+      paymentCustomerId: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+};
+
 export async function getAcademySettings(context: TenantContext) {
   const academyId = context.academyId;
   if (!academyId) {
@@ -70,7 +188,7 @@ export async function getAcademySettings(context: TenantContext) {
 
   const academy = await prisma.academy.findUnique({
     where: { id: academyId },
-    select: ACADEMY_CORE_SELECT,
+    select: ACADEMY_SETTINGS_SELECT,
   });
 
   if (!academy || academy.deletedAt) {
@@ -84,6 +202,11 @@ export async function getAcademySettings(context: TenantContext) {
       id: academy.id,
       slug: academy.slug,
       name: academy.name,
+      displayName: academy.displayName || '',
+      academyCode: academy.academyCode || '',
+      academyType: academy.academyType,
+      establishedYear: academy.establishedYear,
+      socialLinks: academy.socialLinks,
       email: academy.email,
       phone: academy.phone,
       address: academy.address,
@@ -104,6 +227,14 @@ export async function getAcademySettings(context: TenantContext) {
       activeCourseCount: academy.activeCourseCount,
       createdAt: academy.createdAt.toISOString(),
       updatedAt: academy.updatedAt.toISOString(),
+      profile: academy.profile,
+      contacts: academy.contacts,
+      legalProfile: academy.legalProfile,
+      addresses: academy.addresses,
+      billingProfile: academy.billingProfile,
+      academicOfferings: academy.academicOfferings,
+      commercialProfile: academy.commercialProfile,
+      integrationProfile: academy.integrationProfile,
       adminContactSemantics: 'CONTACT_METADATA_ONLY' as const,
     },
   };

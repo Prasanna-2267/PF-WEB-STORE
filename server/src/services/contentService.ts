@@ -6,7 +6,7 @@ import { getStorageProvider } from "../integrations/provider-registry.js";
 import { sanitizeRichText } from "../utils/sanitize-html.js";
 import { assertFileNameMatchesMime, isAllowedContentMimeType } from "../utils/upload-validation.js";
 import { generatePdfFirstPageCover } from "./pdfCoverService.js";
-import { normalizeValidityPolicy } from "./resourceValidityService.js";
+import { normalizeAccessDurationPolicy } from "./resourceValidityService.js";
 
 export interface ContentScope { academyId?: string | null; actorId: string }
 export interface PageInput { page: number; limit: number; courseId: string; parentId?: string | null; search?: string; includeArchived?: boolean }
@@ -54,6 +54,7 @@ export async function listContent(scope: ContentScope, input: PageInput & { pare
     ...(input.parentId === "all" ? {} : { parentId: input.parentId ?? null }),
     ...(input.includeArchived ? {} : { deletedAt: null }),
     ...(input.search ? { name: { contains: input.search, mode: "insensitive" } } : {}),
+    AND: [{ OR: [{ entityType: null }, { entityType: { not: "MONTHLY_REPORT" } }] }],
   };
   const [rows, total] = await Promise.all([
     prisma.contentItem.findMany({ where, select: contentSelect, skip: (input.page - 1) * input.limit, take: input.limit, orderBy: [{ displayOrder: "asc" }, { name: "asc" }, { id: "asc" }] }),
@@ -65,7 +66,17 @@ export async function listContent(scope: ContentScope, input: PageInput & { pare
 export async function getContent(scope: ContentScope, contentId: string) {
   const item = await prisma.contentItem.findFirst({ where: { id: contentId, deletedAt: null, course: scope.academyId !== undefined ? { academyId: scope.academyId } : undefined }, select: { ...contentSelect, sampleImages: true, storeSections: true, locations: true, _count: { select: { children: true } } } });
   if (!item) throw notFound("CONTENT_NOT_FOUND", "The content item was not found in the current scope.");
-  return apiContent(item);
+  const provider = getStorageProvider();
+  const sampleImages = await Promise.all(item.sampleImages.map(async (image) => ({
+    id: image.id,
+    role: image.role,
+    name: image.name,
+    mimeType: image.mimeType,
+    size: Number(image.size),
+    displayOrder: image.displayOrder,
+    url: await provider.createDownloadUrl(image.storagePath, 900),
+  })));
+  return apiContent({ ...item, sampleImages });
 }
 
 export async function createFolder(scope: ContentScope, payload: { courseId: string; parentId?: string | null; name: string; description?: string; displayOrder?: number }) {
@@ -182,9 +193,9 @@ export async function uploadProxy(scope: ContentScope, uploadId: string, fileBuf
   return { uploadId: upload.id, objectKey: upload.objectKey, uploaded: true };
 }
 
-export async function finalizeUpload(scope: ContentScope, uploadId: string, payload: { parentId?: string | null; description?: string; entityType?: Prisma.ContentItemCreateInput["entityType"]; accessType?: "FREE" | "PAID"; price?: number; validityMode?: "PERMANENT" | "EXAM_DATE_OFFSET"; validityOffsetDays?: number | null; displayOrder?: number }) {
-  const upload = await prisma.storageUpload.findFirst({ where: { id: uploadId, createdById: scope.actorId, ...(scope.academyId !== undefined ? { academyId: scope.academyId } : {}) } });
-  if (!upload) throw notFound("UPLOAD_NOT_FOUND", "The upload session was not found in the current scope.");
+export async function finalizeUpload(scope: ContentScope, uploadId: string, payload: { parentId?: string | null; description?: string; entityType?: Prisma.ContentItemCreateInput["entityType"]; accessType?: "FREE" | "PAID"; price?: number | null; accessDurationValue?: number | null; accessDurationUnit?: "DAYS" | "WEEKS" | "MONTHS" | null; displayOrder?: number }) {
+  const upload = await prisma.storageUpload.findFirst({ where: { id: uploadId, createdById: scope.actorId }, select: { id: true, courseId: true, objectKey: true, originalName: true, mimeType: true, sizeBytes: true, checksumSha256: true, status: true, expiresAt: true } });
+  if (!upload) throw notFound("UPLOAD_NOT_FOUND", "The upload session was not found.");
   if (upload.status === "FINALIZED") {
     const existing = await prisma.contentItem.findFirst({ where: { storagePath: upload.objectKey, deletedAt: null }, select: contentSelect });
     if (existing) return apiContent(existing);
@@ -197,7 +208,7 @@ export async function finalizeUpload(scope: ContentScope, uploadId: string, payl
     throw conflict("UPLOAD_VERIFICATION_FAILED", "Stored R2 object metadata does not match declared size, MIME type, or checksum.");
   }
   if (payload.accessType === "PAID" && (!payload.price || payload.price <= 0)) throw badRequest("PRICE_REQUIRED", "Paid content requires a positive price.");
-  const validity = normalizeValidityPolicy({ accessType: payload.accessType ?? "FREE", validityMode: payload.validityMode, validityOffsetDays: payload.validityOffsetDays });
+  const validity = normalizeAccessDurationPolicy({ accessType: payload.accessType ?? "FREE", accessDurationValue: payload.accessDurationValue, accessDurationUnit: payload.accessDurationUnit });
 
   try {
     const finalized = await prisma.$transaction(async (tx) => {
@@ -214,7 +225,7 @@ export async function finalizeUpload(scope: ContentScope, uploadId: string, payl
         courseId: upload.courseId!, parentId: payload.parentId ?? null, kind: "FILE", name: upload.originalName,
         size: upload.sizeBytes, mimeType: upload.mimeType, storagePath: upload.objectKey, description: payload.description?.trim() ?? "",
         entityType: payload.entityType, accessType: validity.accessType, price: validity.accessType === "PAID" ? payload.price : null,
-        validityMode: validity.validityMode, validityOffsetDays: validity.validityOffsetDays,
+        accessDurationValue: validity.accessDurationValue, accessDurationUnit: validity.accessDurationUnit, validityMode: "PERMANENT" as const, validityOffsetDays: null,
         status: "PUBLISHED", displayOrder: payload.displayOrder ?? 0,
       }, select: contentSelect });
       await audit(tx, scope, "CONTENT_UPLOAD_FINALIZED", item.id, `Finalized upload ${item.name}.`);
@@ -242,25 +253,25 @@ export async function getContentAccessUrl(scope: ContentScope, contentId: string
   return { id: item.id, fileName: item.name, mimeType: item.mimeType, disposition, url: await getStorageProvider().createDownloadUrl(item.storagePath, 300), expiresIn: 300 };
 }
 
-export async function updateContent(scope: ContentScope, contentId: string, payload: { name?: string; description?: string; entityType?: Prisma.ContentItemUpdateInput["entityType"]; accessType?: "FREE" | "PAID"; price?: number | null; validityMode?: "PERMANENT" | "EXAM_DATE_OFFSET"; validityOffsetDays?: number | null; status?: "PUBLISHED" | "ARCHIVED"; displayOrder?: number; applyToChildren?: boolean; storeSections?: Array<{ heading: string; content: string; displayOrder?: number }> }) {
+export async function updateContent(scope: ContentScope, contentId: string, payload: { name?: string; description?: string; entityType?: Prisma.ContentItemUpdateInput["entityType"]; accessType?: "FREE" | "PAID"; price?: number | null; accessDurationValue?: number | null; accessDurationUnit?: "DAYS" | "WEEKS" | "MONTHS" | null; status?: "PUBLISHED" | "ARCHIVED"; displayOrder?: number; applyToChildren?: boolean; storeSections?: Array<{ heading: string; content: string; displayOrder?: number }> }) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.contentItem.findFirst({ where: { id: contentId, deletedAt: null, course: scope.academyId !== undefined ? { academyId: scope.academyId } : undefined } });
     if (!existing) throw notFound("CONTENT_NOT_FOUND", "The content item was not found in the current scope.");
     const accessType = payload.accessType ?? existing.accessType;
     const price = payload.price === undefined ? existing.price : payload.price;
     if (accessType === "PAID" && (!price || Number(price) <= 0)) throw badRequest("PRICE_REQUIRED", "Paid content requires a positive price.");
-    const validity = normalizeValidityPolicy({
+    const validity = normalizeAccessDurationPolicy({
       accessType,
-      validityMode: payload.validityMode ?? (payload.accessType === "FREE" ? "PERMANENT" : existing.validityMode),
-      validityOffsetDays: payload.validityOffsetDays === undefined ? existing.validityOffsetDays : payload.validityOffsetDays,
+      accessDurationValue: payload.accessDurationValue === undefined ? (payload.accessType === "FREE" ? null : existing.accessDurationValue) : payload.accessDurationValue,
+      accessDurationUnit: payload.accessDurationUnit === undefined ? (payload.accessType === "FREE" ? null : existing.accessDurationUnit) : payload.accessDurationUnit,
     });
     const updated = await tx.contentItem.update({ where: { id: contentId }, data: {
       ...(payload.name !== undefined ? { name: normalizeFileName(payload.name) } : {}),
       ...(payload.description !== undefined ? { description: payload.description.trim() } : {}),
       ...(payload.entityType !== undefined ? { entityType: payload.entityType } : {}),
       ...(payload.accessType !== undefined ? { accessType: payload.accessType, price: payload.accessType === "FREE" ? null : price } : payload.price !== undefined ? { price } : {}),
-      ...((payload.accessType !== undefined || payload.validityMode !== undefined || payload.validityOffsetDays !== undefined)
-        ? { validityMode: validity.validityMode, validityOffsetDays: validity.validityOffsetDays }
+      ...((payload.accessType !== undefined || payload.accessDurationValue !== undefined || payload.accessDurationUnit !== undefined)
+        ? { accessDurationValue: validity.accessDurationValue, accessDurationUnit: validity.accessDurationUnit, validityMode: "PERMANENT" as const, validityOffsetDays: null }
         : {}),
       ...(payload.status !== undefined ? { status: payload.status } : {}), ...(payload.displayOrder !== undefined ? { displayOrder: payload.displayOrder } : {}),
     }, select: { ...contentSelect, storeSections: { orderBy: { displayOrder: "asc" } }, sampleImages: { orderBy: [{ role: "asc" }, { displayOrder: "asc" }] } } });
@@ -294,8 +305,10 @@ export async function updateContent(scope: ContentScope, contentId: string, payl
           data: {
             accessType,
             price: accessType === "FREE" ? null : price,
-            validityMode: validity.validityMode,
-            validityOffsetDays: validity.validityOffsetDays,
+            accessDurationValue: validity.accessDurationValue,
+            accessDurationUnit: validity.accessDurationUnit,
+            validityMode: "PERMANENT",
+            validityOffsetDays: null,
           },
         });
         currentParentIds = childIds;
@@ -458,7 +471,7 @@ export async function ensurePdfCoverImage(contentId: string) {
   }
 
   const generated = await generatePdfFirstPageCover(pdfBuffer, item.name);
-  const objectKey = `content/${contentId}/samples/cover.${generated.fileName.split(".").pop()}`;
+  const objectKey = `content/${contentId}/samples/${generated.fileName}`;
 
   // Compute SHA-256 for the generated cover before uploading
   const checksumSha256 = createHash("sha256").update(generated.buffer).digest("hex");

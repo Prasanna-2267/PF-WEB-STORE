@@ -3,6 +3,11 @@ export interface EmailMessage {
   template: string;
   variables: Record<string, string>;
   idempotencyKey: string;
+  attachments?: Array<{
+    fileName: string;
+    contentType: string;
+    contentBase64: string;
+  }>;
 }
 
 export interface EmailProvider {

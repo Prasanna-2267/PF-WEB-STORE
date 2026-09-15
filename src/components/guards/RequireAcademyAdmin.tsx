@@ -21,7 +21,7 @@ export const RequireAcademyAdmin: React.FC<{ children?: React.ReactNode }> = ({ 
   const location = useLocation();
 
   useEffect(() => {
-    if (initialized && isAuthenticated && (user?.role === 'admin' || user?.role === 'academy_admin' || user?.role === 'super_admin') && status === 'idle') {
+    if (initialized && isAuthenticated && (user?.role === 'admin' || user?.role === 'academy_admin') && status === 'idle') {
       void resolveContext();
     }
   }, [initialized, isAuthenticated, user?.role, status, resolveContext]);
@@ -32,9 +32,12 @@ export const RequireAcademyAdmin: React.FC<{ children?: React.ReactNode }> = ({ 
 
   if (!initialized) return null;
   if (!isAuthenticated) return <Navigate to={ROUTES.LOGIN} replace state={{ from: location }} />;
-  if (user?.role !== 'admin' && user?.role !== 'academy_admin' && user?.role !== 'super_admin') {
-    return <ContextMessage title="Access Restricted (403)" message="The authenticated server session does not grant Academy administration access." />;
-  }
+  // The Academy console is tenant-scoped. A platform Super Admin has its own
+  // console and must not be left on an Academy route without an Academy
+  // membership/context. Likewise, student sessions return to the student
+  // experience instead of being trapped on a dead-end 403 screen.
+  if (user?.role === 'super_admin') return <Navigate to={ROUTES.ADMIN_OVERVIEW} replace />;
+  if (user?.role !== 'admin' && user?.role !== 'academy_admin') return <Navigate to={ROUTES.HOME} replace />;
   if (status === 'idle' || status === 'loading') {
     return <ContextMessage title="Resolving Academy" message="Verifying your Academy membership with the server…" />;
   }

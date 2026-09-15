@@ -3,9 +3,9 @@ import { prisma } from "../db/prisma.js";
 import { badRequest, conflict, forbidden, notFound } from "../errors/api-error.js";
 import { addLearnerDays, databaseDate, databaseDateKey, learnerDateKey } from "./learnerTime.js";
 import { revisionIntervalDays } from "./trackerService.js";
-import { resolveResourceExpiry } from "./resourceValidityService.js";
+import { getStudentConceptInsights } from "./studentPerformanceService.js";
 
-const ALGORITHM_VERSION = "deterministic-plan-v1";
+const ALGORITHM_VERSION = "deterministic-plan-v2";
 const FALLBACK_NOTE_MINUTES = 45;
 const MIN_SESSION_MINUTES = 15;
 const MAX_SESSION_MINUTES = 45;
@@ -98,7 +98,7 @@ async function buildCandidates(userId: string, courseId: string, localDate: stri
     prisma.contentItem.findMany({
       where: { courseId, kind: "FILE", mimeType: "application/pdf", status: "PUBLISHED", deletedAt: null },
       orderBy: [{ displayOrder: "asc" }, { name: "asc" }, { id: "asc" }],
-      select: { id: true, name: true, accessType: true, validityMode: true, validityOffsetDays: true, displayOrder: true },
+      select: { id: true, name: true, accessType: true, displayOrder: true },
       take: 5000,
     }),
     prisma.learnerNoteState.findMany({
@@ -117,13 +117,13 @@ async function buildCandidates(userId: string, courseId: string, localDate: stri
   ]);
   const stateById = new Map(states.map((state) => [state.contentItemId, state]));
   const estimateById = new Map(estimates.map((estimate) => [estimate.contentItemId, estimate]));
-  const visibleItems = items.filter((item) => {
-    if (item.accessType === "FREE") return true;
-    if (!access.courseAccess && !access.ids.has(item.id)) return false;
-    const expiresAt = resolveResourceExpiry(item, examDate);
-    return expiresAt !== undefined && (!expiresAt || expiresAt > new Date());
-  });
+  const visibleItems = items.filter((item) => item.accessType === "FREE" || access.courseAccess || access.ids.has(item.id));
   const candidates: Candidate[] = carryTasks.map((task) => ({ type: task.type, source: "CARRY_OVER", title: task.title, reason: "Carried forward from an unfinished study plan", contentItemId: task.contentItemId, estimatedMinutes: task.plannedMinutes, priority: 100 + task.priority, estimateSource: task.estimateSource === "ADMIN" ? "ADMIN" : "FALLBACK_V1", carryTaskId: task.id }));
+
+  const insights = await getStudentConceptInsights(userId, { courseId });
+  for (const weak of insights.weakConcepts.slice(0, 2)) {
+    candidates.push({ type: "PRACTICE_WEAK_CONCEPT", source: "WEAK_CONCEPT", title: `Strengthen ${weak.conceptName}`, reason: `${weak.wrong} incorrect answers across ${weak.attempts} attempts in ${weak.chapterName}`, contentItemId: null, estimatedMinutes: 25, priority: 95 - weak.accuracyPercent, estimateSource: "FALLBACK_V1" });
+  }
 
   for (const item of visibleItems) {
     const state = stateById.get(item.id);

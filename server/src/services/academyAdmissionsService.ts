@@ -3,6 +3,8 @@ import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../db/prisma.js';
 import { type TenantContext } from '../auth/tenant-auth.js';
 import { ApiError, badRequest, conflict, forbidden, notFound, serviceUnavailable } from '../errors/api-error.js';
+import { getConfig } from '../config/env.js';
+import { enqueueAccountCreatedEmail } from './accountCreatedEmailService.js';
 
 export interface BulkImportRowInput {
   sNo?: number | string;
@@ -22,6 +24,45 @@ export interface BulkImportValidationResult {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ADMISSION_PROOF_TTL_MS = 20 * 60 * 1_000;
+
+type AdmissionProofPayload = {
+  v: 1;
+  method: 'QR_CODE' | 'ADMISSION_CODE';
+  academyId: string;
+  resourceId: string;
+  exp: number;
+};
+
+const academyPreviewSelect = { id: true, name: true, slug: true, description: true, logoUrl: true, city: true, state: true } as const;
+const proofSignature = (encoded: string) => crypto.createHmac('sha256', getConfig().auth.jwtSecret).update(encoded).digest('base64url');
+
+function assertAdmissionCodeUsable(code: { status: 'ACTIVE' | 'EXHAUSTED' | 'EXPIRED' | 'REVOKED'; expiresAt: Date | null; maxUses: number | null; currentUses: number }, now: Date) {
+  if (code.status === 'REVOKED') throw badRequest('ADMISSION_CODE_DISABLED', 'Academy code is no longer active.');
+  if (code.status === 'EXPIRED' || (code.expiresAt && code.expiresAt <= now)) throw new ApiError(410, 'ADMISSION_CODE_EXPIRED', 'Academy code has expired.');
+  if (code.status === 'EXHAUSTED' || (code.maxUses !== null && code.currentUses >= code.maxUses)) throw conflict('ADMISSION_CODE_USAGE_LIMIT_REACHED', 'Academy code has reached its usage limit.');
+  if (code.status !== 'ACTIVE') throw badRequest('ADMISSION_CODE_UNAVAILABLE', 'Invalid or unavailable admission code.');
+}
+
+function createAdmissionProof(payload: Omit<AdmissionProofPayload, 'v' | 'exp'>) {
+  const expiresAt = new Date(Date.now() + ADMISSION_PROOF_TTL_MS);
+  const encoded = Buffer.from(JSON.stringify({ ...payload, v: 1, exp: expiresAt.getTime() } satisfies AdmissionProofPayload)).toString('base64url');
+  return { admissionProof: `${encoded}.${proofSignature(encoded)}`, expiresAt };
+}
+
+function parseAdmissionProof(value: string): AdmissionProofPayload {
+  const [encoded, suppliedSignature, extra] = String(value || '').split('.');
+  if (!encoded || !suppliedSignature || extra) throw badRequest('INVALID_ADMISSION_PROOF', 'The academy admission proof is invalid.');
+  const expected = Buffer.from(proofSignature(encoded));
+  const supplied = Buffer.from(suppliedSignature);
+  if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) throw badRequest('INVALID_ADMISSION_PROOF', 'The academy admission proof is invalid.');
+  let payload: AdmissionProofPayload;
+  try { payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as AdmissionProofPayload; }
+  catch { throw badRequest('INVALID_ADMISSION_PROOF', 'The academy admission proof is invalid.'); }
+  if (payload.v !== 1 || !UUID_PATTERN.test(payload.academyId) || !UUID_PATTERN.test(payload.resourceId) || !['QR_CODE', 'ADMISSION_CODE'].includes(payload.method)) throw badRequest('INVALID_ADMISSION_PROOF', 'The academy admission proof is invalid.');
+  if (!Number.isFinite(payload.exp) || payload.exp <= Date.now()) throw new ApiError(410, 'ADMISSION_PROOF_EXPIRED', 'The academy admission proof has expired. Validate it again.');
+  return payload;
+}
 
 async function serializableTransaction<T>(operation: (transaction: Prisma.TransactionClient) => Promise<T>): Promise<T> {
   for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -31,12 +72,12 @@ async function serializableTransaction<T>(operation: (transaction: Prisma.Transa
       if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2034' || attempt === 3) throw error;
     }
   }
-  throw new Error('Serializable transaction retry limit reached.');
+  throw serviceUnavailable('ADMISSION_TRANSACTION_BUSY', 'The admission could not be completed safely. Try again.');
 }
 
 async function resolveUserUuid(rawId?: string): Promise<string> {
   if (!rawId || !UUID_PATTERN.test(rawId)) {
-    throw new Error('Authenticated actor identity is missing or invalid.');
+    throw forbidden('INVALID_ACTOR', 'The authenticated administrator identity is invalid.');
   }
   return rawId;
 }
@@ -63,15 +104,15 @@ export async function validateBulkImport(
   input: { rows?: BulkImportRowInput[] } | BulkImportRowInput[]
 ): Promise<BulkImportValidationResult> {
   const academyId = context.academyId;
-  if (!academyId) throw new Error('400 Bad Request: Missing active academy context.');
+  if (!academyId) throw badRequest('ACADEMY_CONTEXT_REQUIRED', 'Missing active academy context.');
 
   const rows = Array.isArray(input) ? input : input && Array.isArray(input.rows) ? input.rows : null;
   if (!rows) {
-    throw new Error('400 Bad Request: Invalid input format. Expected an array of student rows.');
+    throw badRequest('INVALID_IMPORT_ROWS', 'Expected an array of student rows.');
   }
 
   if (rows.length > 1000) {
-    throw new Error('400 Bad Request: Excel import exceeds maximum limit of 1,000 rows.');
+    throw badRequest('IMPORT_ROW_LIMIT_EXCEEDED', 'Excel import cannot exceed 1,000 rows.');
   }
 
   const validRows: BulkImportValidationResult['validRows'] = [];
@@ -196,20 +237,24 @@ export async function confirmImport(
   payload: { fileName: string; rows: BulkImportRowInput[] }
 ) {
   const academyId = context.academyId;
-  if (!academyId) throw new Error('400 Bad Request: Missing active academy context.');
+  if (!academyId) throw badRequest('ACADEMY_CONTEXT_REQUIRED', 'Missing active academy context.');
   const validation = await validateBulkImport(context, payload);
   const actorUserId = await resolveUserUuid(context.user?.id);
   return serializableTransaction(async (transaction) => {
     const role = await transaction.role.findUnique({ where: { key: 'student' }, select: { id: true, isActive: true } });
-    if (!role?.isActive) throw new Error('The canonical student platform role is unavailable.');
+    if (!role?.isActive) throw serviceUnavailable('STUDENT_ROLE_UNAVAILABLE', 'The canonical student role is unavailable.');
+    const academy = await transaction.academy.findFirst({ where: { id: academyId, deletedAt: null }, select: { id: true, name: true } });
+    if (!academy) throw notFound('ACADEMY_NOT_FOUND', 'The academy was not found.');
     const batch = await transaction.admissionBatch.create({ data: { academyId, fileName: payload.fileName, totalRows: payload.rows.length, createdById: actorUserId } });
     let successCount = 0;
     let concurrentAlreadyAdmitted = 0;
     let concurrentConflictCount = 0;
     for (const row of validation.validRows) {
-      let user = await transaction.user.findUnique({ where: { email: row.email }, select: { id: true, email: true, fullName: true } });
+      let createdAccount = false;
+      let user = await transaction.user.findUnique({ where: { email: row.email }, select: { id: true, email: true, fullName: true, createdAt: true } });
       if (!user) {
-        user = await transaction.user.create({ data: { id: crypto.randomUUID(), email: row.email, fullName: row.name, phone: row.phone, roleId: role.id, status: 'ACTIVE' }, select: { id: true, email: true, fullName: true } });
+        user = await transaction.user.create({ data: { id: crypto.randomUUID(), email: row.email, fullName: row.name, phone: row.phone, roleId: role.id, status: 'ACTIVE' }, select: { id: true, email: true, fullName: true, createdAt: true } });
+        createdAccount = true;
         await transaction.academyInvitation.create({ data: { academyId, email: row.email, studentName: row.name, role: 'ACADEMY_STUDENT', status: 'PENDING', invitedBy: actorUserId, expiresAt: new Date(Date.now() + 7 * 86_400_000) } });
       }
       const existing = await transaction.academyMembership.findUnique({ where: { userId_academyId: { userId: user.id, academyId } }, select: { id: true } });
@@ -224,6 +269,20 @@ export async function confirmImport(
       }
       if (!existing) {
         await transaction.academyMembership.create({ data: { academyId, userId: user.id, role: 'ACADEMY_STUDENT', status: 'ACTIVE' } });
+        await transaction.userAcademyPreference.upsert({
+          where: { userId: user.id },
+          create: { userId: user.id, academyId },
+          update: { academyId },
+        });
+        if (createdAccount) {
+          await enqueueAccountCreatedEmail(transaction, {
+            userId: user.id,
+            recipientEmail: user.email,
+            userName: user.fullName,
+            accountCreatedAt: user.createdAt.toISOString(),
+            academyId: academy.id,
+          });
+        }
         successCount += 1;
       } else {
         concurrentAlreadyAdmitted += 1;
@@ -294,7 +353,7 @@ export async function getAdmissionsDashboard(context: TenantContext) {
  */
 export async function getImportBatches(context: TenantContext) {
   const academyId = context.academyId;
-  if (!academyId) throw new Error('400 Bad Request: Missing active academy context.');
+  if (!academyId) throw badRequest('ACADEMY_CONTEXT_REQUIRED', 'Missing active academy context.');
 
   return prisma.admissionBatch.findMany({
     where: { academyId },
@@ -311,7 +370,7 @@ export async function getImportBatches(context: TenantContext) {
  */
 export async function getImportBatchDetail(context: TenantContext, batchId: string) {
   const academyId = context.academyId;
-  if (!academyId) throw new Error('400 Bad Request: Missing active academy context.');
+  if (!academyId) throw badRequest('ACADEMY_CONTEXT_REQUIRED', 'Missing active academy context.');
 
   const batch = await prisma.admissionBatch.findFirst({
     where: { id: batchId, academyId },
@@ -322,7 +381,7 @@ export async function getImportBatchDetail(context: TenantContext, batchId: stri
   });
 
   if (!batch) {
-    throw new Error('404 Not Found: Admission import batch not found for this academy.');
+    throw notFound('ADMISSION_BATCH_NOT_FOUND', 'The admission import batch was not found for this academy.');
   }
 
   return batch;
@@ -334,7 +393,7 @@ export async function getImportBatchDetail(context: TenantContext, batchId: stri
  */
 export async function generateQrSession(context: TenantContext) {
   const academyId = context.academyId;
-  if (!academyId) throw new Error('400 Bad Request: Missing active academy context.');
+  if (!academyId) throw badRequest('ACADEMY_CONTEXT_REQUIRED', 'Missing active academy context.');
 
   const actorUserId = await resolveUserUuid(context.user?.id);
   const rawToken = `PFQR.${crypto.randomBytes(32).toString('base64url')}`;
@@ -358,6 +417,84 @@ export async function generateQrSession(context: TenantContext) {
     expiresAt: expiresAt.toISOString(),
     refreshIntervalMs: 10000,
   };
+}
+
+/** Public, read-only exchange used before registration. Raw Academy secrets are
+ * never trusted by the registration endpoint; this short-lived signed proof is. */
+export async function validateQrAdmission(qrToken: string) {
+  if (!qrToken || typeof qrToken !== 'string') throw badRequest('QR_TOKEN_REQUIRED', 'A QR token is required.');
+  const tokenHash = crypto.createHash('sha256').update(qrToken).digest('hex');
+  const now = new Date();
+  const session = await prisma.academyQrSession.findUnique({
+    where: { tokenHash },
+    include: { academy: { select: { ...academyPreviewSelect, status: true, deletedAt: true } } },
+  });
+  if (!session) throw badRequest('INVALID_QR_TOKEN', 'This Academy QR code is invalid.');
+  if (session.revokedAt) throw badRequest('QR_TOKEN_REVOKED', 'This Academy QR code is no longer active. Scan the latest code.');
+  if (session.usedAt) throw conflict('QR_TOKEN_REPLAYED', 'This Academy QR code has already been used. Scan the latest code.');
+  if (session.expiresAt <= now) throw new ApiError(410, 'QR_TOKEN_EXPIRED', 'This Academy QR code has expired. Scan the latest code.');
+  if (session.academy.status !== 'ACTIVE' || session.academy.deletedAt) throw forbidden('ACADEMY_UNAVAILABLE', 'This Academy is unavailable.');
+  const { status: _status, deletedAt: _deletedAt, ...academy } = session.academy;
+  return { academy, ...createAdmissionProof({ method: 'QR_CODE', academyId: academy.id, resourceId: session.id }) };
+}
+
+export async function validateAdmissionCode(codeInput: string) {
+  const codeValue = String(codeInput || '').trim().toUpperCase();
+  if (!/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/.test(codeValue)) throw badRequest('ADMISSION_CODE_UNAVAILABLE', 'Invalid or unavailable admission code.');
+  const now = new Date();
+  const code = await prisma.admissionCode.findUnique({
+    where: { code: codeValue },
+    include: { academy: { select: { ...academyPreviewSelect, status: true, deletedAt: true } } },
+  });
+  if (!code) throw badRequest('ADMISSION_CODE_UNAVAILABLE', 'Invalid or unavailable admission code.');
+  assertAdmissionCodeUsable(code, now);
+  if (code.academy.status !== 'ACTIVE' || code.academy.deletedAt) throw forbidden('ACADEMY_UNAVAILABLE', 'This Academy is unavailable.');
+  const { status: _status, deletedAt: _deletedAt, ...academy } = code.academy;
+  return { academy, ...createAdmissionProof({ method: 'ADMISSION_CODE', academyId: academy.id, resourceId: code.id }) };
+}
+
+export async function redeemAdmissionProof(
+  transaction: Prisma.TransactionClient,
+  student: { id: string; email: string; fullName: string },
+  admissionProof: string,
+) {
+  const proof = parseAdmissionProof(admissionProof);
+  const now = new Date();
+  const academy = await transaction.academy.findFirst({ where: { id: proof.academyId, status: 'ACTIVE', deletedAt: null }, select: { id: true, name: true } });
+  if (!academy) throw forbidden('ACADEMY_UNAVAILABLE', 'This Academy is unavailable.');
+  const existing = await transaction.academyMembership.findUnique({ where: { userId_academyId: { userId: student.id, academyId: academy.id } } });
+  if (existing?.status === 'ACTIVE') {
+    await transaction.userAcademyPreference.upsert({ where: { userId: student.id }, create: { userId: student.id, academyId: academy.id }, update: { academyId: academy.id } });
+    return { status: 'ALREADY_ADMITTED' as const, academyId: academy.id, academyName: academy.name };
+  }
+  if (existing) throw forbidden('ACADEMY_MEMBERSHIP_INACTIVE', 'This Academy membership is not active. Contact the Academy administrator.');
+  const otherMembership = await transaction.academyMembership.findFirst({ where: { userId: student.id, academyId: { not: academy.id }, role: 'ACADEMY_STUDENT', status: 'ACTIVE' }, select: { id: true } });
+  if (otherMembership) throw conflict('STUDENT_ACADEMY_CONFLICT', 'This student already belongs to another Academy.');
+
+  let createdById: string | null = null;
+  let codeId: string | null = null;
+  if (proof.method === 'QR_CODE') {
+    const qr = await transaction.academyQrSession.findFirst({ where: { id: proof.resourceId, academyId: academy.id }, select: { id: true, usedAt: true, createdById: true } });
+    if (!qr || qr.usedAt) throw conflict('QR_TOKEN_REPLAYED', 'This Academy QR admission has already been used.');
+    const consumed = await transaction.academyQrSession.updateMany({ where: { id: qr.id, usedAt: null }, data: { usedAt: now } });
+    if (consumed.count !== 1) throw conflict('QR_TOKEN_REPLAYED', 'This Academy QR admission has already been used.');
+    createdById = qr.createdById;
+  } else {
+    const code = await transaction.admissionCode.findFirst({ where: { id: proof.resourceId, academyId: academy.id }, select: { id: true, status: true, maxUses: true, currentUses: true, expiresAt: true, createdById: true } });
+    if (!code) throw badRequest('ADMISSION_CODE_UNAVAILABLE', 'Invalid or unavailable admission code.');
+    assertAdmissionCodeUsable(code, now);
+    const incremented = await transaction.admissionCode.updateMany({ where: { id: code.id, status: 'ACTIVE', AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }, ...(code.maxUses === null ? [] : [{ currentUses: { lt: code.maxUses } }])] }, data: { currentUses: { increment: 1 } } });
+    if (incremented.count !== 1) throw badRequest('ADMISSION_CODE_UNAVAILABLE', 'Invalid or unavailable admission code.');
+    if (code.maxUses !== null && code.currentUses + 1 >= code.maxUses) await transaction.admissionCode.update({ where: { id: code.id }, data: { status: 'EXHAUSTED' } });
+    codeId = code.id;
+    createdById = code.createdById;
+  }
+
+  const membership = await transaction.academyMembership.create({ data: { academyId: academy.id, userId: student.id, role: 'ACADEMY_STUDENT', status: 'ACTIVE' } });
+  await transaction.userAcademyPreference.upsert({ where: { userId: student.id }, create: { userId: student.id, academyId: academy.id }, update: { academyId: academy.id } });
+  await transaction.admissionRecord.create({ data: { academyId: academy.id, studentId: student.id, email: student.email, studentName: student.fullName, method: proof.method, codeId, status: 'SUCCESS', createdById, completedAt: now } });
+  await transaction.systemAuditLog.create({ data: { action: proof.method === 'QR_CODE' ? 'QR_ADMISSION_SUCCESS' : 'ADMISSION_CODE_CLAIMED', entityType: 'AcademyMembership', entityId: membership.id, academyId: academy.id, actorId: student.id, description: `Student joined the Academy through ${proof.method === 'QR_CODE' ? 'a validated QR admission' : 'an admission code'}.` } });
+  return { status: 'SUCCESS' as const, academyId: academy.id, academyName: academy.name };
 }
 
 async function persistFailedQrAdmission(studentUserId: string, tokenHash: string, error: unknown): Promise<void> {
@@ -397,12 +534,15 @@ export async function claimQrSession(studentUserId: string, qrToken: string) {
     if (!student) throw notFound('STUDENT_NOT_FOUND', 'The authenticated student account was not found.');
     const existing = await transaction.academyMembership.findUnique({ where: { userId_academyId: { userId: studentUserId, academyId: session.academyId } } });
     if (existing) {
+      if (existing.status !== 'ACTIVE') throw forbidden('ACADEMY_MEMBERSHIP_INACTIVE', 'This Academy membership is not active. Contact the Academy administrator.');
+      await transaction.userAcademyPreference.upsert({ where: { userId: studentUserId }, create: { userId: studentUserId, academyId: session.academyId }, update: { academyId: session.academyId } });
       await transaction.admissionRecord.create({ data: { academyId: session.academyId, studentId: studentUserId, email: student.email, studentName: student.fullName, method: 'QR_CODE', status: 'ALREADY_ADMITTED', failureReason: 'Student is already admitted to this Academy', createdById: session.createdById, completedAt: now } });
       return { status: 'ALREADY_ADMITTED' as const, academyId: session.academyId, academyName: session.academy.name };
     }
     const otherMembership = await transaction.academyMembership.findFirst({ where: { userId: studentUserId, academyId: { not: session.academyId }, role: 'ACADEMY_STUDENT', status: 'ACTIVE' }, select: { id: true } });
     if (otherMembership) throw conflict('STUDENT_ACADEMY_CONFLICT', 'This student already belongs to another Academy.');
     const membership = await transaction.academyMembership.create({ data: { academyId: session.academyId, userId: studentUserId, role: 'ACADEMY_STUDENT', status: 'ACTIVE' } });
+    await transaction.userAcademyPreference.upsert({ where: { userId: studentUserId }, create: { userId: studentUserId, academyId: session.academyId }, update: { academyId: session.academyId } });
     await transaction.admissionRecord.create({ data: { academyId: session.academyId, studentId: studentUserId, email: student.email, studentName: student.fullName, method: 'QR_CODE', status: 'SUCCESS', createdById: session.createdById, completedAt: now } });
     await transaction.systemAuditLog.create({ data: { action: 'QR_ADMISSION_SUCCESS', entityType: 'AcademyMembership', entityId: membership.id, academyId: session.academyId, actorId: studentUserId, description: 'Student joined the academy through a single-use QR session.' } });
     await transaction.securityEvent.create({ data: { eventType: 'QR_AUTH_SUCCESS', riskLevel: 'LOW', description: 'A single-use academy QR admission succeeded.', userId: studentUserId, actorId: studentUserId, academyId: session.academyId } });
@@ -438,7 +578,7 @@ export async function createAdmissionCode(
   generateCode: () => string = generateSecureAdmissionCode,
 ) {
   const academyId = context.academyId;
-  if (!academyId) throw new Error('400 Bad Request: Missing active academy context.');
+  if (!academyId) throw badRequest('ACADEMY_CONTEXT_REQUIRED', 'Missing active academy context.');
 
   const maxUses = payload.maxUses ?? null;
   if (maxUses !== null && (!Number.isFinite(maxUses) || !Number.isInteger(maxUses) || maxUses < 1 || maxUses > 100_000)) {
@@ -455,7 +595,7 @@ export async function createAdmissionCode(
   for (let attempt = 1; attempt <= ADMISSION_CODE_INSERT_ATTEMPTS; attempt += 1) {
     const code = generateCode();
     if (!new RegExp(`^[${ADMISSION_CODE_CHARSET}]{8}$`).test(code)) {
-      throw new Error('Admission code generator returned an invalid value.');
+      throw serviceUnavailable('ADMISSION_CODE_GENERATION_FAILED', 'A secure admission code could not be generated. Try again.');
     }
     try {
       return await prisma.$transaction(async (transaction) => {
@@ -476,7 +616,7 @@ export async function createAdmissionCode(
  */
 export async function getAdmissionCodes(context: TenantContext) {
   const academyId = context.academyId;
-  if (!academyId) throw new Error('400 Bad Request: Missing active academy context.');
+  if (!academyId) throw badRequest('ACADEMY_CONTEXT_REQUIRED', 'Missing active academy context.');
 
   const codes = await prisma.admissionCode.findMany({
     where: { academyId },
@@ -503,14 +643,14 @@ export async function getAdmissionCodes(context: TenantContext) {
  */
 export async function revokeAdmissionCode(context: TenantContext, codeId: string) {
   const academyId = context.academyId;
-  if (!academyId) throw new Error('400 Bad Request: Missing active academy context.');
+  if (!academyId) throw badRequest('ACADEMY_CONTEXT_REQUIRED', 'Missing active academy context.');
 
   const existing = await prisma.admissionCode.findFirst({
     where: { id: codeId, academyId },
   });
 
   if (!existing) {
-    throw new Error('404 Not Found: Admission code not found for this academy.');
+    throw notFound('ADMISSION_CODE_NOT_FOUND', 'The admission code was not found for this academy.');
   }
 
   const actorUserId = await resolveUserUuid(context.user?.id);
@@ -529,14 +669,14 @@ export interface UpdateAdmissionCodeInput {
 
 export async function updateAdmissionCode(context: TenantContext, codeId: string, payload: UpdateAdmissionCodeInput) {
   const academyId = context.academyId;
-  if (!academyId) throw new Error('400 Bad Request: Missing active academy context.');
+  if (!academyId) throw badRequest('ACADEMY_CONTEXT_REQUIRED', 'Missing active academy context.');
 
   const existing = await prisma.admissionCode.findFirst({
     where: { id: codeId, academyId },
   });
 
   if (!existing) {
-    throw new Error('404 Not Found: Admission code not found for this academy.');
+    throw notFound('ADMISSION_CODE_NOT_FOUND', 'The admission code was not found for this academy.');
   }
 
   const dataToUpdate: Prisma.AdmissionCodeUpdateInput = {};
@@ -584,14 +724,14 @@ export async function updateAdmissionCode(context: TenantContext, codeId: string
 
 export async function deleteAdmissionCode(context: TenantContext, codeId: string) {
   const academyId = context.academyId;
-  if (!academyId) throw new Error('400 Bad Request: Missing active academy context.');
+  if (!academyId) throw badRequest('ACADEMY_CONTEXT_REQUIRED', 'Missing active academy context.');
 
   const existing = await prisma.admissionCode.findFirst({
     where: { id: codeId, academyId },
   });
 
   if (!existing) {
-    throw new Error('404 Not Found: Admission code not found for this academy.');
+    throw notFound('ADMISSION_CODE_NOT_FOUND', 'The admission code was not found for this academy.');
   }
 
   const actorUserId = await resolveUserUuid(context.user?.id);
@@ -639,14 +779,14 @@ export async function claimAdmissionCode(studentUserId: string, codeInput: strin
     const now = new Date();
     const code = await transaction.admissionCode.findUnique({ where: { code: sanitizedCode }, include: { academy: { select: { id: true, name: true, status: true, deletedAt: true } } } });
     if (!code) throw unavailable();
-    if (code.status !== 'ACTIVE') throw unavailable();
-    if (code.expiresAt && code.expiresAt <= now) throw unavailable();
-    if (code.maxUses !== null && code.currentUses >= code.maxUses) throw unavailable();
-    if (code.academy.status !== 'ACTIVE' || code.academy.deletedAt) throw unavailable();
+    assertAdmissionCodeUsable(code, now);
+    if (code.academy.status !== 'ACTIVE' || code.academy.deletedAt) throw forbidden('ACADEMY_UNAVAILABLE', 'This Academy is unavailable.');
     const student = await transaction.user.findFirst({ where: { id: studentUserId, status: 'ACTIVE', deletedAt: null }, select: { id: true, email: true, fullName: true } });
     if (!student) throw notFound('STUDENT_NOT_FOUND', 'The authenticated student account was not found.');
     const existing = await transaction.academyMembership.findUnique({ where: { userId_academyId: { userId: studentUserId, academyId: code.academyId } } });
     if (existing) {
+      if (existing.status !== 'ACTIVE') throw forbidden('ACADEMY_MEMBERSHIP_INACTIVE', 'This Academy membership is not active. Contact the Academy administrator.');
+      await transaction.userAcademyPreference.upsert({ where: { userId: studentUserId }, create: { userId: studentUserId, academyId: code.academyId }, update: { academyId: code.academyId } });
       await transaction.admissionRecord.create({ data: { academyId: code.academyId, studentId: studentUserId, email: student.email, studentName: student.fullName, method: 'ADMISSION_CODE', codeId: code.id, status: 'ALREADY_ADMITTED', failureReason: 'Student is already admitted to this Academy', createdById: code.createdById, completedAt: now } });
       return { status: 'ALREADY_ADMITTED' as const, academyId: code.academyId, academyName: code.academy.name };
     }
@@ -667,6 +807,7 @@ export async function claimAdmissionCode(studentUserId: string, codeInput: strin
     const afterIncrement = await transaction.admissionCode.findUniqueOrThrow({ where: { id: code.id }, select: { currentUses: true, maxUses: true } });
     if (afterIncrement.maxUses !== null && afterIncrement.currentUses >= afterIncrement.maxUses) await transaction.admissionCode.update({ where: { id: code.id }, data: { status: 'EXHAUSTED' } });
     const membership = await transaction.academyMembership.create({ data: { academyId: code.academyId, userId: studentUserId, role: 'ACADEMY_STUDENT', status: 'ACTIVE' } });
+    await transaction.userAcademyPreference.upsert({ where: { userId: studentUserId }, create: { userId: studentUserId, academyId: code.academyId }, update: { academyId: code.academyId } });
     await transaction.admissionRecord.create({ data: { academyId: code.academyId, studentId: studentUserId, email: student.email, studentName: student.fullName, method: 'ADMISSION_CODE', codeId: code.id, status: 'SUCCESS', createdById: code.createdById, completedAt: now } });
     await transaction.systemAuditLog.create({ data: { action: 'ADMISSION_CODE_CLAIMED', entityType: 'AcademyMembership', entityId: membership.id, academyId: code.academyId, actorId: studentUserId, description: 'Student joined the academy using an admission code.' } });
     return { status: 'SUCCESS' as const, academyId: code.academyId, academyName: code.academy.name };

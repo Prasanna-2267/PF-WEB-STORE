@@ -154,7 +154,7 @@ export async function computeCollectionProducts(key: string, courseSlug = "all",
   const mapPackageToProduct = (pkg: any) => ({
     id: pkg.id,
     type: "bundle" as const,
-    productType: "bundle",
+    productType: pkg.questionBank ? "question-bank" : "bundle",
     title: pkg.title,
     slug: pkg.slug || pkg.id,
     courseId: pkg.courseId,
@@ -209,7 +209,7 @@ export async function computeCollectionProducts(key: string, courseSlug = "all",
       where: packageWhere,
       orderBy: { createdAt: "desc" },
       take: section.limit,
-      include: { course: { select: { id: true, name: true, slug: true } }, _count: { select: { items: true } } },
+      include: { course: { select: { id: true, name: true, slug: true } }, questionBank: { select: { id: true } }, _count: { select: { items: true } } },
     });
 
     candidateContents = await prisma.contentItem.findMany({
@@ -245,7 +245,7 @@ export async function computeCollectionProducts(key: string, courseSlug = "all",
     candidatePackages = await prisma.package.findMany({
       where: { ...packageWhere, ...(bestPackageIds.length ? { id: { in: bestPackageIds } } : {}) },
       take: section.limit,
-      include: { course: { select: { id: true, name: true, slug: true } }, _count: { select: { items: true } } },
+      include: { course: { select: { id: true, name: true, slug: true } }, questionBank: { select: { id: true } }, _count: { select: { items: true } } },
     });
 
     candidateContents = await prisma.contentItem.findMany({
@@ -263,7 +263,7 @@ export async function computeCollectionProducts(key: string, courseSlug = "all",
       where: packageWhere,
       orderBy: { createdAt: "desc" },
       take: 15,
-      include: { course: { select: { id: true, name: true, slug: true } }, _count: { select: { items: true } } },
+      include: { course: { select: { id: true, name: true, slug: true } }, questionBank: { select: { id: true } }, _count: { select: { items: true } } },
     });
 
     candidateContents = await prisma.contentItem.findMany({
@@ -300,7 +300,7 @@ export async function computeCollectionProducts(key: string, courseSlug = "all",
     } else {
       const pinnedPackages = await prisma.package.findMany({
         where: { ...packageWhere, id: { in: section.pinnedItemIds } },
-        include: { course: { select: { id: true, name: true, slug: true } }, _count: { select: { items: true } } },
+        include: { course: { select: { id: true, name: true, slug: true } }, questionBank: { select: { id: true } }, _count: { select: { items: true } } },
       });
       const pinnedContents = await prisma.contentItem.findMany({
         where: { ...contentWhere, id: { in: section.pinnedItemIds } },
@@ -321,7 +321,7 @@ export async function computeCollectionProducts(key: string, courseSlug = "all",
     if (section.pinnedItemIds && section.pinnedItemIds.length > 0) {
       const pinnedPackages = await prisma.package.findMany({
         where: { ...packageWhere, id: { in: section.pinnedItemIds } },
-        include: { course: { select: { id: true, name: true, slug: true } }, _count: { select: { items: true } } },
+        include: { course: { select: { id: true, name: true, slug: true } }, questionBank: { select: { id: true } }, _count: { select: { items: true } } },
       });
       const pinnedContents = await prisma.contentItem.findMany({
         where: { ...contentWhere, id: { in: section.pinnedItemIds } },

@@ -8,6 +8,10 @@ import { getConfig } from "../config/env.js";
 import { getEmailProvider } from "../integrations/provider-registry.js";
 import { executeContentTreeCopyJob } from "./contentService.js";
 import { dispatchLearnerPushDeliveries, runLearnerReminderSweep } from "./learnerNotificationService.js";
+import { ACCOUNT_CREATED_EMAIL_JOB, deliverAccountCreatedEmail } from "./accountCreatedEmailService.js";
+import { PURCHASE_INVOICE_EMAIL_JOB, deliverPurchaseInvoiceEmail } from "./purchaseInvoiceEmailService.js";
+import { MONTHLY_REPORT_EMAIL_JOB, deliverMonthlyReportEmail } from "./monthlyReportEmailService.js";
+import { USER_LIFECYCLE_EMAIL_JOB, deliverUserLifecycleEmail } from "./userLifecycleEmailService.js";
 
 export interface EnqueueJobInput { kind: string; payload: Prisma.InputJsonValue; academyId?: string; createdById?: string; runAt?: Date; deduplicationKey?: string; maxAttempts?: number }
 export async function enqueueJob(input: EnqueueJobInput, tx: Prisma.TransactionClient | typeof prisma = prisma) {
@@ -23,6 +27,16 @@ async function execute(job: { id: string; kind: string; payload: unknown; academ
   if (kind === "GLOBAL_BROADCAST_PUBLISH") return publishGlobalBroadcast(String(data.actorId), String(data.broadcastId));
   if (kind === "LEARNER_PUSH_DELIVERY") return dispatchLearnerPushDeliveries(data.sourceKey ? String(data.sourceKey) : undefined);
   if (kind === "LEARNER_REMINDER_SWEEP") return runLearnerReminderSweep();
+  if (kind === ACCOUNT_CREATED_EMAIL_JOB) return deliverAccountCreatedEmail(data);
+  if (kind === PURCHASE_INVOICE_EMAIL_JOB) return deliverPurchaseInvoiceEmail(data);
+  if (kind === MONTHLY_REPORT_EMAIL_JOB) return deliverMonthlyReportEmail(data);
+  if (kind === USER_LIFECYCLE_EMAIL_JOB) return deliverUserLifecycleEmail(data);
+  if (kind === "MONTHLY_REPORT_GENERATE") {
+    // Loaded lazily to keep the queue service independent from producers that
+    // enqueue jobs inside a commerce transaction.
+    const { generateMonthlyReport } = await import("./monthlyReportService.js");
+    return generateMonthlyReport(String(data.reportId));
+  }
   if (kind === "CONTACT_EMAIL") {
     const submission = await prisma.contactSubmission.findUniqueOrThrow({ where: { id: String(data.submissionId) }, include: { academy: { select: { email: true } } } });
     const recipient = submission.academy?.email ?? getConfig().email.contactRecipient;

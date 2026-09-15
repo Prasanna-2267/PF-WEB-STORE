@@ -32,9 +32,17 @@ const visibleAcademyIds = async (userId: string) => (await prisma.academyMembers
 })).map((membership) => membership.academyId);
 
 const visibleCourseWhere = (academyIds: string[]): Prisma.CourseWhereInput => {
-  const visibility: Prisma.CourseWhereInput[] = [{ academyId: null }];
-  if (academyIds.length) visibility.push({ academyId: { in: academyIds }, academy: { status: "ACTIVE", deletedAt: null } });
-  return { status: "ACTIVE", deletedAt: null, OR: visibility };
+  // Academy members personalise against their Academy catalogue. Unaffiliated
+  // learners retain the platform catalogue. Mixing both contexts would let an
+  // Academy learner select a platform course and silently leave the tenant
+  // question/content scope expected by the Academy experience.
+  return {
+    status: "ACTIVE",
+    deletedAt: null,
+    ...(academyIds.length
+      ? { academyId: { in: academyIds }, academy: { status: "ACTIVE", deletedAt: null } }
+      : { academyId: null }),
+  };
 };
 
 const assertCourseVisible = async (userId: string, courseId: string) => {

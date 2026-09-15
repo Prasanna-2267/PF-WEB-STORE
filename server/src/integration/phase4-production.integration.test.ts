@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { test } from "node:test";
+import ExcelJS from "exceljs";
 import { PDFDocument } from "pdf-lib";
 import { createApp } from "../app/create-app.js";
 import { hashPassword } from "../auth/password.js";
@@ -26,6 +27,8 @@ import * as content from "../services/contentService.js";
 import * as templates from "../services/notificationTemplateService.js";
 import * as publicApi from "../services/publicService.js";
 import * as questions from "../services/questionService.js";
+import * as questionBanks from "../services/questionBankService.js";
+import * as questionImports from "../services/questionImportService.js";
 import * as student from "../services/studentService.js";
 import * as studentLibrary from "../services/studentLibraryService.js";
 import * as practice from "../services/practiceService.js";
@@ -110,7 +113,7 @@ test("Phase 4 migration ledger, deterministic seed, and operational constraints 
     SELECT COUNT(*) FILTER (WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL)::bigint AS applied,
            COUNT(*) FILTER (WHERE finished_at IS NULL AND rolled_back_at IS NULL)::bigint AS failed
     FROM "_prisma_migrations"`;
-  assert.equal(Number(migrations[0]?.applied), 25);
+  assert.ok(Number(migrations[0]?.applied) >= 40, "All migrations through direct single-owner Question Bank enforcement must be applied");
   assert.equal(Number(migrations[0]?.failed), 0);
   const roles = await prisma.role.findMany({ where: { key: { in: ["super_admin", "admin", "ACADEMY_ADMIN", "student"] } }, include: { rolePermissions: true } });
   assert.equal(roles.length, 4);
@@ -148,7 +151,7 @@ test("authentication persists sessions, rejects failures, and atomically rotates
   } finally { await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); }
 });
 
-test("staged mobile registration verifies email and mobile before creating a student session", { skip: !enabled }, async () => {
+test("staged mobile registration verifies email before creating a student session", { skip: !enabled }, async () => {
   const server = createApp(getConfig()).listen(0, "127.0.0.1");
   await new Promise<void>((resolve, reject) => { server.once("listening", resolve); server.once("error", reject); });
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/auth`;
@@ -168,16 +171,6 @@ test("staged mobile registration verifies email and mobile before creating a stu
     });
     assert.equal(emailVerification.status, 200);
 
-    const mobileSend = await fetch(`${base}/registrations/${created.registrationId}/mobile/send`, { method: "POST", headers, body: "{}" });
-    assert.equal(mobileSend.status, 200);
-    const mobileDelivery = await mobileSend.json() as { developmentCode: string };
-    assert.match(mobileDelivery.developmentCode, /^\d{4}$/);
-
-    const mobileVerification = await fetch(`${base}/registrations/${created.registrationId}/mobile/verify`, {
-      method: "POST", headers, body: JSON.stringify({ code: mobileDelivery.developmentCode }),
-    });
-    assert.equal(mobileVerification.status, 200);
-
     const completedResponse = await fetch(`${base}/registrations/${created.registrationId}/complete`, { method: "POST", headers, body: "{}" });
     assert.equal(completedResponse.status, 201);
     const completed = await completedResponse.json() as { accessToken: string; user: { id: string; email: string; fullName: string; role: string; permissions: string[] } };
@@ -192,7 +185,9 @@ test("staged mobile registration verifies email and mobile before creating a stu
     assert.ok(persisted.passwordCredential);
     assert.equal(persisted.sessions.length, 1);
     assert.equal(persisted.sessions[0]!.platform, "ANDROID");
+    assert.equal(await prisma.backgroundJob.count({ where: { kind: "ACCOUNT_CREATED_EMAIL", deduplicationKey: persisted.id } }), 1);
     assert.equal((await fetch(`${base}/registrations/${created.registrationId}/complete`, { method: "POST", headers, body: "{}" })).status, 409);
+    assert.equal(await prisma.backgroundJob.count({ where: { kind: "ACCOUNT_CREATED_EMAIL", deduplicationKey: persisted.id } }), 1, "Registration retry must not duplicate the welcome event");
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
@@ -221,6 +216,8 @@ test("Super Admin academy creation atomically provisions one active Academy Admi
   assert.deepEqual(administrator.academyMemberships.map((membership) => ({ academyId: membership.academyId, role: membership.role, status: membership.status })), [
     { academyId: created.academy.id, role: "ACADEMY_ADMIN", status: "ACTIVE" },
   ]);
+  const accountEmail = await prisma.backgroundJob.findUniqueOrThrow({ where: { kind_deduplicationKey: { kind: "ACCOUNT_CREATED_EMAIL", deduplicationKey: administrator.id } } });
+  assert.equal(accountEmail.academyId, created.academy.id);
   const auditActions = await prisma.systemAuditLog.findMany({ where: { academyId: created.academy.id }, select: { action: true }, orderBy: { occurredAt: "asc" } });
   assert.deepEqual(auditActions.map((entry) => entry.action), ["ACADEMY_CREATED", "ACADEMY_ADMIN_ASSIGNED"]);
   await prisma.passwordCredential.create({ data: { userId: administrator.id, passwordHash: await hashPassword(password) } });
@@ -240,6 +237,21 @@ test("Super Admin academy creation atomically provisions one active Academy Admi
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
 
+  const reassignedEmail = `reassigned-admin-${suffix}@test.invalid`;
+  const updatedAcademy = await adminDomains.updateAcademy(superId, created.academy.id, {
+    adminName: "Reassigned Admin",
+    adminEmail: reassignedEmail,
+    adminPhone: "9000000077",
+  });
+  assert.equal(updatedAcademy.adminEmail, reassignedEmail);
+  const oldMembership = await prisma.academyMembership.findUniqueOrThrow({ where: { userId_academyId: { userId: administrator.id, academyId: created.academy.id } } });
+  const reassignedAdministrator = await prisma.user.findUniqueOrThrow({ where: { email: reassignedEmail }, include: { academyMemberships: true, role: true } });
+  assert.equal(oldMembership.status, "REVOKED", "Replacing the primary administrator must revoke the previous tenant membership");
+  assert.equal(reassignedAdministrator.role.key, "ACADEMY_ADMIN");
+  assert.deepEqual(reassignedAdministrator.academyMemberships.map((membership) => ({ academyId: membership.academyId, role: membership.role, status: membership.status })), [
+    { academyId: created.academy.id, role: "ACADEMY_ADMIN", status: "ACTIVE" },
+  ]);
+
   await assert.rejects(
     () => adminDomains.createAcademy(superId, {
       name: `Rollback Academy ${suffix}`,
@@ -250,7 +262,7 @@ test("Super Admin academy creation atomically provisions one active Academy Admi
       state: "Tamil Nadu",
       postalCode: "600001",
       adminName: "Provisioned Admin",
-      adminEmail: administrator.email,
+      adminEmail: reassignedEmail,
     }),
     (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && error.code === "ADMIN_IDENTITY_CONFLICT"),
   );
@@ -364,7 +376,10 @@ test("HTTP RBAC, single-tenant Academy Admin scope, IDOR, and commercial boundar
     assert.equal((await call("/api/academy/admissions/code", adminToken, { method: "POST", body: JSON.stringify({ academyId: academyBId, maxUses: 1, expiresAt: null }) })).status, 403, "Cross-Academy code generation forgery must fail closed");
     assert.equal((await call("/api/student/admissions/codes/claim", studentToken, { method: "POST", body: JSON.stringify({ code: "ABCDEFGH", academyId: academyBId }) })).status, 422, "Students must not mass-assign Academy identity during code claims");
     assert.equal((await call("/api/academy/admissions/qr", superToken, { method: "POST", body: "{}" })).status, 409, "Super Admin must not receive an implicit Academy tenant context");
-    for (const removedPath of ["/api/academy/analytics", "/api/academy/settings", "/api/academy/notifications"]) {
+    assert.equal((await call("/api/academy/admissions/qr", superToken, { method: "POST", headers: { "x-academy-id": academyAId }, body: "{}" })).status, 403, "Super Admin must remain read-only even when an Academy header is supplied");
+    assert.equal((await call("/api/academy/settings", adminToken)).status, 200, "Academy Admin must be able to load the finalized settings module");
+    assert.equal((await call("/api/academy/settings", superToken, { headers: { "x-academy-id": academyAId } })).status, 403, "Super Admin must not mutate or enter Academy operational settings");
+    for (const removedPath of ["/api/academy/analytics", "/api/academy/notifications"]) {
       assert.equal((await call(removedPath, adminToken)).status, 404, `${removedPath} must not be exposed to Academy Admin`);
     }
     for (const commercialPath of ["/api/admin/packages", "/api/admin/orders", "/api/admin/coupons", "/api/admin/store-management"]) {
@@ -699,15 +714,16 @@ test("question and taxonomy lifecycle is tenant-scoped and sanitizes persisted r
   const scope = { academyId: academyAId, actorId: adminAId };
   const subject = await questions.createTaxonomyNode(scope, { kind: "subject", parentId: courseAId, courseId: courseAId, name: "Mathematics" });
   const chapter = await questions.createTaxonomyNode(scope, { kind: "chapter", parentId: subject.id, courseId: courseAId, name: "Algebra" });
-  const created = await questions.createQuestion(scope, { kind: "NORMAL_MCQ", courseId: courseAId, subjectId: subject.id, chapterId: chapter.id, questionHtml: '<p>2 + 2?</p><script>alert(1)</script>', correctOptionId: "B", options: [{ optionLabel: "A", html: "3" }, { optionLabel: "B", html: "4" }] });
+  const linkedFile = await prisma.contentItem.create({ data: { courseId: courseAId, kind: "FILE", name: `Question lifecycle ${suffix}.pdf`, mimeType: "application/pdf", storagePath: `integration/questions/lifecycle-${suffix}.pdf`, accessType: "FREE", status: "PUBLISHED" } });
+  const created = await questions.createQuestion(scope, { kind: "NORMAL_MCQ", courseId: courseAId, subjectId: subject.id, chapterId: chapter.id, contentItemIds: [linkedFile.id], questionHtml: '<p>2 + 2?</p><script>alert(1)</script>', correctOptionId: "B", options: [{ optionLabel: "A", html: "3" }, { optionLabel: "B", html: "4" }] });
   assert.doesNotMatch(created.questionHtml, /script|alert/i);
   const persisted = await prisma.question.findUniqueOrThrow({ where: { id: created.id } });
   assert.equal(persisted.academyId, academyAId);
   assert.equal(persisted.courseId, courseAId);
-  const replaced = await questions.updateQuestion(scope, created.id, { kind: "NORMAL_MCQ", courseId: courseAId, questionHtml: "Updated", correctOptionId: "A", options: [{ optionLabel: "A", html: "4" }, { optionLabel: "B", html: "5" }] });
+  const replaced = await questions.updateQuestion(scope, created.id, { kind: "NORMAL_MCQ", courseId: courseAId, contentItemIds: [linkedFile.id], questionHtml: "Updated", correctOptionId: "A", options: [{ optionLabel: "A", html: "4" }, { optionLabel: "B", html: "5" }] });
   assert.equal(replaced.options.length, 2); assert.equal(replaced.correctOptionId, "A");
   const cloned = await questions.cloneQuestion(scope, created.id); assert.equal(cloned.status, "DRAFT");
-  const caseQuestion = await questions.createQuestion(scope, { kind: "CASE_MCQ", courseId: courseAId, caseHtml: "Read the Academy case.", classificationMode: "ENTIRE_CASE", subQuestions: [{ questionHtml: "Which option applies?", correctOptionId: "A", options: [{ optionLabel: "A", html: "Applicable" }, { optionLabel: "B", html: "Not applicable" }] }] });
+  const caseQuestion = await questions.createQuestion(scope, { kind: "CASE_MCQ", courseId: courseAId, contentItemIds: [linkedFile.id], caseHtml: "Read the Academy case.", classificationMode: "ENTIRE_CASE", subQuestions: [{ questionHtml: "Which option applies?", correctOptionId: "A", options: [{ optionLabel: "A", html: "Applicable" }, { optionLabel: "B", html: "Not applicable" }] }] });
   assert.equal(caseQuestion.kind, "CASE_MCQ");
   assert.equal(caseQuestion.subQuestions.length, 1);
   await questions.setQuestionLifecycle(scope, created.id, "publish");
@@ -753,6 +769,7 @@ test("broadcast delivery, templates, durable jobs, retries, deduplication, and s
     });
     assert.equal(broadcast.academyId, academyAId);
     assert.equal(broadcast.audienceKind, "ACADEMY_STUDENTS");
+    assert.equal(broadcast.platform, "APP");
     assert.equal(broadcast.cta?.destination, courseAId);
     assert.deepEqual(broadcast.placements.map((entry) => entry.placement).sort(), ["GENERAL", "HOME", "NOTIFICATION"]);
     const persistedBroadcast = await prisma.broadcast.findUniqueOrThrow({ where: { id: broadcast.id }, include: { placements: true, cta: true, timeline: true } });
@@ -771,7 +788,7 @@ test("broadcast delivery, templates, durable jobs, retries, deduplication, and s
     await expectCode(() => academy.getAcademyBroadcastDetail(contextA, academyBPrivate.id), "BROADCAST_NOT_FOUND");
     await expectCode(() => academy.updateAcademyBroadcast(contextA, academyBPrivate.id, { title: "Tampered" }), "BROADCAST_NOT_FOUND");
     const published = await academy.publishAcademyBroadcast(contextA, broadcast.id);
-    assert.equal(published.delivery.status, "QUEUED");
+    assert.equal(published.delivery.status, "SENT");
     const concurrentRuns = await Promise.all([
       runDueJobsOnce({ workerId: "phase4-worker-a", limit: 20 }),
       runDueJobsOnce({ workerId: "phase4-worker-b", limit: 20 }),
@@ -882,9 +899,29 @@ test("commerce enforces server pricing, idempotency, coupon concurrency, webhook
     const webhookAttempts = await Promise.allSettled([commerce.handlePaymentWebhook("http", webhookBody, "valid"), commerce.handlePaymentWebhook("http", webhookBody, "valid")]);
     assert.ok(webhookAttempts.some((item) => item.status === "fulfilled"));
     assert.equal(await prisma.entitlement.count({ where: { orderId: order.id } }), 1);
-    const refundA = await admin.refundAdminOrder(superId, order.id, { reason: "Phase 4", idempotencyKey: `refund-${suffix}` });
-    const refundB = await admin.refundAdminOrder(superId, order.id, { reason: "Phase 4", idempotencyKey: `refund-${suffix}` });
+    const refundA = await admin.refundAdminOrder(superId, order.id, { amount: 250, reason: "Phase 4 partial", idempotencyKey: `refund-${suffix}` });
+    const refundB = await admin.refundAdminOrder(superId, order.id, { amount: 250, reason: "Phase 4 partial", idempotencyKey: `refund-${suffix}` });
     assert.equal(refundA.id, refundB.id);
+    const partiallyRefunded = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { entitlements: true, payments: true } });
+    assert.equal(partiallyRefunded.status, "PAID");
+    assert.equal(partiallyRefunded.refundStatus, "PARTIAL");
+    assert.equal(partiallyRefunded.accessStatus, "GRANTED");
+    assert.equal(partiallyRefunded.entitlements[0]?.status, "ACTIVE");
+    assert.equal(partiallyRefunded.payments[0]?.status, "SUCCESS");
+    const partialNotice = await prisma.learnerNotification.findUniqueOrThrow({ where: { userId_sourceKey: { userId: studentAId, sourceKey: `order-refund:${refundA.id}` } } });
+    assert.match(partialNotice.title, /partial refund/i);
+    assert.match(partialNotice.body, /250\.00/);
+    const finalRefund = await admin.refundAdminOrder(superId, order.id, { amount: 249, reason: "Phase 4 remainder", idempotencyKey: `refund-final-${suffix}` });
+    const fullyRefunded = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { entitlements: true, payments: true } });
+    assert.equal(fullyRefunded.status, "REFUNDED");
+    assert.equal(fullyRefunded.refundStatus, "FULL");
+    assert.equal(fullyRefunded.accessStatus, "REVOKED");
+    assert.equal(fullyRefunded.entitlements[0]?.status, "REVOKED");
+    assert.equal(fullyRefunded.payments[0]?.status, "REFUNDED");
+    const fullNotice = await prisma.learnerNotification.findUniqueOrThrow({ where: { userId_sourceKey: { userId: studentAId, sourceKey: `order-refund:${finalRefund.id}` } } });
+    assert.match(fullNotice.title, /partial refund/i);
+    assert.match(fullNotice.body, /249\.00/);
+    assert.match(fullNotice.body, /now fully refunded/i);
     const freePackage = await adminDomains.createPackage(superId, { courseId: courseAId, title: `Coupon ${suffix}`, price: 100, status: "PUBLISHED" });
     const coupon = await adminDomains.createCoupon(superId, { code: `ONE${suffix}`, discountType: "PERCENT", discountValue: 100, maxUses: 1 });
     const couponAttempts = await Promise.allSettled([
@@ -950,10 +987,113 @@ test("student package, store, entitlement, and library projections reflect autho
   await assert.rejects(() => studentLibrary.getEntitlement(studentBId, expired.id), (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && error.code === "ENTITLEMENT_NOT_FOUND"));
 });
 
+test("first-class Question Banks enforce tenant, type, file, purchase, and student-practice boundaries", { skip: !enabled }, async () => {
+  await selectCourseForStudent(studentAId, courseAId);
+  await selectCourseForStudent(studentBId, courseAId);
+  const subject = await prisma.subject.create({ data: { courseId: courseAId, name: `Question Bank Subject ${suffix}` } });
+  const chapter = await prisma.taxonomyChapter.create({ data: { courseId: courseAId, subjectId: subject.id, name: `Question Bank Chapter ${suffix}` } });
+  const lesson = await prisma.taxonomyLesson.create({ data: { chapterId: chapter.id, name: `Question Bank Lesson ${suffix}` } });
+  const topic = await prisma.taxonomyTopic.create({ data: { lessonId: lesson.id, name: `Question Bank Concept ${suffix}` } });
+  const freeFile = await prisma.contentItem.create({ data: { courseId: courseAId, kind: "FILE", name: `Question Bank Free ${suffix}.pdf`, mimeType: "application/pdf", storagePath: `integration/question-bank/free-${suffix}.pdf`, accessType: "FREE", status: "PUBLISHED" } });
+  const scope = { academyId: academyAId, actorId: adminAId };
+
+  await expectCode(() => questionBanks.createQuestionBank({ academyId: academyBId, actorId: adminAId }, {
+    courseId: courseAId, name: `Cross tenant ${suffix}`, accessType: "FREE",
+  }), "COURSE_NOT_FOUND");
+
+  const freeBank = await questionBanks.createQuestionBank(scope, {
+    courseId: courseAId,
+    name: `Free Normal Bank ${suffix}`,
+    description: "Free first-class Question Bank integration fixture",
+    accessType: "FREE",
+  });
+  await questions.createQuestion(scope, {
+    courseId: courseAId, subjectId: subject.id, chapterId: chapter.id, contentItemIds: [],
+    kind: "NORMAL_MCQ", status: "PUBLISHED", practiceCollection: "QUESTION_BANK", questionBankId: freeBank.id,
+    questionHtml: "<p>Free bank prompt</p>", options: [{ optionLabel: "A", html: "Wrong" }, { optionLabel: "B", html: "Correct" }], correctOptionId: "B",
+    correctExplanationHtml: "<p>B is correct.</p>", premiumWrongOptionsExplanationHtml: "<p>A is incorrect.</p>",
+    examName: "Integration", chapterName: chapter.name, conceptName: "Free bank concept",
+  });
+  await questions.createQuestion(scope, {
+    courseId: courseAId, subjectId: subject.id, chapterId: chapter.id, contentItemIds: [freeFile.id],
+    kind: "CASE_MCQ", status: "PUBLISHED", practiceCollection: "QUESTION_BANK", questionBankId: freeBank.id,
+    caseHtml: "<p>Mixed bank case</p>", subQuestions: [{ questionHtml: "<p>Mixed bank sub-question</p>", options: [{ optionLabel: "A", html: "One" }, { optionLabel: "B", html: "Two" }], correctOptionId: "A" }],
+  });
+  await questionBanks.setQuestionBankLifecycle(scope, freeBank.id, "publish");
+  const freeVisible = await practice.listQuestionBanks(studentBId);
+  assert.ok(freeVisible.some((bank) => bank.id === freeBank.id && bank.questionKinds.includes("NORMAL_MCQ") && bank.questionKinds.includes("CASE_MCQ") && bank.questionCount === 2));
+  const freeFilters = await practice.getPracticeFilters(studentBId, { sourceKind: "ARCHIVE", mode: "QUESTION_BANK", questionBankId: freeBank.id });
+  assert.ok(freeFilters.linkedFiles.some((file) => file.id === freeFile.id));
+  const freeSession = await practice.createPracticeSession(studentBId, { sourceKind: "ARCHIVE", mode: "QUESTION_BANK", questionBankId: freeBank.id, collection: "QUESTION_BANK", answerFormat: "MCQ", questionCount: 2 });
+  assert.equal(freeSession.questionBankId, freeBank.id);
+  assert.deepEqual(new Set((await practice.listSessionQuestions(studentBId, freeSession.id, 1, 10)).items.map((item) => item.kind)), new Set(["NORMAL_MCQ", "CASE_MCQ"]));
+
+  const caseBank = await questionBanks.createQuestionBank(scope, {
+    courseId: courseAId, name: `Free Case Bank ${suffix}`, accessType: "FREE",
+  });
+  await questions.createQuestion(scope, {
+    courseId: courseAId, subjectId: subject.id, chapterId: chapter.id, contentItemIds: [freeFile.id],
+    kind: "CASE_MCQ", status: "PUBLISHED", practiceCollection: "QUESTION_BANK", questionBankId: caseBank.id,
+    caseHtml: "<p>Read this integration case.</p>", examName: "Integration", chapterName: chapter.name, conceptName: "Case bank concept",
+    subQuestions: [{ questionHtml: "<p>Choose the case answer.</p>", options: [{ optionLabel: "A", html: "Correct" }, { optionLabel: "B", html: "Wrong" }], correctOptionId: "A", correctExplanationHtml: "<p>A is correct.</p>", premiumWrongOptionsExplanationHtml: "<p>B is incorrect.</p>" }],
+  });
+  const caseWorkbook = new ExcelJS.Workbook();
+  const caseSheet = caseWorkbook.addWorksheet("Case MCQ");
+  caseSheet.addRow(["Case Passage", "Sub-question", "Option A", "Option B", "Option C", "Option D", "Correct Answer", "Correct Explanation", "Wrong Options Explanation", "File Name(s)", "Exam", "Chapter Name", "Concept Name"]);
+  caseSheet.addRow([
+    `Imported case passage ${suffix}`,
+    `Imported case question ${suffix}`,
+    "Correct imported option",
+    "Wrong imported option",
+    "",
+    "",
+    "A",
+    "Imported correct explanation",
+    "Imported wrong option explanation",
+    freeFile.name,
+    "Integration",
+    chapter.name,
+    topic.name,
+  ]);
+  const caseWorkbookBase64 = Buffer.from(await caseWorkbook.xlsx.writeBuffer()).toString("base64");
+  const importRequest = { courseId: courseAId, mode: "case" as const, practiceCollection: "QUESTION_BANK" as const, questionBankId: caseBank.id, fileName: `case-bank-${suffix}.xlsx`, contentBase64: caseWorkbookBase64 };
+  const importValidation = await questionImports.validateImport(scope, importRequest);
+  assert.equal(importValidation.valid, true, JSON.stringify(importValidation.errors));
+  const imported = await questionImports.commitImport(scope, { ...importRequest, validationDigest: importValidation.validationDigest });
+  assert.equal(imported.imported, 1);
+  assert.equal(imported.questions[0]?.subQuestions[0]?.correctExplanationHtml, "<p>Imported correct explanation</p>");
+  assert.equal(imported.questions[0]?.subQuestions[0]?.premiumWrongOptionsExplanationHtml, "<p>Imported wrong option explanation</p>");
+  assert.deepEqual(imported.questions[0]?.contentLinks.map((link) => link.contentItemId), [freeFile.id]);
+  await questions.setQuestionLifecycle(scope, imported.questions[0]!.id, "publish");
+  await questionBanks.setQuestionBankLifecycle(scope, caseBank.id, "publish");
+  const caseSession = await practice.createPracticeSession(studentBId, { sourceKind: "ARCHIVE", mode: "QUESTION_BANK", questionBankId: caseBank.id, collection: "QUESTION_BANK", answerFormat: "CASE_STUDY", questionCount: 1 });
+  assert.equal((await practice.listSessionQuestions(studentBId, caseSession.id, 1, 10)).items[0]?.kind, "CASE_MCQ");
+
+  const paidBank = await questionBanks.createQuestionBank(scope, { courseId: courseAId, name: `Paid Bank ${suffix}`, accessType: "PAID", price: 399, accessDurationValue: 3, accessDurationUnit: "MONTHS" });
+  await questions.createQuestion(scope, {
+    courseId: courseAId, subjectId: subject.id, chapterId: chapter.id, contentItemIds: [],
+    kind: "NORMAL_MCQ", status: "PUBLISHED", practiceCollection: "QUESTION_BANK", questionBankId: paidBank.id,
+    questionHtml: "<p>Paid bank prompt</p>", options: [{ optionLabel: "A", html: "Correct" }, { optionLabel: "B", html: "Wrong" }], correctOptionId: "A",
+    examName: "Integration", chapterName: chapter.name, conceptName: "Paid bank concept",
+  });
+  await questionBanks.setQuestionBankLifecycle(scope, paidBank.id, "publish");
+  assert.ok(!(await practice.listQuestionBanks(studentBId)).some((bank) => bank.id === paidBank.id), "Unpurchased paid Question Banks must remain hidden");
+  const paidOrder = await prisma.order.create({ data: { orderNumber: `QB-${suffix}`, userId: studentAId, courseId: courseAId, subtotal: "399.00", totalAmount: "399.00", status: "PAID", accessStatus: "GRANTED", paidAt: new Date(), receiptNumber: `QB-RCP-${suffix}`, items: { create: { questionBankId: paidBank.id, resourceType: "QUESTION_BANK", titleSnapshot: paidBank.name, unitPrice: "399.00", quantity: 1, totalPrice: "399.00" } } } });
+  await prisma.entitlement.create({ data: { userId: studentAId, resourceType: "QUESTION_BANK", questionBankId: paidBank.id, resourceTitle: paidBank.name, source: "PURCHASE", orderId: paidOrder.id, status: "ACTIVE" } });
+  assert.ok((await practice.listQuestionBanks(studentAId)).some((bank) => bank.id === paidBank.id), "A paid order entitlement must reveal its Question Bank");
+  const paidSession = await practice.createPracticeSession(studentAId, { sourceKind: "ARCHIVE", mode: "QUESTION_BANK", questionBankId: paidBank.id, collection: "QUESTION_BANK", answerFormat: "MCQ", questionCount: 1 });
+  assert.equal(paidSession.accessPolicy, "PAID");
+  const paidSessionQuestionId = (await practice.listSessionQuestions(studentAId, paidSession.id, 1, 10)).items[0]!.id;
+  const paidWrong = await practice.submitAttempt(studentAId, paidSession.id, paidSessionQuestionId, { clientAttemptId: `paid-bank-wrong-${suffix}`, answerOptionLabel: "B" });
+  assert.equal(paidWrong.result.retryAllowed, true);
+  assert.ok((await practice.listWrongAnswers(studentAId, { page: 1, limit: 100 })).data.some((item) => item.id === paidSessionQuestionId), "Entitled Question Bank mistakes must remain available in Wrong Answers mode");
+});
+
 test("secure practice hides answers, enforces Free/Paid retry policy, timers, idempotency, and chapter tracking", { skip: !enabled }, async () => {
   const subject = await prisma.subject.create({ data: { courseId: courseAId, name: `Practice Subject ${suffix}` } });
   const freeChapter = await prisma.taxonomyChapter.create({ data: { courseId: courseAId, subjectId: subject.id, name: `Free Chapter ${suffix}` } });
   const paidChapter = await prisma.taxonomyChapter.create({ data: { courseId: courseAId, subjectId: subject.id, name: `Paid Chapter ${suffix}` } });
+  const practiceFile = await prisma.contentItem.create({ data: { courseId: courseAId, kind: "FILE", name: `Practice source ${suffix}.pdf`, mimeType: "application/pdf", storagePath: `integration/practice/source-${suffix}.pdf`, accessType: "FREE", status: "PUBLISHED" } });
   await prisma.learnerPreference.upsert({
     where: { userId: studentBId },
     create: { userId: studentBId, selectedCourseId: courseAId, examDate: new Date(Date.UTC(new Date().getUTCFullYear() + 1, 0, 1)), examDatePrecision: "MONTH", onboardingCompletedAt: new Date() },
@@ -975,9 +1115,10 @@ test("secure practice hides answers, enforces Free/Paid retry policy, timers, id
     practiceYear: 2025,
     questionHtml: "Free secure prompt",
     correctOptionId: "B",
-    correctExplanationHtml: "Free correct explanation",
-    premiumWrongOptionsExplanationHtml: "Free wrong explanation must remain hidden",
+    correctExplanationHtml: "Free correct answer explanation",
+    premiumWrongOptionsExplanationHtml: "Free wrong answer explanation",
     options: { create: [{ optionLabel: "A", html: "Wrong", displayOrder: 0 }, { optionLabel: "B", html: "Correct", displayOrder: 1 }] },
+    contentLinks: { create: { contentItemId: practiceFile.id } },
   } });
   await prisma.question.create({ data: {
     academyId: academyAId,
@@ -993,6 +1134,7 @@ test("secure practice hides answers, enforces Free/Paid retry policy, timers, id
     correctExplanationHtml: "Free explanation released after correct answer",
     premiumWrongOptionsExplanationHtml: "Unused free wrong explanation",
     options: { create: [{ optionLabel: "A", html: "Wrong", displayOrder: 0 }, { optionLabel: "D", html: "Correct", displayOrder: 1 }] },
+    contentLinks: { create: { contentItemId: practiceFile.id } },
   } });
   const freeSession = await practice.createPracticeSession(studentBId, { sourceKind: "ARCHIVE", subjectId: subject.id, chapterId: freeChapter.id, collection: "PYQ", year: 2025, answerFormat: "MCQ", questionCount: 2, timerSeconds: 300 });
   const freePrompts = await practice.listSessionQuestions(studentBId, freeSession.id, 1, 10);
@@ -1002,7 +1144,10 @@ test("secure practice hides answers, enforces Free/Paid retry policy, timers, id
   const freeCorrectQuestionId = freePrompts.items.find((item) => item.promptHtml === "Free correct prompt")!.id;
   const freeWrong = await practice.submitAttempt(studentBId, freeSession.id, freeQuestionId, { clientAttemptId: `free-wrong-${suffix}`, answerOptionLabel: "A", durationMs: 1200 });
   assert.equal(freeWrong.result.navigatorState, "LOCKED_WRONG");
-  assert.equal(freeWrong.result.explanation, null);
+  assert.equal(freeWrong.result.explanation, "Free wrong answer explanation");
+  assert.equal(freeWrong.result.wrongExplanation, "Free wrong answer explanation");
+  assert.equal(freeWrong.result.correctExplanation, "Free correct answer explanation");
+  assert.equal(freeWrong.result.correctOptionLabel, "B");
   assert.equal(freeWrong.result.retryAllowed, false);
   const freeReplay = await practice.submitAttempt(studentBId, freeSession.id, freeQuestionId, { clientAttemptId: `free-wrong-${suffix}`, answerOptionLabel: "A", durationMs: 1200 });
   assert.equal(freeReplay.replay, true);
@@ -1010,6 +1155,10 @@ test("secure practice hides answers, enforces Free/Paid retry policy, timers, id
   const freeCorrect = await practice.submitAttempt(studentBId, freeSession.id, freeCorrectQuestionId, { clientAttemptId: `free-correct-${suffix}`, answerOptionLabel: "D" });
   assert.equal(freeCorrect.result.navigatorState, "ANSWERED_CORRECT");
   assert.equal(freeCorrect.result.explanation, "Free explanation released after correct answer");
+  assert.equal(freeCorrect.result.correctExplanation, "Free explanation released after correct answer");
+  assert.equal(freeCorrect.result.wrongExplanation, "Unused free wrong explanation");
+  assert.equal(freeCorrect.result.correctOptionLabel, "D");
+  await expectCode(() => practice.previewPracticeSet(studentBId, { sourceKind: "ARCHIVE", subjectId: subject.id, chapterId: freeChapter.id, collection: "PYQ", year: 2025, answerFormat: "MCQ", questionCount: 1 }), "FILTER_COMBINATION_EMPTY");
   await expectCode(() => practice.getPracticeSession(studentAId, freeSession.id), "PRACTICE_SESSION_NOT_FOUND");
 
   const bank = await prisma.package.create({ data: { courseId: courseAId, title: `Question Bank PDF ${suffix}`, slug: `question-bank-pdf-${suffix}`, price: "499.00", status: "PUBLISHED" } });
@@ -1026,6 +1175,7 @@ test("secure practice hides answers, enforces Free/Paid retry policy, timers, id
     correctExplanationHtml: "Paid-policy correct explanation",
     premiumWrongOptionsExplanationHtml: "Paid-policy wrong explanation",
     options: { create: [{ optionLabel: "A", html: "Wrong", displayOrder: 0 }, { optionLabel: "C", html: "Correct", displayOrder: 1 }] },
+    contentLinks: { create: { contentItemId: practiceFile.id } },
   } });
   const paidOrder = await prisma.order.create({ data: { orderNumber: `PRACTICE-${suffix}`, userId: studentAId, courseId: courseAId, subtotal: "499.00", totalAmount: "499.00", status: "PAID", accessStatus: "GRANTED", paidAt: new Date(), receiptNumber: `PRACTICE-RCP-${suffix}`, items: { create: { packageId: bank.id, resourceType: "PACKAGE", titleSnapshot: bank.title, unitPrice: "499.00", quantity: 1, totalPrice: "499.00" } } } });
   const bankEntitlement = await prisma.entitlement.create({ data: { userId: studentAId, resourceType: "PACKAGE", packageId: bank.id, resourceTitle: bank.title, source: "PURCHASE", orderId: paidOrder.id, status: "ACTIVE" } });
@@ -1037,9 +1187,21 @@ test("secure practice hides answers, enforces Free/Paid retry policy, timers, id
   assert.equal(paidWrong.result.navigatorState, "ANSWERED_WRONG");
   assert.equal(paidWrong.result.retryAllowed, true);
   assert.equal(paidWrong.result.explanation, "Paid-policy wrong explanation");
+  assert.equal(paidWrong.result.correctExplanation, "Paid-policy correct explanation");
+  assert.equal(paidWrong.result.wrongExplanation, "Paid-policy wrong explanation");
+  assert.equal(paidWrong.result.correctOptionLabel, "C");
   const paidCorrect = await practice.submitAttempt(studentAId, paidSession.id, paidQuestionId, { clientAttemptId: `paid-correct-${suffix}`, answerOptionLabel: "C" });
   assert.equal(paidCorrect.result.navigatorState, "ANSWERED_CORRECT");
   assert.equal(paidCorrect.result.explanation, "Paid-policy correct explanation");
+  assert.equal(paidCorrect.result.correctExplanation, "Paid-policy correct explanation");
+  assert.equal(paidCorrect.result.wrongExplanation, "Paid-policy wrong explanation");
+  const reviewModes = await practice.listPracticeModes(studentAId);
+  assert.ok(reviewModes.modes.some((mode) => mode.id === "REVISIT" && mode.availableCount >= 1 && !mode.locked));
+  const revisitSession = await practice.createPracticeSession(studentAId, { sourceKind: "ARCHIVE", mode: "REVISIT", subjectId: subject.id, chapterId: paidChapter.id, answerFormat: "MCQ", questionCount: 1 });
+  assert.equal(revisitSession.mode, "REVISIT");
+  assert.equal(revisitSession.questionCount, 1);
+  const currentWrongAnswers = await practice.listWrongAnswers(studentAId, { page: 1, limit: 100 });
+  assert.ok(currentWrongAnswers.data.every((item) => item.promptHtml !== "Free Admin-uploaded prompt"), "A correctly answered question must leave Wrong Answers");
   const tracker = await practice.getPracticeTracker(studentAId);
   assert.ok(tracker.chapters.some((chapter) => chapter.chapterId === paidChapter.id && chapter.questionsSolved >= 1 && chapter.attempts >= 2));
 

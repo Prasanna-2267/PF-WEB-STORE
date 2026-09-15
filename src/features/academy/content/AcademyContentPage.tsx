@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -38,6 +39,7 @@ import {
   Undo2,
   Upload,
   X,
+  Link2,
 } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { useAcademyTenantStore } from '@/app/store/useAcademyTenantStore';
@@ -57,6 +59,7 @@ import {
 } from '@/features/admin/AdminUi';
 import '@/features/admin/admin-pages.css';
 import '@/features/admin/content/content.css';
+import { ContentAttachedLinksDialog } from '@/features/admin/content/ContentAttachedLinksDialog';
 import './academy-content.css';
 
 type Crumb = { id: string | null; name: string };
@@ -158,6 +161,7 @@ export const AcademyContentPage: React.FC = () => {
   const [headingInvalid, setHeadingInvalid] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ item: AcademyContentItem; x: number; y: number } | null>(null);
+  const [linkTarget, setLinkTarget] = useState<AcademyContentItem | null>(null);
   const [toast, setToast] = useState<AdminToastData | null>(null);
   const [publishingFiles, setPublishingFiles] = useState<File[] | null>(null);
   const [, setHistoryVersion] = useState(0);
@@ -289,7 +293,10 @@ export const AcademyContentPage: React.FC = () => {
   });
 
   const detailsMutation = useMutation({
-    mutationFn: () => details ? academyContentApi.update(details.id, { description }) : Promise.reject(new Error('No content selected.')),
+    mutationFn: () => {
+      if (!details) return Promise.reject(new Error('No content selected.'));
+      return academyContentApi.update(details.id, { description });
+    },
     onSuccess: async (item) => { setDetails(item); await refresh(); notify('Details saved'); },
     onError: (error) => notify('Details not saved', error instanceof Error ? error.message : undefined, 'error'),
   });
@@ -369,7 +376,11 @@ export const AcademyContentPage: React.FC = () => {
     } catch (error) { notify('Download unavailable', error instanceof Error ? error.message : undefined, 'error'); }
   };
   const showDetails = async (item: AcademyContentItem) => {
-    try { const result = await academyContentApi.get(item.id); setDetails(result); setDescription(result.description ?? ''); }
+    try {
+      const result = await academyContentApi.get(item.id);
+      setDetails(result);
+      setDescription(result.description ?? '');
+    }
     catch (error) { notify('Details unavailable', error instanceof Error ? error.message : undefined, 'error'); }
   };
   const context = (event: React.MouseEvent, item: AcademyContentItem) => {
@@ -428,7 +439,7 @@ export const AcademyContentPage: React.FC = () => {
         eyebrow="ACADEMIC RESOURCES"
         title="Content"
         description={`Manage Drive-style course files and folders for ${academy?.name ?? 'your Academy'}. Only this Academy's courses and content are available here.`}
-        actions={<label className="pf-academy-content-course"><span>CHOOSE COURSE</span><select className="pf-admin-select" value={courseId} onChange={(event) => resetCourse(event.target.value)}><option value="">Select an active course</option>{activeCourses.map((course) => <option key={course.id} value={course.id}>{course.code} — {course.name}</option>)}</select></label>}
+        actions={<label className="pf-academy-content-course"><span>CHOOSE COURSE</span><AppSelect className="pf-admin-select" value={courseId} onChange={(event) => resetCourse(event.target.value)}><option value="">Select an active course</option>{activeCourses.map((course) => <option key={course.id} value={course.id}>{course.code} — {course.name}</option>)}</AppSelect></label>}
       />
 
       <input ref={fileInputRef} hidden multiple type="file" accept={ACADEMY_UPLOAD_ACCEPT} onChange={(event) => { stageUpload(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ''; }} />
@@ -602,14 +613,23 @@ export const AcademyContentPage: React.FC = () => {
       </section>
 
       {contextMenu ? <div className="pf-content-context" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
-        {contextMenu.item.status === 'PUBLISHED' ? <>{contextMenu.item.kind === 'FILE' ? <><button type="button" onClick={() => void preview(contextMenu.item)}><Eye /> Preview</button><button type="button" onClick={() => void download(contextMenu.item)}><Download /> Download</button></> : <button type="button" onClick={() => openItem(contextMenu.item)}><FolderOpen /> Open</button>}<hr /><button type="button" onClick={() => startDialog('rename', contextMenu.item)}><Pencil /> Rename</button><button type="button" onClick={() => startDialog('move', contextMenu.item)}><Move /> Move</button><button type="button" onClick={() => startDialog('copy', contextMenu.item)}><Copy /> Copy</button><button type="button" onClick={() => void showDetails(contextMenu.item)}><Info /> Details</button><hr /><button className="is-danger" type="button" onClick={() => startDialog('archive', contextMenu.item)}><Trash2 /> Delete</button></> : <button type="button" onClick={() => startDialog('restore', contextMenu.item)}><RotateCcw /> Restore</button>}
+        {contextMenu.item.status === 'PUBLISHED' ? <>{contextMenu.item.kind === 'FILE' ? <><button type="button" onClick={() => void preview(contextMenu.item)}><Eye /> Preview</button><button type="button" onClick={() => void download(contextMenu.item)}><Download /> Download</button></> : <button type="button" onClick={() => openItem(contextMenu.item)}><FolderOpen /> Open</button>}<hr /><button type="button" onClick={() => startDialog('rename', contextMenu.item)}><Pencil /> Rename</button><button type="button" onClick={() => { setLinkTarget(contextMenu.item); setContextMenu(null); }}><Link2 /> Attach Link</button><button type="button" onClick={() => startDialog('move', contextMenu.item)}><Move /> Move</button><button type="button" onClick={() => startDialog('copy', contextMenu.item)}><Copy /> Copy</button><button type="button" onClick={() => void showDetails(contextMenu.item)}><Info /> Details</button><hr /><button className="is-danger" type="button" onClick={() => startDialog('archive', contextMenu.item)}><Trash2 /> Delete</button></> : <button type="button" onClick={() => startDialog('restore', contextMenu.item)}><RotateCcw /> Restore</button>}
       </div> : null}
+
+      <ContentAttachedLinksDialog
+        open={Boolean(linkTarget)}
+        contentId={linkTarget?.id ?? null}
+        contentName={linkTarget?.name ?? ''}
+        apiBase="/api/academy/content"
+        onClose={() => setLinkTarget(null)}
+      />
 
       <AnimatePresence>{details ? <motion.aside className="pf-content-details" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
         <header><div><ItemIcon item={details} /><strong>{details.name}</strong></div><button type="button" onClick={() => setDetails(null)}><X /></button></header>
         <div className="pf-content-details__preview"><ItemIcon item={details} size={48} /></div>
         <dl><div><dt>Type</dt><dd>{details.kind === 'FOLDER' ? 'Folder' : details.mimeType ?? 'File'}</dd></div><div><dt>Size</dt><dd>{details.kind === 'FILE' ? formatBytes(details.size) : '—'}</dd></div><div><dt>Location</dt><dd>{crumbs.map((crumb) => crumb.name).join(' / ')}</dd></div><div><dt>Owner</dt><dd>{academy?.name ?? 'Current Academy'}</dd></div><div><dt>Status</dt><dd>{details.status}</dd></div><div><dt>Modified</dt><dd>{formatDate(details.updatedAt)}</dd></div><div><dt>Created</dt><dd>{formatDate(details.createdAt)}</dd></div></dl>
-        <label><span>Description</span><textarea rows={5} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Add description" /></label><button className="pf-admin-button" type="button" disabled={detailsMutation.isPending} onClick={() => detailsMutation.mutate()}>{detailsMutation.isPending ? 'Saving…' : 'Save details'}</button>
+        <label><span>Description</span><textarea rows={5} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Add description" /></label>
+        <button className="pf-admin-button" type="button" disabled={detailsMutation.isPending} onClick={() => detailsMutation.mutate()}>{detailsMutation.isPending ? 'Saving…' : 'Save details'}</button>
       </motion.aside> : null}</AnimatePresence>
 
       <AdminDialog open={Boolean(dialog && dialog.kind !== 'preview')} onClose={() => !operation.isPending && setDialog(null)} title={dialog?.kind === 'create' ? 'Create folder' : dialog?.kind === 'rename' ? 'Rename content' : dialog?.kind === 'archive' ? 'Delete content?' : dialog?.kind === 'restore' ? 'Restore content?' : dialog?.kind === 'move' ? 'Move content' : 'Copy content'} description={dialog?.kind === 'archive' ? 'Are you sure you want to delete the selected item(s)? This action cannot be undone.' : dialog?.kind === 'restore' ? 'The selected item(s) will return to this Academy library.' : dialog?.kind === 'move' || dialog?.kind === 'copy' ? 'Choose a destination inside the same Academy course.' : 'Use a clear academic name.'} size="small" footer={<><button className="pf-admin-button pf-admin-button--quiet" type="button" disabled={operation.isPending} onClick={() => setDialog(null)}>Cancel</button><button className={`pf-admin-button ${dialog?.kind === 'archive' ? 'pf-admin-button--danger' : 'pf-admin-button--primary'}`} type="button" disabled={operation.isPending || ((dialog?.kind === 'create' || dialog?.kind === 'rename') && !targetName.trim()) || ((dialog?.kind === 'move' || dialog?.kind === 'copy') && !itemsForDialog.length)} onClick={submitDialog}>{operation.isPending ? 'Working…' : dialog?.kind === 'archive' ? 'Delete' : dialog?.kind === 'restore' ? 'Restore' : dialog?.kind === 'move' ? 'Move here' : dialog?.kind === 'copy' ? 'Copy here' : 'Save'}</button></>}>

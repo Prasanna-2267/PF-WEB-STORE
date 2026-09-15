@@ -139,6 +139,17 @@ async function runAcademySettingsTestSuite() {
   try {
     const resA = await getAcademySettings(contextA);
     assert(resA.academy.id === academyA.id && Boolean(resA.academy.name), 'A. Academy Admin can GET own academy settings');
+    assert(
+      Object.prototype.hasOwnProperty.call(resA.academy, 'profile')
+        && Array.isArray(resA.academy.contacts)
+        && Object.prototype.hasOwnProperty.call(resA.academy, 'legalProfile')
+        && Array.isArray(resA.academy.addresses)
+        && Object.prototype.hasOwnProperty.call(resA.academy, 'billingProfile')
+        && Array.isArray(resA.academy.academicOfferings)
+        && Object.prototype.hasOwnProperty.call(resA.academy, 'commercialProfile')
+        && Object.prototype.hasOwnProperty.call(resA.academy, 'integrationProfile'),
+      'A2. Academy Admin receives the complete read-only provisioning projection',
+    );
   } catch (err: any) {
     assert(false, 'A. Academy Admin can GET own academy settings', err.message);
   }

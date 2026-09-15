@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { Ban, CheckCircle2, Clock3, Copy, Download, Edit3, FileSpreadsheet, KeyRound, QrCode, ShieldCheck, Trash2, TriangleAlert, Upload, UserPlus, UsersRound, X, XCircle, type LucideIcon } from 'lucide-react';
 import { useAcademyTenantStore } from '@/app/store/useAcademyTenantStore';
 import { AdminDialog, AdminEmptyState, AdminPageHeader, AdminSkeleton, AdminStatusBadge, AdminToast, type AdminToastData } from '@/features/admin/AdminUi';
+import { AdminDateTimePicker } from '@/features/admin/AdminDateTimePicker';
 import { ReadOnlyPagination } from '@/components/ReadOnlyPagination';
 import {
   academyAdmissionKeys,
@@ -646,7 +647,7 @@ export const AcademyAdmissionsPage: React.FC = () => {
           {codeExpiration === 'scheduled' ? (
             <label className="pf-admin-field">
               <span>Expiration date/time</span>
-              <input className="pf-admin-input" type="datetime-local" min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)} value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
+              <AdminDateTimePicker min={new Date(Date.now() + 60_000).toISOString()} value={expiresAt || null} onChange={setExpiresAt} placeholder="Choose expiration date and time" />
             </label>
           ) : null}
           <p className="pf-admission-code-options__note">The code is generated automatically. Academy identity is never embedded in or accepted from the client.</p>
@@ -706,7 +707,7 @@ export const AcademyAdmissionsPage: React.FC = () => {
           {editExpiration === 'scheduled' ? (
             <label className="pf-admin-field">
               <span>Expiration date/time</span>
-              <input className="pf-admin-input" type="datetime-local" min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)} value={editExpiresAt} onChange={(event) => setEditExpiresAt(event.target.value)} />
+              <AdminDateTimePicker min={new Date(Date.now() + 60_000).toISOString()} value={editExpiresAt || null} onChange={setEditExpiresAt} placeholder="Choose expiration date and time" />
             </label>
           ) : null}
         </div>

@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma.js";
 import { logger } from "../observability/logger.js";
 import { runDueJobsOnce } from "../services/backgroundJobService.js";
 import { dispatchLearnerPushDeliveries, runLearnerReminderSweep } from "../services/learnerNotificationService.js";
+import { processMonthlyReportsFor1stOfMonth } from "../services/monthlyReportService.js";
 
 const parsePositiveInteger = (value: string | undefined, fallback: number, maximum: number) => {
   if (!value) return fallback;
@@ -18,8 +19,10 @@ const batchLimit = parsePositiveInteger(process.env.JOB_WORKER_BATCH_LIMIT, 50, 
 const runOnce = process.env.JOB_WORKER_RUN_ONCE === "true";
 const workerId = process.env.JOB_WORKER_ID?.trim() || `durable-worker-${process.pid}`;
 const notificationMaintenanceMs = parsePositiveInteger(process.env.NOTIFICATION_MAINTENANCE_INTERVAL_MS, 300_000, 3_600_000);
+const monthlyReportMaintenanceMs = parsePositiveInteger(process.env.MONTHLY_REPORT_MAINTENANCE_INTERVAL_MS, 21_600_000, 86_400_000);
 let stopping = false;
 let nextNotificationMaintenanceAt = 0;
+let nextMonthlyReportMaintenanceAt = 0;
 
 const stop = (signal: string) => {
   stopping = true;
@@ -56,6 +59,11 @@ async function runWorker() {
         const [reminders, pushes] = await Promise.all([runLearnerReminderSweep(), dispatchLearnerPushDeliveries()]);
         nextNotificationMaintenanceAt = Date.now() + notificationMaintenanceMs;
         logger.info("durable_worker.notification_maintenance", { workerId, reminders, pushes });
+      }
+      if (Date.now() >= nextMonthlyReportMaintenanceAt) {
+        const monthlyReports = await processMonthlyReportsFor1stOfMonth();
+        nextMonthlyReportMaintenanceAt = Date.now() + monthlyReportMaintenanceMs;
+        logger.info("durable_worker.monthly_report_maintenance", { workerId, monthlyReports });
       }
       logger.info("durable_worker.cycle", {
         workerId,

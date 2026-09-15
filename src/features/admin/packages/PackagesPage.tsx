@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -7,6 +8,7 @@ import {
   ArrowRight,
   ArrowUp,
   Box,
+  BookOpenCheck,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -37,7 +39,8 @@ import {
   useDeleteAdminPackage,
 } from './adminPackagesReadOnlyApi';
 import type { ContentBreadcrumb, ContentItem, ContentSearchResult } from '../content/types/content';
-import type { LearningPackage, PackageInput, PackageStatus } from './types/package';
+import type { AccessDurationUnit, LearningPackage, PackageInput, PackageStatus } from './types/package';
+import { questionWorkspaceApi, type QuestionBank } from '../questions/api/questionWorkspaceApi';
 import {
   AdminDialog,
   AdminEmptyState,
@@ -57,16 +60,24 @@ interface PackageFormState {
   title: string;
   description: string;
   price: string;
+  accessDurationMode: 'PERMANENT' | 'FIXED';
+  accessDurationValue: string;
+  accessDurationUnit: AccessDurationUnit;
   status: PackageStatus;
   contentItemIds: string[];
+  questionBankIds: string[];
 }
 
 const emptyForm = (): PackageFormState => ({
   title: '',
   description: '',
   price: '',
+  accessDurationMode: 'PERMANENT',
+  accessDurationValue: '',
+  accessDurationUnit: 'DAYS',
   status: 'draft',
   contentItemIds: [],
+  questionBankIds: [],
 });
 
 const formatCurrency = (value: number): string => new Intl.NumberFormat('en-IN', {
@@ -191,6 +202,9 @@ export const PackagesPage: React.FC = () => {
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [contentLoading, setContentLoading] = useState(true);
   const [contentError, setContentError] = useState<string | null>(null);
+  const [questionBanks, setQuestionBanks] = useState<QuestionBank[]>([]);
+  const [questionBanksLoading, setQuestionBanksLoading] = useState(false);
+  const [questionBanksError, setQuestionBanksError] = useState<string | null>(null);
 
   const [editorPackage, setEditorPackage] = useState<LearningPackage | null | undefined>(undefined);
   const [editorStep, setEditorStep] = useState<'form' | 'picker'>('form');
@@ -239,9 +253,31 @@ export const PackagesPage: React.FC = () => {
     }
   };
 
+  const loadQuestionBanks = async () => {
+    if (!courseId) {
+      setQuestionBanks([]);
+      setQuestionBanksError(null);
+      return;
+    }
+    setQuestionBanksLoading(true);
+    setQuestionBanksError(null);
+    try {
+      setQuestionBanks(await questionWorkspaceApi.banks('platform', null, courseId));
+    } catch (error) {
+      setQuestionBanksError(error instanceof Error ? error.message : 'Question Banks could not be loaded.');
+    } finally {
+      setQuestionBanksLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (courseId) void loadContent();
-    else setContentItems([]);
+    if (courseId) {
+      void loadContent();
+      void loadQuestionBanks();
+    } else {
+      setContentItems([]);
+      setQuestionBanks([]);
+    }
   }, [courseId]);
 
   useEffect(() => {
@@ -307,8 +343,12 @@ export const PackagesPage: React.FC = () => {
       title: item.title,
       description: item.description,
       price: String(item.price),
+      accessDurationMode: item.accessDurationValue && item.accessDurationUnit ? 'FIXED' : 'PERMANENT',
+      accessDurationValue: item.accessDurationValue ? String(item.accessDurationValue) : '',
+      accessDurationUnit: item.accessDurationUnit ?? 'DAYS',
       status: item.status,
       contentItemIds: item.items.map((reference) => reference.contentItemId),
+      questionBankIds: item.questionBanks.map((reference) => reference.questionBankId),
     } : emptyForm());
   };
 
@@ -404,8 +444,24 @@ export const PackagesPage: React.FC = () => {
       setFormError('Enter a valid positive price or zero for a free package.');
       return null;
     }
-    if (!form.contentItemIds.length) {
-      setFormError('Select at least one file or folder from the Content Library.');
+    if (price > 0 && form.accessDurationMode === 'FIXED') {
+      const value = Number(form.accessDurationValue);
+      const limits: Record<AccessDurationUnit, number> = { DAYS: 3650, WEEKS: 520, MONTHS: 120 };
+      if (!Number.isInteger(value) || value < 1 || value > limits[form.accessDurationUnit]) {
+        setFormError(`Enter a duration from 1 to ${limits[form.accessDurationUnit]} ${form.accessDurationUnit.toLowerCase()}.`);
+        return null;
+      }
+    }
+    if (!form.contentItemIds.length && !form.questionBankIds.length) {
+      setFormError('Select at least one Content Library item or Question Bank.');
+      return null;
+    }
+    if (form.questionBankIds.some((id) => !questionBanks.some((bank) => bank.id === id))) {
+      setFormError('One or more selected Question Banks are no longer available in this course.');
+      return null;
+    }
+    if (form.status === 'published' && form.questionBankIds.some((id) => questionBanks.find((bank) => bank.id === id)?.status !== 'PUBLISHED')) {
+      setFormError('Only published Question Banks can be included in a published package.');
       return null;
     }
     return { title, price: Math.round(price * 100) / 100 };
@@ -431,9 +487,12 @@ export const PackagesPage: React.FC = () => {
       title,
       description: form.description.trim(),
       price,
+      accessDurationValue: price > 0 && form.accessDurationMode === 'FIXED' ? Number(form.accessDurationValue) : null,
+      accessDurationUnit: price > 0 && form.accessDurationMode === 'FIXED' ? form.accessDurationUnit : null,
       status: form.status,
       courseId: editorPackage?.courseId ?? courseId ?? null,
       contentItemIds: form.contentItemIds,
+      questionBankIds: form.questionBankIds,
     };
 
     setSaving(true);
@@ -496,18 +555,18 @@ export const PackagesPage: React.FC = () => {
         }
       />
 
-      {packageLoading || contentLoading ? <AdminSkeleton variant="table" rows={6} label="Loading packages" /> : null}
+      {packageLoading || contentLoading || questionBanksLoading ? <AdminSkeleton variant="table" rows={6} label="Loading packages" /> : null}
 
-      {packageError || contentError ? (
+      {packageError || contentError || questionBanksError ? (
         <AdminEmptyState
           title="Packages could not be loaded"
-          description={packageError ?? contentError ?? 'Try loading the module again.'}
+          description={packageError ?? contentError ?? questionBanksError ?? 'Try loading the module again.'}
           icon={<RefreshCw />}
-          action={<button className="pf-admin-button" type="button" onClick={() => { void packagesQuery.refetch(); void loadContent(); }}>Try again</button>}
+          action={<button className="pf-admin-button" type="button" onClick={() => { void packagesQuery.refetch(); void loadContent(); void loadQuestionBanks(); }}>Try again</button>}
         />
       ) : null}
 
-      {!packageLoading && !packageError && !contentLoading && !scopedPackageCount ? (
+      {!packageLoading && !packageError && !contentLoading && !questionBanksLoading && !questionBanksError && !scopedPackageCount ? (
         <AdminEmptyState
           title="No packages yet"
           description="Create a package by selecting existing files and folders from the Content Library."
@@ -520,7 +579,7 @@ export const PackagesPage: React.FC = () => {
         />
       ) : null}
 
-      {!packageLoading && !packageError && !contentLoading && scopedPackageCount ? (
+      {!packageLoading && !packageError && !contentLoading && !questionBanksLoading && !questionBanksError && scopedPackageCount ? (
         <section className="pf-package-library" aria-label="Package library">
           <div className="pf-package-toolbar">
             <label className="pf-admin-search-field">
@@ -530,12 +589,12 @@ export const PackagesPage: React.FC = () => {
             </label>
             <label className="pf-admin-field pf-package-status-filter">
               <span>Status</span>
-              <select className="pf-admin-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | PackageStatus)}>
+              <AppSelect className="pf-admin-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | PackageStatus)}>
                 <option value="all">All statuses</option>
                 <option value="draft">Draft</option>
                 <option value="published">Published</option>
                 <option value="archived">Archived</option>
-              </select>
+              </AppSelect>
             </label>
             <p>{filteredPackages.length} of {scopedPackageCount} packages</p>
           </div>
@@ -568,6 +627,7 @@ export const PackagesPage: React.FC = () => {
                       <dl className="pf-package-card__stats">
                         <div><dt><Files size={13} /> Files</dt><dd>{summary.files}</dd></div>
                         <div><dt><Folder size={13} /> Folders</dt><dd>{summary.folders}</dd></div>
+                        <div><dt><BookOpenCheck size={13} /> Question Banks</dt><dd>{item.questionBanks.length}</dd></div>
                       </dl>
                       {summary.missing ? <p className="pf-package-card__warning">{summary.missing} source item{summary.missing === 1 ? '' : 's'} unavailable</p> : null}
                       <footer>
@@ -600,7 +660,7 @@ export const PackagesPage: React.FC = () => {
           <>
             <button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={closeEditor}>Cancel</button>
             <button className="pf-admin-button" type="button" onClick={() => handleFormSubmit()} disabled={saving}>
-              {saving ? 'Saving…' : editorPackage ? `Save changes · ${formSummary.selected} items` : `Create package · ${formSummary.selected} items`}
+              {saving ? 'Saving…' : editorPackage ? `Save changes · ${formSummary.selected + form.questionBankIds.length} resources` : `Create package · ${formSummary.selected + form.questionBankIds.length} resources`}
             </button>
           </>
         )}
@@ -619,8 +679,10 @@ export const PackagesPage: React.FC = () => {
             <div className="pf-package-form__grid">
               <label className="pf-admin-field"><span>Title</span><input className="pf-admin-input" autoFocus value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="e.g. CA Intermediate Revision Library" maxLength={140} /></label>
               <label className="pf-admin-field"><span>Price (₹)</span><input className="pf-admin-input" inputMode="decimal" type="number" min="0" step="0.01" value={form.price} onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))} placeholder="e.g. 999" /></label>
+              {isPaid ? <label className="pf-admin-field"><span>Access duration</span><AppSelect className="pf-admin-select" value={form.accessDurationMode} onChange={(event) => setForm((current) => ({ ...current, accessDurationMode: event.target.value as 'PERMANENT' | 'FIXED' }))}><option value="PERMANENT">Permanent access</option><option value="FIXED">Fixed duration from purchase</option></AppSelect></label> : null}
+              {isPaid && form.accessDurationMode === 'FIXED' ? <div className="pf-admin-field"><span>Duration from successful purchase</span><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><input className="pf-admin-input" inputMode="numeric" type="number" min="1" value={form.accessDurationValue} onChange={(event) => setForm((current) => ({ ...current, accessDurationValue: event.target.value }))} placeholder="e.g. 90" /><AppSelect className="pf-admin-select" value={form.accessDurationUnit} onChange={(event) => setForm((current) => ({ ...current, accessDurationUnit: event.target.value as AccessDurationUnit }))}><option value="DAYS">Days</option><option value="WEEKS">Weeks</option><option value="MONTHS">Months</option></AppSelect></div></div> : null}
               <label className="pf-admin-field pf-package-form__wide"><span>Description <small>Optional</small></span><textarea className="pf-admin-textarea" rows={3} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="Explain what the learner receives." /></label>
-              <label className="pf-admin-field"><span>Status <small>Draft is safe default</small></span><select className="pf-admin-select" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as PackageStatus }))}><option value="draft">Draft (Safe Default)</option><option value="published">Published (Store Visible)</option><option value="archived">Archived</option></select></label>
+              <label className="pf-admin-field"><span>Status <small>Draft is safe default</small></span><AppSelect className="pf-admin-select" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as PackageStatus }))}><option value="draft">Draft (Safe Default)</option><option value="published">Published (Store Visible)</option><option value="archived">Archived</option></AppSelect></label>
             </div>
 
             <section className="pf-package-selected-section">
@@ -662,6 +724,49 @@ export const PackagesPage: React.FC = () => {
               )}
             </section>
 
+            <section className="pf-package-selected-section pf-package-question-banks">
+              <header>
+                <div>
+                  <h3>Included Question Banks</h3>
+                  <p>{form.questionBankIds.length} selected · referenced without duplicating questions</p>
+                </div>
+              </header>
+              {questionBanksLoading ? <AdminSkeleton rows={2} label="Loading Question Banks" /> : null}
+              {!questionBanksLoading && !questionBanks.length ? (
+                <div className="pf-package-selected-empty">
+                  <BookOpenCheck size={25} />
+                  <p>No Question Banks exist for this course. Create one in Questions before adding it to a package.</p>
+                </div>
+              ) : null}
+              {!questionBanksLoading && questionBanks.length ? (
+                <div className="pf-package-qb-selector">
+                  {questionBanks.map((bank) => {
+                    const selected = form.questionBankIds.includes(bank.id);
+                    return (
+                      <button
+                        key={bank.id}
+                        type="button"
+                        className={`pf-package-qb-card${selected ? ' is-selected' : ''}`}
+                        aria-pressed={selected}
+                        onClick={() => setForm((current) => ({
+                          ...current,
+                          questionBankIds: selected
+                            ? current.questionBankIds.filter((id) => id !== bank.id)
+                            : [...current.questionBankIds, bank.id],
+                        }))}
+                      >
+                        <span className="pf-package-qb-card__check">{selected ? <Check size={15} /> : null}</span>
+                        <span className="pf-package-qb-card__copy">
+                          <strong>{bank.name}</strong>
+                          <small>{bank._count.questions} questions · {bank.accessType} · {bank.status}</small>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </section>
+
             {/* PACKAGE SUMMARY CARD */}
             <div className="pf-package-builder-summary">
               <header>
@@ -682,9 +787,10 @@ export const PackagesPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="pf-package-builder-summary__pills">
-                  <span><strong>{formSummary.selected}</strong> resources ({formSummary.files} files · {formSummary.folders} folders)</span>
+                  <span><strong>{formSummary.selected + form.questionBankIds.length}</strong> resources ({formSummary.files} files · {formSummary.folders} folders · {form.questionBankIds.length} Question Banks)</span>
                   <span><strong>{formatBytes(formSummary.totalBytes)}</strong> total size</span>
                   <span>Access: <strong>{isPaid ? 'Paid' : 'Free'}</strong></span>
+                  {isPaid ? <span>Duration: <strong>{form.accessDurationMode === 'FIXED' ? `${form.accessDurationValue || '—'} ${form.accessDurationUnit.toLowerCase()}` : 'Permanent'}</strong></span> : null}
                   <span>Status: <AdminStatusBadge tone={statusTone(form.status)}>{form.status}</AdminStatusBadge></span>
                 </div>
               </div>
@@ -763,7 +869,8 @@ export const PackagesPage: React.FC = () => {
             <div><dt>Package</dt><dd><strong>{form.title.trim() || 'Untitled package'}</strong></dd></div>
             <div><dt>Course</dt><dd>{currentCourse?.name ?? 'Selected Course'}</dd></div>
             <div><dt>Listed Price</dt><dd><strong>{Number(form.price) > 0 ? formatCurrency(Number(form.price)) : 'Free'}</strong></dd></div>
-            <div><dt>Included</dt><dd>{formSummary.selected} resources ({formSummary.files} files · {formSummary.folders} folders)</dd></div>
+            <div><dt>Access duration</dt><dd><strong>{Number(form.price) > 0 && form.accessDurationMode === 'FIXED' ? `${form.accessDurationValue} ${form.accessDurationUnit.toLowerCase()} from purchase` : 'Permanent'}</strong></dd></div>
+            <div><dt>Included</dt><dd>{formSummary.selected + form.questionBankIds.length} resources ({formSummary.files} files · {formSummary.folders} folders · {form.questionBankIds.length} Question Banks)</dd></div>
             <div><dt>Total Size</dt><dd>{formatBytes(formSummary.totalBytes)}</dd></div>
           </dl>
         </div>
@@ -773,7 +880,7 @@ export const PackagesPage: React.FC = () => {
         open={Boolean(detailsPackage)}
         onClose={() => setDetailsPackage(null)}
         title={detailsPackage?.title ?? 'Package details'}
-        description="Package metadata and the Content Library references it includes."
+        description="Package metadata and the Content Library or Question Bank references it includes."
         size="large"
         footer={<><button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={() => setDetailsPackage(null)}>Close</button>{detailsPackage ? <button className="pf-admin-button" type="button" onClick={() => { const target = detailsPackage; setDetailsPackage(null); openEditor(target); }}><Pencil size={16} /> Edit package</button> : null}</>}
       >
@@ -811,8 +918,10 @@ const PackageDetails: React.FC<{
       <dl className="pf-package-details__meta">
         <div><dt>Status</dt><dd><AdminStatusBadge tone={statusTone(item.status)}>{item.status}</AdminStatusBadge></dd></div>
         <div><dt>Price</dt><dd>{formatCurrency(item.price)}</dd></div>
+        <div><dt>Access duration</dt><dd>{item.accessDurationValue && item.accessDurationUnit ? `${item.accessDurationValue} ${item.accessDurationUnit.toLowerCase()} from purchase` : 'Permanent'}</dd></div>
         <div><dt>Files included</dt><dd>{summary.files}</dd></div>
         <div><dt>Folders included</dt><dd>{summary.folders}</dd></div>
+        <div><dt>Question Banks</dt><dd>{item.questionBanks.length}</dd></div>
         <div><dt>Created</dt><dd>{formatDate(item.createdAt)}</dd></div>
         <div><dt>Last updated</dt><dd>{formatDate(item.updatedAt)}</dd></div>
       </dl>
@@ -840,6 +949,22 @@ const PackageDetails: React.FC<{
           })}
         </ul>
       </section>
+      {item.questionBanks.length ? (
+        <section className="pf-package-details__question-banks">
+          <h3>Included Question Banks</h3>
+          <ul>
+            {item.questionBanks.map((reference) => (
+              <li key={reference.questionBankId}>
+                <span><BookOpenCheck size={18} /></span>
+                <div>
+                  <strong>{reference.questionBank.name}</strong>
+                  <small>{reference.questionBank.questionCount} questions · {reference.questionBank.accessType.toLowerCase()} · {reference.questionBank.status.toLowerCase()}</small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 };

@@ -1,0 +1,33 @@
+.pf-admin .pf-admin-form { display: grid; gap: 18px; }
+.pf-admin .pf-admin-form-section { padding: 22px; border: 1px solid var(--admin-line); border-radius: 20px; background: var(--admin-panel); box-shadow: var(--admin-shadow-sm); }
+.pf-admin .pf-admin-form-section .pf-admin-section__header { padding: 0 0 18px; margin-bottom: 18px; border-bottom: 1px solid var(--admin-line); }
+.pf-admin .pf-admin-form-section .pf-admin-section__header h2 { display: flex; align-items: center; gap: 9px; }
+.pf-admin .pf-admin-form-actions { position: sticky; bottom: 16px; z-index: 5; display: flex; justify-content: flex-end; padding: 12px; border: 1px solid var(--admin-line); border-radius: 16px; background: color-mix(in srgb, var(--admin-panel) 92%, transparent); backdrop-filter: blur(18px); }
+.pf-admin .pf-admin-form-actions .pf-admin-button { min-width: 170px; justify-content: center; }
+.pf-admin .pf-academy-readonly-section { display: grid; gap: 18px; }
+.pf-admin .pf-academy-readonly-section > .pf-admin-section__header { margin-bottom: 0; }
+.pf-admin .pf-academy-readonly-group { overflow: hidden; border: 1px solid var(--admin-line); border-radius: 16px; background: color-mix(in srgb, var(--admin-panel-solid) 72%, var(--admin-soft)); }
+.pf-admin .pf-academy-readonly-group > header { padding: 16px 18px; border-bottom: 1px solid var(--admin-line); }
+.pf-admin .pf-academy-readonly-group > header h3 { margin: 0; color: var(--admin-text); font-size: 15px; }
+.pf-admin .pf-academy-readonly-group > header p { margin: 5px 0 0; color: var(--admin-muted); font-size: 12px; }
+.pf-admin .pf-academy-readonly-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pf-admin .pf-academy-readonly-value { min-width: 0; padding: 15px 18px; border-right: 1px solid var(--admin-line); border-bottom: 1px solid var(--admin-line); }
+.pf-admin .pf-academy-readonly-value span { display: block; margin-bottom: 7px; color: var(--admin-muted); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.pf-admin .pf-academy-readonly-value strong { display: block; overflow-wrap: anywhere; color: var(--admin-text); font-size: 13px; line-height: 1.45; }
+.pf-admin .pf-academy-readonly-card { min-width: 0; margin: 14px; padding: 15px; border: 1px solid var(--admin-line); border-radius: 14px; background: var(--admin-panel-solid); }
+.pf-admin .pf-academy-readonly-card div { display: grid; gap: 4px; }
+.pf-admin .pf-academy-readonly-card div strong { color: var(--admin-text); font-size: 14px; }
+.pf-admin .pf-academy-readonly-card div span,
+.pf-admin .pf-academy-readonly-card p { margin: 4px 0 0; overflow-wrap: anywhere; color: var(--admin-muted); font-size: 12px; line-height: 1.45; }
+.pf-admin .pf-academy-readonly-empty { grid-column: 1 / -1; margin: 0; padding: 18px; color: var(--admin-muted); font-size: 13px; }
+@media (max-width: 980px) {
+  .pf-admin .pf-academy-readonly-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .pf-admin .pf-admin-form-section { padding: 17px; border-radius: 16px; }
+  .pf-admin .pf-admin-form-actions { bottom: 8px; }
+  .pf-admin .pf-admin-form-actions .pf-admin-button { width: 100%; }
+  .pf-admin .pf-academy-readonly-grid { grid-template-columns: 1fr; }
+  .pf-admin .pf-academy-readonly-group > header,
+  .pf-admin .pf-academy-readonly-value { padding: 14px; }
+}

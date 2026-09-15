@@ -244,6 +244,13 @@
 .pf-content-details dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--admin-ink-soft); font-size: 9.5px; }
 .pf-content-details label { display: grid; gap: 6px; color: var(--admin-ink-soft); font-size: 9.5px; font-weight: 700; }
 .pf-content-details textarea { width: 100%; resize: vertical; padding: 10px; color: var(--admin-ink); border: 1px solid var(--admin-line-strong); border-radius: 10px; outline: none; background: var(--admin-panel-soft); font-size: 10.5px; line-height: 1.55; }
+.pf-content-commercial-fields { display: grid; gap: 10px; margin-top: 14px; padding: 12px; border: 1px solid var(--admin-line); border-radius: 12px; background: var(--admin-panel-soft); }
+.pf-content-commercial-fields label { min-width: 0; }
+.pf-content-commercial-fields input,
+.pf-content-commercial-fields select { width: 100%; min-height: 38px; padding: 8px 10px; color: var(--admin-ink); border: 1px solid var(--admin-line-strong); border-radius: 9px; outline: none; background: var(--admin-panel-solid); font: inherit; }
+.pf-content-commercial-fields input:focus,
+.pf-content-commercial-fields select:focus { border-color: var(--admin-primary); box-shadow: 0 0 0 3px var(--admin-accent-soft); }
+.pf-content-commercial-fields > small { color: var(--admin-muted); font-size: 8.5px; line-height: 1.5; }
 .pf-content-details > .pf-admin-button { width: 100%; margin-top: 10px; }
 
 .pf-content-folder-picker { display: grid; max-height: 340px; overflow-y: auto; gap: 2px; }
@@ -376,3 +383,21 @@
   color: var(--admin-muted);
 }
 
+.pf-content-links-dialog { padding: 18px 20px; }
+.pf-content-links-form { display: grid; gap: 14px; }
+.pf-content-links-form textarea { resize: vertical; min-height: 82px; }
+.pf-content-links-error { margin: 0; color: #b42318; font-size: 12px; line-height: 1.45; }
+.pf-content-links-notice { margin: 0; color: #087443; font-size: 12px; font-weight: 700; line-height: 1.45; }
+.pf-content-links-list { display: grid; gap: 8px; max-height: 210px; overflow-y: auto; overflow-x: hidden; }
+.pf-content-links-status { margin: 0; padding: 12px; border: 1px dashed var(--pf-admin-border, #d4dce9); border-radius: 10px; color: var(--pf-admin-muted, #64748b); font-size: 13px; text-align: center; }
+.pf-content-links-list article { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border: 1px solid var(--pf-admin-border, #d4dce9); border-radius: 11px; background: var(--pf-admin-surface-soft, #f8fafc); }
+.pf-content-links-list article.is-editing { border-color: #5b86f7; background: #eef4ff; }
+.pf-content-links-list article > div:first-child { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.pf-content-links-list article strong { overflow-wrap: anywhere; font-size: 13px; line-height: 1.35; }
+.pf-content-links-list article a { display: flex; align-items: center; gap: 5px; min-width: 0; color: #315fcf; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.pf-content-links-list article a svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.pf-content-links-actions { display: flex; gap: 4px; }
+.pf-content-links-actions button { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--pf-admin-border, #d4dce9); border-radius: 8px; background: var(--pf-admin-surface, #fff); color: var(--pf-admin-muted, #64748b); cursor: pointer; }
+.pf-content-links-actions button:hover { color: #315fcf; border-color: #9bb5f5; }
+.pf-content-links-actions button:last-child:hover { color: #b42318; border-color: #f0a9a1; }
+.pf-content-links-actions svg { width: 15px; height: 15px; }

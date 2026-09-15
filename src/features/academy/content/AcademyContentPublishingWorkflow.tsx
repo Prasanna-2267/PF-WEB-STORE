@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -31,6 +32,10 @@ export interface AcademyUploadEntry {
   pageHeading: string;
   description: string;
   entityType: AcademyEntityType;
+  accessType: 'FREE' | 'PAID';
+  price: number | null;
+  accessDurationValue: number | null;
+  accessDurationUnit: 'DAYS' | 'WEEKS' | 'MONTHS' | null;
 }
 
 export interface AcademyContentPublishingWorkflowProps {
@@ -83,6 +88,10 @@ export function buildAcademyUploadEntries(files: File[]): AcademyUploadEntry[] {
           pageHeading: segment,
           description: '',
           entityType: 'STUDY_MATERIAL',
+          accessType: 'FREE',
+          price: null,
+          accessDurationValue: null,
+          accessDurationUnit: null,
         });
       }
     });
@@ -98,6 +107,10 @@ export function buildAcademyUploadEntries(files: File[]): AcademyUploadEntry[] {
       pageHeading: '',
       description: '',
       entityType: file.type.startsWith('video/') || file.type.startsWith('audio/') ? 'MEDIA' : 'STUDY_MATERIAL',
+      accessType: 'FREE',
+      price: null,
+      accessDurationValue: null,
+      accessDurationUnit: null,
     });
   });
 
@@ -138,7 +151,8 @@ export const AcademyContentPublishingWorkflow: React.FC<AcademyContentPublishing
   const folderEntries = useMemo(() => entries.filter((entry) => entry.kind === 'folder'), [entries]);
   const selectedEntry = entries.find((entry) => entry.id === selectedId) ?? null;
   const totalSize = fileEntries.reduce((sum, entry) => sum + (entry.file?.size ?? 0), 0);
-  const configurationValid = validHeading(rootHeading) && folderEntries.every((entry) => validHeading(entry.pageHeading));
+  const entryValid = (_entry: AcademyUploadEntry) => true;
+  const configurationValid = validHeading(rootHeading) && folderEntries.every((entry) => validHeading(entry.pageHeading)) && fileEntries.every(entryValid);
   const stepIndex = steps.findIndex((candidate) => candidate.id === step);
 
   const appendFiles = (next: File[]) => {
@@ -278,18 +292,18 @@ export const AcademyContentPublishingWorkflow: React.FC<AcademyContentPublishing
               <header><div><Folder /><span><strong>{selectedEntry.relativePath}</strong><small>New folder page</small></span></div><i className={validHeading(selectedEntry.pageHeading) ? 'ready' : 'needs-attention'}>{validHeading(selectedEntry.pageHeading) ? 'Ready' : 'Required'}</i></header>
               <label>Page heading <b>Required</b><input value={selectedEntry.pageHeading} maxLength={160} onChange={(event) => updateEntry(selectedEntry.id, { pageHeading: event.target.value })} /></label>
             </div> : selectedEntry?.kind === 'file' ? <div className="pf-publish-bulk">
-              <label>Content type<select value={selectedEntry.entityType} onChange={(event) => updateEntry(selectedEntry.id, { entityType: event.target.value as AcademyEntityType })}><option value="STUDY_MATERIAL">Study material</option><option value="GOVERNMENT_DOCUMENT">Government document</option><option value="QUESTION_PAPER">Question paper</option><option value="REFERENCE_MATERIAL">Reference material</option><option value="MEDIA">Media</option><option value="OTHER">Other</option></select></label>
+              <label>Content type<AppSelect value={selectedEntry.entityType} onChange={(event) => updateEntry(selectedEntry.id, { entityType: event.target.value as AcademyEntityType })}><option value="STUDY_MATERIAL">Study material</option><option value="GOVERNMENT_DOCUMENT">Government document</option><option value="QUESTION_PAPER">Question paper</option><option value="REFERENCE_MATERIAL">Reference material</option><option value="MEDIA">Media</option><option value="OTHER">Other</option></AppSelect></label>
               <label>Description<textarea rows={5} maxLength={2000} value={selectedEntry.description} onChange={(event) => updateEntry(selectedEntry.id, { description: event.target.value })} placeholder="Optional description" /></label>
             </div> : <div className="pf-publish-no-file"><p>Select a file or folder to configure it.</p></div>}
-            <div className="pf-publish-free-note"><LockKeyhole /><div><strong>Academy-owned content</strong><p>Publishing is authorized by the backend and remains limited to this Academy and course.</p></div></div>
+            <div className="pf-publish-free-note"><LockKeyhole /><div><strong>Academy-owned content</strong><p>Publishing and commercial access are authorized by the backend and remain limited to this Academy and course.</p></div></div>
           </div>
         </div>
       </section> : null}
 
       {step === 'review' ? <section className="pf-publish-review">
         <header><div><span className={configurationValid ? 'is-ready' : 'has-issues'}>{configurationValid ? <CheckCircle2 /> : <AlertTriangle />}</span><div><h3>{configurationValid ? 'Ready to publish' : 'Configuration needs attention'}</h3><p>Review the server-authoritative Academy destination before committing.</p></div></div><strong>{destinationLabel}</strong></header>
-        <div className="pf-publish-review-stats"><div><strong>{fileEntries.length}</strong><span>Files</span></div><div><strong>{folderEntries.length}</strong><span>Folders</span></div><div><strong>{formatBytes(totalSize)}</strong><span>Total size</span></div><div><strong>Free</strong><span>Academy library</span></div><div><strong>{configurationValid ? 'Ready' : 'Blocked'}</strong><span>Validation</span></div></div>
-        <div className="pf-publish-review-list">{fileEntries.map((entry) => <article key={entry.id}><FileText /><div><strong>{entry.name}</strong><small>{entry.relativePath}</small></div><span>{entry.entityType.replaceAll('_', ' ')}</span><i>Ready</i><CheckCircle2 /></article>)}</div>
+        <div className="pf-publish-review-stats"><div><strong>{fileEntries.length}</strong><span>Files</span></div><div><strong>{folderEntries.length}</strong><span>Folders</span></div><div><strong>{formatBytes(totalSize)}</strong><span>Total size</span></div><div><strong>Academy</strong><span>Access scope</span></div><div><strong>{configurationValid ? 'Ready' : 'Blocked'}</strong><span>Validation</span></div></div>
+        <div className="pf-publish-review-list">{fileEntries.map((entry) => <article key={entry.id}><FileText /><div><strong>{entry.name}</strong><small>{entry.relativePath}</small></div><span>Academy access</span><i>{entryValid(entry) ? 'Ready' : 'Needs attention'}</i>{entryValid(entry) ? <CheckCircle2 /> : <AlertTriangle />}</article>)}</div>
         <p className="pf-publish-review-assurance"><LockKeyhole /> No file, folder, or metadata is written until you select Publish content.</p>
       </section> : null}
 

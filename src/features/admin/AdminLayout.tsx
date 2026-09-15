@@ -5,7 +5,6 @@ import {
   BookMarked,
   Building2,
   ChevronRight,
-  CircleUserRound,
   LayoutDashboard,
   LibraryBig,
   LogOut,
@@ -14,7 +13,6 @@ import {
   Moon,
   Package,
   ReceiptText,
-  Settings,
   ShoppingBag,
   Sun,
   TicketPercent,
@@ -26,6 +24,8 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/app/store/useAuthStore';
 import { useThemeStore } from '@/app/store/useThemeStore';
 import { SeoHead } from '@/seo/SeoHead';
+import { PoweredByNeuralWebLabs } from '@/components/branding/PoweredByNeuralWebLabs';
+import { SuperAdminManagementDialog } from './SuperAdminManagementDialog';
 import './admin.css';
 
 const ADMIN_EASE = [0.22, 1, 0.36, 1] as const;
@@ -54,15 +54,10 @@ const primaryNavigation = [
   { label: 'Academies', to: '/admin/academies', icon: Building2 },
 ] as const;
 
-const accountNavigation = [
-  { label: 'Account', to: '/admin/account', icon: CircleUserRound },
-  { label: 'Settings', to: '/admin/settings', icon: Settings },
-] as const;
-
 const getSectionLabel = (pathname: string): string => {
   if (/^\/admin\/students\/[^/]+\/?$/.test(pathname)) return 'Student details';
   if (/^\/admin\/academies\/[^/]+\/?$/.test(pathname)) return 'Academy details';
-  const route = [...primaryNavigation, ...accountNavigation]
+  const route = primaryNavigation
     .find((item) => pathname === item.to || pathname.startsWith(`${item.to}/`));
   return route?.label ?? 'Admin Console';
 };
@@ -118,7 +113,7 @@ const AdminLayout: React.FC = () => {
     typeof window === 'undefined' ? false : window.matchMedia(ADMIN_DRAWER_QUERY).matches
   ));
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [accountManagerOpen, setAccountManagerOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -140,7 +135,7 @@ const AdminLayout: React.FC = () => {
   };
 
   const closeSidebar = () => {
-    setAccountMenuOpen(false);
+    setAccountManagerOpen(false);
     if (isCompact) setDrawerOpen(false);
     else setDesktopSidebarVisibility(false);
   };
@@ -162,7 +157,7 @@ const AdminLayout: React.FC = () => {
 
     if (previousPathRef.current !== location.pathname) {
       previousPathRef.current = location.pathname;
-      setAccountMenuOpen(false);
+      setAccountManagerOpen(false);
       const focusFrame = window.requestAnimationFrame(() => {
         mainRef.current?.focus({ preventScroll: true });
       });
@@ -281,7 +276,6 @@ const AdminLayout: React.FC = () => {
             id="pf-admin-navigation"
             className={`pf-admin-sidebar${sidebarVisible ? ' is-open' : ''}`}
             aria-label="Admin navigation"
-            aria-hidden={!sidebarVisible ? true : undefined}
             role={isCompact ? 'dialog' : undefined}
             aria-modal={isCompact ? true : undefined}
             data-lenis-prevent
@@ -313,28 +307,12 @@ const AdminLayout: React.FC = () => {
             </div>
 
             <div className="pf-admin-sidebar__footer">
-              <AnimatePresence initial={false}>
-                {accountMenuOpen ? (
-      <motion.nav
-        id="pf-admin-account-menu"
-        className="pf-admin-nav pf-admin-nav--account"
-                    aria-label="Admin account"
-                    initial={prefersReducedMotion ? false : { opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={prefersReducedMotion ? undefined : { opacity: 0, y: 4 }}
-                    transition={{ duration: 0.18, ease: ADMIN_EASE }}
-                  >
-                    {accountNavigation.map((item) => <AdminNavigationItem key={item.to} {...item} />)}
-                  </motion.nav>
-                ) : null}
-              </AnimatePresence>
               <div className="pf-admin-account-card">
                 <button
                   className="pf-admin-account-card__summary"
                   type="button"
-                  onClick={() => setAccountMenuOpen((open) => !open)}
-                  aria-expanded={accountMenuOpen}
-                  aria-controls="pf-admin-account-menu"
+                  onClick={() => setAccountManagerOpen(true)}
+                  aria-haspopup="dialog"
                 >
                   <span className="pf-admin-account-card__avatar" aria-hidden="true">
                     {user?.avatarUrl ? <img src={user.avatarUrl} alt="" /> : getInitials(user?.fullName)}
@@ -343,7 +321,7 @@ const AdminLayout: React.FC = () => {
                     <strong>{user?.fullName || 'Super Admin'}</strong>
                     <small>{user?.email || 'Administrator'}</small>
                   </span>
-                  <ChevronRight className={`pf-admin-account-card__chevron${accountMenuOpen ? ' is-open' : ''}`} size={16} aria-hidden="true" />
+                  <ChevronRight className="pf-admin-account-card__chevron" size={16} aria-hidden="true" />
                 </button>
                 <button
                   className="pf-admin-account-card__logout"
@@ -355,6 +333,7 @@ const AdminLayout: React.FC = () => {
                   <LogOut size={18} aria-hidden="true" />
                 </button>
               </div>
+              <PoweredByNeuralWebLabs className="pf-admin-powered-by" />
             </div>
           </aside>
 
@@ -439,6 +418,11 @@ const AdminLayout: React.FC = () => {
             </motion.div>
           ) : null}
         </AnimatePresence>
+        <SuperAdminManagementDialog
+          open={accountManagerOpen}
+          onClose={() => setAccountManagerOpen(false)}
+          currentUserId={user?.id}
+        />
       </div>
 
       <div className="pf-admin-portal-host" />

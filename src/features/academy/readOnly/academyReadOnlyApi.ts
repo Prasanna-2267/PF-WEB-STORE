@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api/client';
+import type { AdminEntitlementDto } from '@/features/admin/readOnly/adminReadOnlyApi';
 
 
 export type AcademyMembershipStatus = 'ACTIVE' | 'INVITED' | 'SUSPENDED' | 'REVOKED';
@@ -59,7 +60,11 @@ interface AcademyStudentDetailDto {
     completedAt: string | null;
     course: { name: string; code: string };
   }>;
+  performanceInsights: PerformanceInsights;
 }
+
+export interface ConceptInsight { conceptName: string; chapterName: string; examName: string; courseId: string; courseName: string; attempts: number; correct: number; wrong: number; durationMs: number; accuracyPercent: number; lastAttemptAt: string }
+export interface PerformanceInsights { minimumAttempts: number; weakConcepts: ConceptInsight[]; strongConcepts: ConceptInsight[] }
 
 interface AcademyCourseDto {
   id: string;
@@ -100,6 +105,7 @@ export interface AcademyStudentDetailViewModel extends Omit<AcademyStudentViewMo
     enrolledAt: string;
     completedAt: string | null;
   }>;
+  performanceInsights: PerformanceInsights;
 }
 
 export interface AcademyCourseViewModel {
@@ -222,7 +228,34 @@ export async function fetchAcademyStudent(studentId: string, signal?: AbortSigna
       enrolledAt: enrollment.enrolledAt,
       completedAt: enrollment.completedAt,
     })),
+    performanceInsights: result.performanceInsights,
   };
+}
+
+export async function mutateAcademyStudentAccountStatus(studentId: string, status: AccountStatus) {
+  return apiRequest(`/api/academy/students/${encodeURIComponent(studentId)}/account-status`, { method: 'PATCH', body: { status } });
+}
+export async function approveAcademyStudentDeviceReset(studentId: string) {
+  return apiRequest<{
+    userId: string;
+    state: 'AWAITING_FIRST_BINDING' | 'RESET_APPROVED';
+    deviceName: string | null;
+    platform: string | null;
+    resetApprovedAt: string | null;
+    expiresAt: string | null;
+    message: string;
+  }>(`/api/academy/students/${encodeURIComponent(studentId)}/device-reset/approve`, { method: 'POST' });
+}
+export async function permanentlyDeleteAcademyStudent(studentId: string) {
+  return apiRequest(`/api/academy/students/${encodeURIComponent(studentId)}`, { method: 'DELETE', body: { confirmation: 'PERMANENTLY DELETE' } });
+}
+
+export async function fetchAcademyStudentEntitlements(studentId: string, signal?: AbortSignal) {
+  return apiRequest<AdminEntitlementDto[]>(`/api/academy/students/${encodeURIComponent(studentId)}/entitlements`, { signal });
+}
+
+export async function revokeAcademyStudentEntitlement(entitlementId: string, reason: string) {
+  return apiRequest<{ id: string; status: string }>(`/api/academy/entitlements/${encodeURIComponent(entitlementId)}/revoke`, { method: 'POST', body: { reason } });
 }
 
 export async function fetchAcademyCourses(filters: AcademyCourseFilters, signal?: AbortSignal) {

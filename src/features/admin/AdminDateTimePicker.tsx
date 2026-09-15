@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, X, Check } from 'lucide-react';
+import { AppSelect } from '@/components/ui/AppSelect';
 
 interface AdminDateTimePickerProps {
   value: string | null; // ISO string
@@ -125,6 +126,8 @@ export const AdminDateTimePicker: React.FC<AdminDateTimePickerProps> = ({
   };
 
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const currentCalendarYear = new Date().getFullYear();
+  const availableYears = Array.from({ length: 126 }, (_, index) => currentCalendarYear - 100 + index);
 
   // Time Handlers
   const handleHourChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -218,7 +221,10 @@ export const AdminDateTimePicker: React.FC<AdminDateTimePickerProps> = ({
             {/* Calendar Panel */}
             <div className="pf-admin-datetime-picker__calendar">
               <header>
-                <strong>{monthNames[currentMonth]} {currentYear}</strong>
+                <div className="pf-admin-calendar__selectors">
+                  <AppSelect value={String(currentMonth)} onChange={(event) => setCurrentMonth(Number(event.target.value))} aria-label="Month">{monthNames.map((name, index) => <option key={name} value={index}>{name}</option>)}</AppSelect>
+                  <AppSelect value={String(currentYear)} onChange={(event) => setCurrentYear(Number(event.target.value))} aria-label="Year">{availableYears.map((year) => <option key={year} value={year}>{year}</option>)}</AppSelect>
+                </div>
                 <div className="pf-admin-calendar__nav">
                   <button type="button" onClick={prevMonth} aria-label="Previous month"><ChevronLeft size={18} /></button>
                   <button type="button" onClick={nextMonth} aria-label="Next month"><ChevronRight size={18} /></button>
@@ -299,7 +305,7 @@ export const AdminDateTimePicker: React.FC<AdminDateTimePickerProps> = ({
               </strong>
             </div>
             <div className="pf-admin-datetime-picker__actions">
-              <button type="button" className="pf-admin-button pf-admin-button--quiet" onClick={() => setIsOpen(false)}>Clear</button>
+              <button type="button" className="pf-admin-button pf-admin-button--quiet" onClick={() => setIsOpen(false)}>Cancel</button>
               <button type="button" className="pf-admin-button" onClick={applyValue}>Apply</button>
             </div>
           </div>

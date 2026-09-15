@@ -14,9 +14,9 @@ function readStoredCredentials(): SessionCredentials | null {
     const value = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? window.sessionStorage.getItem(LEGACY_STORAGE_KEY) ?? 'null') as Partial<SessionCredentials> | null;
     if (
       !value ||
-      typeof value.accessToken !== 'string' ||
-      typeof value.refreshToken !== 'string' ||
-      typeof value.expiresAt !== 'number'
+      typeof value.accessToken !== 'string' || !value.accessToken.trim() ||
+      typeof value.refreshToken !== 'string' || !value.refreshToken.trim() ||
+      typeof value.expiresAt !== 'number' || !Number.isFinite(value.expiresAt)
     ) return null;
     return value as SessionCredentials;
   } catch {

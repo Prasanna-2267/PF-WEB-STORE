@@ -12,7 +12,7 @@ const idempotencyKey = (value: string | undefined) => {
 };
 
 const checkoutItemSchema = z.object({
-  resourceType: z.enum(["PACKAGE", "CONTENT"]),
+  resourceType: z.enum(["PACKAGE", "CONTENT", "QUESTION_BANK"]),
   resourceId: z.string().uuid(),
 }).strict();
 

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "../db/prisma.js";
 import { badRequest, conflict, notFound } from "../errors/api-error.js";
 import { getStorageProvider } from "../integrations/provider-registry.js";
@@ -19,6 +19,19 @@ export async function createImageUpload(scope: BroadcastMediaScope, broadcastId:
   const signed = await getStorageProvider().createUploadUrl({ academyId: scope.academyId ?? "platform", objectKey, mimeType: input.mimeType, sizeBytes: input.sizeBytes, checksumSha256: input.checksumSha256.toLowerCase() });
   const upload = await prisma.storageUpload.create({ data: { academyId: scope.academyId, createdById: scope.actorId, objectKey, originalName: input.fileName, mimeType: input.mimeType, sizeBytes: BigInt(input.sizeBytes), checksumSha256: input.checksumSha256.toLowerCase(), purpose: `BROADCAST_IMAGE:${broadcastId}`, expiresAt: signed.expiresAt } });
   return { uploadId: upload.id, uploadUrl: signed.uploadUrl, headers: signed.headers, expiresAt: signed.expiresAt };
+}
+export async function uploadImageBytes(scope: BroadcastMediaScope, broadcastId: string, uploadId: string, body: Buffer) {
+  await owned(scope, broadcastId);
+  const upload = await prisma.storageUpload.findFirst({ where: { id: uploadId, academyId: scope.academyId, createdById: scope.actorId, purpose: `BROADCAST_IMAGE:${broadcastId}`, status: "PENDING" } });
+  if (!upload) throw notFound("UPLOAD_NOT_FOUND", "The broadcast image upload was not found.");
+  if (upload.expiresAt <= new Date()) throw conflict("UPLOAD_EXPIRED", "The broadcast image upload session has expired.");
+  if (body.byteLength !== Number(upload.sizeBytes)) throw badRequest("UPLOAD_SIZE_MISMATCH", "The uploaded image size does not match the declared size.");
+  const checksum = createHash("sha256").update(body).digest("hex");
+  if (checksum !== upload.checksumSha256.toLowerCase()) throw badRequest("UPLOAD_CHECKSUM_MISMATCH", "The uploaded image checksum does not match the declared checksum.");
+  const storage = getStorageProvider();
+  if (!storage.putObject) throw conflict("STORAGE_PROXY_UNAVAILABLE", "The configured storage provider does not support authenticated server uploads.");
+  await storage.putObject(upload.objectKey, body, upload.mimeType, upload.checksumSha256);
+  return finalizeImage(scope, broadcastId, uploadId);
 }
 export async function finalizeImage(scope: BroadcastMediaScope, broadcastId: string, uploadId: string) {
   await owned(scope, broadcastId);

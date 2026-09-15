@@ -62,10 +62,16 @@ describe('server-derived route guards', () => {
     expect(await screen.findByText('academy-console')).toBeInTheDocument();
   });
 
-  it('does not treat a stale local Academy object as authorization', async () => {
+  it('does not treat a stale local Academy object as authorization', () => {
     authenticated(user('student'));
     useAcademyTenantStore.setState({ activeAcademyId: 'stale-academy' });
     route(<RequireAcademyAdmin><p>academy-console</p></RequireAcademyAdmin>);
-    expect(await screen.findByText('Access Restricted (403)')).toBeInTheDocument();
+    expect(screen.getByText('home')).toBeInTheDocument();
+  });
+
+  it('returns a Super Admin to the platform console instead of resolving an Academy tenant', () => {
+    authenticated(user('super_admin', ['overview:read']));
+    route(<RequireAcademyAdmin><p>academy-console</p></RequireAcademyAdmin>);
+    expect(screen.getByText('admin-home')).toBeInTheDocument();
   });
 });

@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -124,7 +125,7 @@ export function AdminCoursesPage() {
             />
           </label>
 
-          <select
+          <AppSelect
             className="pf-admin-select"
             value={statusFilter}
             onChange={(e) => {
@@ -137,7 +138,7 @@ export function AdminCoursesPage() {
             <option value="ACTIVE">Active</option>
             <option value="INACTIVE">Inactive</option>
             <option value="ARCHIVED">Archived</option>
-          </select>
+          </AppSelect>
         </div>
 
         {query.isPending ? (
@@ -491,7 +492,7 @@ const CourseEditorModal: React.FC<{ course: AdminCourseItem | null; onClose: () 
 
         <label className="pf-admin-field">
           <span>Status</span>
-          <select
+          <AppSelect
             className="pf-admin-select"
             value={form.status}
             onChange={(e) => setForm({ ...form, status: e.target.value as CourseStatus })}
@@ -499,7 +500,7 @@ const CourseEditorModal: React.FC<{ course: AdminCourseItem | null; onClose: () 
             <option value="ACTIVE">Active</option>
             <option value="INACTIVE">Inactive</option>
             <option value="ARCHIVED">Archived</option>
-          </select>
+          </AppSelect>
         </label>
 
         {error ? (

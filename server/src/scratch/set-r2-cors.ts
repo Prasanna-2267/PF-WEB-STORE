@@ -11,17 +11,22 @@ async function main() {
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY!;
   const bucketName = process.env.R2_BUCKET_NAME || "parallax-flow-assets";
   const region = process.env.R2_REGION || "auto";
+  const allowedOrigins = [...new Set([
+    ...(process.env.CORS_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean),
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+  ])];
+  const originXml = allowedOrigins.map((origin) => `    <AllowedOrigin>${origin.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</AllowedOrigin>`).join("\n");
 
   const corsXml = `<?xml version="1.0" encoding="UTF-8"?>
 <CORSConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
   <CORSRule>
-    <AllowedOrigin>*</AllowedOrigin>
+${originXml}
     <AllowedMethod>GET</AllowedMethod>
     <AllowedMethod>PUT</AllowedMethod>
-    <AllowedMethod>POST</AllowedMethod>
-    <AllowedMethod>DELETE</AllowedMethod>
     <AllowedMethod>HEAD</AllowedMethod>
-    <AllowedHeader>*</AllowedHeader>
+    <AllowedHeader>content-type</AllowedHeader>
+    <AllowedHeader>x-amz-meta-sha256</AllowedHeader>
     <ExposeHeader>ETag</ExposeHeader>
     <ExposeHeader>x-amz-meta-sha256</ExposeHeader>
     <ExposeHeader>Content-Length</ExposeHeader>

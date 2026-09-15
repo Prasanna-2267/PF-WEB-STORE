@@ -11,7 +11,7 @@ import type {
   ContentSampleImage,
   ContentSearchResult,
   ContentStoreSection,
-  ContentValidityMode,
+  AccessDurationUnit,
   ContentUploadInput,
   CreateContentFolderInput,
 } from '../types/content';
@@ -27,6 +27,18 @@ const ROOT_NAME = 'My Flow';
 const fileSources = new Map<string, File>();
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const allowOfflineFixtures = import.meta.env.MODE === 'test';
+const FIXTURE_COURSE_ID = 'course-chartered-accountancy';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Content is course-scoped and the production API accepts database UUIDs only.
+ * The repository is initialized before the asynchronously loaded course picker,
+ * so an absent course must mean "not ready" rather than the legacy fixture id.
+ */
+function resolveTargetCourse(courseId?: string): string | null {
+  if (allowOfflineFixtures) return courseId || FIXTURE_COURSE_ID;
+  return courseId && UUID_PATTERN.test(courseId) ? courseId : null;
+}
 
 function repositoryFailure(error: unknown, fallbackMessage: string): ContentRepositoryError {
   if (error instanceof ContentRepositoryError) return error;
@@ -80,42 +92,68 @@ interface BackendContentDto {
   courseId?: string;
   parentId?: string | null;
   name: string;
+  size?: number;
+  mimeType?: string | null;
+  description?: string;
   kind?: string;
   entityType?: string;
   accessType?: string;
   price?: number | null;
-  validityMode?: ContentValidityMode;
-  validityOffsetDays?: number | null;
+  accessDurationValue?: number | null;
+  accessDurationUnit?: AccessDurationUnit | null;
   status?: string;
   createdAt?: string;
   updatedAt?: string;
+  sampleImages?: Array<{
+    id: string;
+    role?: 'ADMIN_PREVIEW' | 'PDF_FIRST_PAGE';
+    name: string;
+    mimeType: string;
+    size?: number;
+    displayOrder: number;
+    url?: string;
+    dataUrl?: string;
+  }>;
+  storeSections?: Array<{ id: string; heading: string; content: string; displayOrder: number }>;
 }
 
 function adaptBackendContent(dto: BackendContentDto): ContentItem {
   const isFolder = dto.kind === 'FOLDER' || dto.entityType === 'FOLDER' || dto.kind === 'folder';
   const meta = getItemMetadata(dto.id);
   const localItem = items.find((i) => i.id === dto.id);
+  const backendSampleImages = dto.sampleImages
+    ?.filter((image) => image.role !== 'PDF_FIRST_PAGE')
+    .map((image) => ({
+      id: image.id,
+      name: image.name,
+      mimeType: image.mimeType,
+      size: Number(image.size ?? 0),
+      dataUrl: image.url || image.dataUrl || '',
+      order: image.displayOrder,
+    })) ?? [];
+  const backendStoreSections = dto.storeSections
+    ?.map((section) => ({ ...section, order: section.displayOrder })) ?? [];
   return {
     id: dto.id,
-    courseId: dto.courseId || 'course-chartered-accountancy',
+    courseId: dto.courseId || (allowOfflineFixtures ? FIXTURE_COURSE_ID : ''),
     parentId: dto.parentId || null,
     name: dto.name,
     kind: isFolder ? 'folder' : 'file',
-    size: isFolder ? 0 : 1024 * 1024,
+    size: isFolder ? 0 : Number(dto.size ?? 1024 * 1024),
     createdAt: dto.createdAt || new Date().toISOString(),
     updatedAt: dto.updatedAt || new Date().toISOString(),
     lastOpenedAt: null,
     owner: 'Super Admin',
-    mimeType: isFolder ? null : 'application/pdf',
+    mimeType: isFolder ? null : dto.mimeType ?? 'application/pdf',
     storagePath: null,
-    description: meta?.description ?? localItem?.description ?? '',
+    description: dto.description ?? meta?.description ?? localItem?.description ?? '',
     entityType: isFolder ? null : 'study-material',
     accessType: (dto.accessType || 'FREE') as any,
     price: dto.price ?? null,
-    validityMode: dto.validityMode ?? 'PERMANENT',
-    validityOffsetDays: dto.validityOffsetDays ?? null,
-    sampleImages: (dto as any).sampleImages ?? meta?.sampleImages ?? localItem?.sampleImages ?? [],
-    storeSections: (dto as any).storeSections ?? meta?.storeSections ?? localItem?.storeSections ?? [],
+    accessDurationValue: dto.accessDurationValue ?? null,
+    accessDurationUnit: dto.accessDurationUnit ?? null,
+    sampleImages: backendSampleImages.length ? backendSampleImages : meta?.sampleImages ?? localItem?.sampleImages ?? [],
+    storeSections: backendStoreSections.length ? backendStoreSections : meta?.storeSections ?? localItem?.storeSections ?? [],
     displayOrder: 0,
   };
 }
@@ -135,9 +173,56 @@ async function calculateSha256(blob: Blob): Promise<string> {
   return 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 }
 
+const isNewSampleImage = (image: ContentSampleImage): boolean => image.dataUrl.startsWith('data:');
+
+async function uploadSampleImage(contentId: string, image: ContentSampleImage, displayOrder: number) {
+  const response = await fetch(image.dataUrl);
+  if (!response.ok) throw new ContentRepositoryError('STORAGE_ERROR', `The preview image "${image.name}" could not be read.`);
+  const blob = await response.blob();
+  const mimeType = (image.mimeType === 'image/jpg' ? 'image/jpeg' : image.mimeType) || blob.type;
+  const checksumSha256 = await calculateSha256(blob);
+  const intent = await apiRequest<{ uploadId: string }>(`/api/admin/content/${encodeURIComponent(contentId)}/sample-images/upload-intent`, {
+    method: 'POST',
+    body: { fileName: image.name, mimeType, sizeBytes: blob.size, checksumSha256 },
+    timeoutMs: 300_000,
+  });
+
+  await retryUploadStep(() => apiRequest(`/api/admin/content/uploads/${encodeURIComponent(intent.uploadId)}/binary`, {
+    method: 'POST',
+    headers: { 'Content-Type': mimeType },
+    body: blob,
+    timeoutMs: 300_000,
+  }));
+
+  return retryUploadStep(() => apiRequest<NonNullable<BackendContentDto['sampleImages']>[number]>(`/api/admin/content/${encodeURIComponent(contentId)}/sample-images/finalize`, {
+    method: 'POST',
+    body: { uploadId: intent.uploadId, displayOrder: displayOrder + 1 },
+    timeoutMs: 300_000,
+  }));
+}
+
+async function syncSampleImages(contentId: string, desiredImages: ContentSampleImage[]) {
+  const detail = await apiRequest<BackendContentDto>(`/api/admin/content/${encodeURIComponent(contentId)}`);
+  const currentImages = (detail.sampleImages || []).filter((image) => image.role !== 'PDF_FIRST_PAGE');
+  const preservedIds = new Set(desiredImages.filter((image) => !isNewSampleImage(image)).map((image) => image.id));
+
+  await Promise.all(currentImages
+    .filter((image) => !preservedIds.has(image.id))
+    .map((image) => apiRequest(`/api/admin/content/${encodeURIComponent(contentId)}/sample-images/${encodeURIComponent(image.id)}`, { method: 'DELETE' })));
+
+  const persisted: NonNullable<BackendContentDto['sampleImages']> = [];
+  for (const [index, image] of desiredImages.slice(0, 3).entries()) {
+    const existing = currentImages.find((candidate) => candidate.id === image.id && !isNewSampleImage(image));
+    if (existing) persisted.push({ ...existing, displayOrder: index + 1, url: image.dataUrl || existing.url });
+    else persisted.push({ ...(await uploadSampleImage(contentId, image, index)), url: image.dataUrl });
+  }
+  return persisted;
+}
+
 export class MockContentRepository implements ContentRepository {
   async getAllItems(courseId?: string): Promise<ContentItem[]> {
-    const targetCourse = courseId || 'course-chartered-accountancy';
+    const targetCourse = resolveTargetCourse(courseId);
+    if (!targetCourse) return [];
     try {
       const response = await apiRequest<{ data: BackendContentDto[] }>(`/api/admin/content?courseId=${encodeURIComponent(targetCourse)}&parentId=all&limit=1000`);
       if (response && Array.isArray(response.data)) {
@@ -151,7 +236,8 @@ export class MockContentRepository implements ContentRepository {
   }
 
   async getChildren(parentId: string | null, courseId?: string): Promise<ContentItem[]> {
-    const targetCourse = courseId || 'course-chartered-accountancy';
+    const targetCourse = resolveTargetCourse(courseId);
+    if (!targetCourse) return [];
     const key = this.getLocationKey(targetCourse, parentId);
     const childOrder = this.locationSettingsMap.get(key)?.childOrder;
     const sortWithOrder = (list: ContentItem[]): ContentItem[] => {
@@ -567,14 +653,29 @@ export class MockContentRepository implements ContentRepository {
               description: fileEntry.description,
               accessType: fileEntry.accessType,
               price: fileEntry.price ?? undefined,
-              validityMode: fileEntry.validityMode,
-              validityOffsetDays: fileEntry.validityOffsetDays,
+              accessDurationValue: fileEntry.accessDurationValue,
+              accessDurationUnit: fileEntry.accessDurationUnit,
             },
             timeoutMs: 300_000,
           }));
 
           if (dto && dto.id) {
-            createdItem = adaptBackendContent(dto);
+            const metadataDto = fileEntry.accessType === 'PAID'
+              ? await apiRequest<BackendContentDto>(`/api/admin/content/${encodeURIComponent(dto.id)}`, {
+                  method: 'PATCH',
+                  body: {
+                    storeSections: fileEntry.storeSections.map((section, index) => ({
+                      heading: section.heading,
+                      content: section.content,
+                      displayOrder: index,
+                    })),
+                  },
+                })
+              : dto;
+            const persistedImages = fileEntry.accessType === 'PAID'
+              ? await syncSampleImages(dto.id, fileEntry.sampleImages)
+              : [];
+            createdItem = adaptBackendContent({ ...metadataDto, sampleImages: persistedImages });
           }
         }
       } catch (error) {
@@ -599,8 +700,8 @@ export class MockContentRepository implements ContentRepository {
           entityType: fileEntry.entityType || 'study-material',
           accessType: fileEntry.accessType,
           price: fileEntry.price,
-          validityMode: fileEntry.validityMode,
-          validityOffsetDays: fileEntry.validityOffsetDays,
+          accessDurationValue: fileEntry.accessDurationValue,
+          accessDurationUnit: fileEntry.accessDurationUnit,
           sampleImages: fileEntry.sampleImages,
           storeSections: fileEntry.storeSections,
           displayOrder: fileEntry.displayOrder,
@@ -717,8 +818,8 @@ export class MockContentRepository implements ContentRepository {
     description?: string,
     sampleImages?: ContentSampleImage[],
     storeSections?: ContentStoreSection[],
-    validityMode: ContentValidityMode = 'PERMANENT',
-    validityOffsetDays: number | null = null
+    accessDurationValue: number | null = null,
+    accessDurationUnit: AccessDurationUnit | null = null
   ): Promise<ContentItem> {
     saveItemMetadata(itemId, {
       description: description ?? '',
@@ -732,21 +833,22 @@ export class MockContentRepository implements ContentRepository {
           accessType,
           price: accessType === 'FREE' ? null : (price ?? undefined),
           applyToChildren,
-          validityMode: accessType === 'FREE' ? 'PERMANENT' : validityMode,
-          validityOffsetDays: accessType === 'PAID' && validityMode === 'EXAM_DATE_OFFSET' ? validityOffsetDays : null,
+          accessDurationValue: accessType === 'PAID' ? accessDurationValue : null,
+          accessDurationUnit: accessType === 'PAID' ? accessDurationUnit : null,
           ...(description !== undefined ? { description } : {}),
           ...(storeSections !== undefined ? { storeSections: storeSections.map((s, idx) => ({ heading: s.heading, content: s.content, displayOrder: idx })) } : {}),
         },
       });
       if (dto && dto.id) {
-        const item = adaptBackendContent(dto);
+        const persistedImages = await syncSampleImages(itemId, accessType === 'PAID' ? (sampleImages ?? []) : []);
+        const item = adaptBackendContent({ ...dto, sampleImages: persistedImages });
         const idx = items.findIndex((i) => i.id === itemId);
         const merged: ContentItem = {
           ...item,
           accessType,
           price: accessType === 'FREE' ? null : price ?? null,
-          validityMode: accessType === 'FREE' ? 'PERMANENT' : validityMode,
-          validityOffsetDays: accessType === 'PAID' && validityMode === 'EXAM_DATE_OFFSET' ? validityOffsetDays : null,
+          accessDurationValue: accessType === 'PAID' ? accessDurationValue : null,
+          accessDurationUnit: accessType === 'PAID' ? accessDurationUnit : null,
           ...(description !== undefined ? { description } : {}),
           ...(sampleImages ? { sampleImages } : {}),
           ...(storeSections ? { storeSections } : {}),

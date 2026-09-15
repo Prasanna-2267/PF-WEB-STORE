@@ -21,6 +21,8 @@ export const requireAuth = async (req: Request, _res: Response, next: NextFuncti
         authSessionId: true,
         expiresAt: true,
         revokedAt: true,
+        deviceIdHash: true,
+        deviceBindingVersion: true,
         lastSeenAt: true,
         user: {
           select: {
@@ -35,6 +37,7 @@ export const requireAuth = async (req: Request, _res: Response, next: NextFuncti
                 rolePermissions: { select: { permission: { select: { key: true } } } },
               },
             },
+            deviceBinding: { select: { bindingVersion: true, deviceIdHash: true } },
           },
         },
       },
@@ -49,6 +52,8 @@ export const requireAuth = async (req: Request, _res: Response, next: NextFuncti
       session.user.deletedAt ||
       session.user.status !== "ACTIVE" ||
       !session.user.role.isActive
+      || (session.deviceBindingVersion !== null && session.deviceBindingVersion !== session.user.deviceBinding?.bindingVersion)
+      || (session.deviceIdHash !== null && session.deviceIdHash !== session.user.deviceBinding?.deviceIdHash)
     ) {
       throw unauthorized("The session is invalid or expired.");
     }

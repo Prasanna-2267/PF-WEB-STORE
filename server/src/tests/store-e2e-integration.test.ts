@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { providerTestHooks } from "../integrations/provider-registry.js";
 import type { StorageProvider, UploadIntent } from "../integrations/storage-provider.js";
 import { generatePdfFirstPageCover } from "../services/pdfCoverService.js";
+import { PDFDocument, rgb } from "pdf-lib";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 describe("Store Module End-to-End & Security Boundary Verification", () => {
   let mockStorage: Map<string, { sizeBytes: number; mimeType: string; checksumSha256: string }>;
@@ -59,7 +61,7 @@ describe("Store Module End-to-End & Security Boundary Verification", () => {
       description: "Complete Income Tax revision notes",
       price: 499,
       sampleImages: [
-        { id: "cover-1", role: "PDF_FIRST_PAGE", name: "cover.svg", displayOrder: 0, url: "https://storage.test/download/content/item-1/samples/cover.svg?expires=3600" },
+        { id: "cover-1", role: "PDF_FIRST_PAGE", name: "cover-v2.png", displayOrder: 0, url: "https://storage.test/download/content/item-1/samples/cover-v2.png?expires=3600" },
         { id: "sample-1", role: "ADMIN_PREVIEW", name: "Sample Page 1", displayOrder: 1, url: "https://storage.test/download/academies/platform/content/item-1/samples/sample-1.jpg?expires=3600" },
       ],
       highlights: [
@@ -76,13 +78,25 @@ describe("Store Module End-to-End & Security Boundary Verification", () => {
   });
 
   it("generates automatic PDF first-page cover buffer", async () => {
-    const mockPdfBuffer = Buffer.from(`%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000062 00000 n \n0000000117 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n190\n%%EOF`);
+    const pdf = await PDFDocument.create();
+    const page = pdf.addPage([300, 420]);
+    page.drawRectangle({ x: 0, y: 0, width: 300, height: 420, color: rgb(0.9, 0.1, 0.1) });
+    page.drawText("ACTUAL FIRST PAGE", { x: 45, y: 210, size: 24, color: rgb(1, 1, 1) });
+    const secondPage = pdf.addPage([300, 420]);
+    secondPage.drawRectangle({ x: 0, y: 0, width: 300, height: 420, color: rgb(0.1, 0.1, 0.9) });
+    const mockPdfBuffer = Buffer.from(await pdf.save());
     const result = await generatePdfFirstPageCover(mockPdfBuffer, "Advanced Taxation Notes.pdf");
     
     assert.ok(result.buffer.length > 0);
-    assert.equal(result.fileName, "cover.svg");
-    assert.equal(result.mimeType, "image/svg+xml");
-    assert.match(result.buffer.toString("utf-8"), /AUTOMATIC COVER|PARALLAX FLOW/);
+    assert.equal(result.fileName, "cover-v2.png");
+    assert.equal(result.mimeType, "image/png");
+    assert.deepEqual([...result.buffer.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+    const rendered = await loadImage(result.buffer);
+    const inspectionCanvas = createCanvas(rendered.width, rendered.height);
+    const inspectionContext = inspectionCanvas.getContext("2d");
+    inspectionContext.drawImage(rendered, 0, 0);
+    const center = inspectionContext.getImageData(Math.floor(rendered.width / 2), Math.floor(rendered.height / 4), 1, 1).data;
+    assert.ok(center[0] > center[2] * 3, "the rendered cover must contain the red first page, not the blue second page");
   });
 
   it("verifies public catalog filtering parameters", async () => {

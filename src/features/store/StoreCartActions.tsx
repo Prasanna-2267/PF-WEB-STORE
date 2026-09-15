@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Check, Plus } from 'lucide-react';
+import { Check, Play, Plus } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore, type UserProfile } from '@/app/store/useAuthStore';
 import { useCartStore } from '@/app/store/useCartStore';
@@ -128,9 +128,18 @@ export const StoreAddToCartButton: React.FC<StoreAddToCartButtonProps> = ({
   const entitlements = useStoreEntitlements(isAuthenticated);
   const isInCart = itemIds.includes(product.id);
   const isServerOwned = Boolean(entitlements.data?.items.some((item) => item.resourceId === product.id));
+  const isQuestionBank = product.productType === 'question-bank';
+  const isFreeQuestionBank = isQuestionBank && product.accessType === 'FREE';
+  const includedPackage = isQuestionBank
+    ? product.includedPackages?.find((candidate) => entitlements.data?.items.some(
+        (item) => item.resourceType === 'PACKAGE' && item.resourceId === candidate.id,
+      ))
+    : undefined;
+  const canPractice = isFreeQuestionBank || isServerOwned || Boolean(includedPackage);
+  const isCheckingQuestionBankAccess = isQuestionBank && isAuthenticated && entitlements.isLoading;
   const [phase, setPhase] = useState<AddButtonPhase>('idle');
   const [announcement, setAnnouncement] = useState('');
-  const buttonState = phase === 'adding' ? 'adding' : isInCart || isServerOwned ? 'added' : 'idle';
+  const buttonState = phase === 'adding' ? 'adding' : canPractice || isInCart || isServerOwned ? 'added' : 'idle';
 
   useEffect(() => {
     if (phase !== 'adding') return undefined;
@@ -160,6 +169,11 @@ export const StoreAddToCartButton: React.FC<StoreAddToCartButtonProps> = ({
 
   const handleAdd = () => {
     if (phase === 'adding') return;
+
+    if (canPractice) {
+      window.location.assign(product.deepLink);
+      return;
+    }
 
     if (!isAuthenticated) {
       requestLogin();
@@ -194,9 +208,9 @@ export const StoreAddToCartButton: React.FC<StoreAddToCartButtonProps> = ({
         className={buttonClasses}
         type="button"
         data-state={buttonState}
-        disabled={phase === 'adding' || isInCart || isServerOwned}
-        aria-busy={phase === 'adding'}
-        aria-label={isServerOwned ? `${product.title} already unlocked` : isInCart ? `${product.title} added to cart` : `Add ${product.title} to cart`}
+        disabled={phase === 'adding' || isCheckingQuestionBankAccess || (!canPractice && (isInCart || (isServerOwned && !isQuestionBank)))}
+        aria-busy={phase === 'adding' || isCheckingQuestionBankAccess}
+        aria-label={canPractice ? `Practice ${product.title}` : isServerOwned ? `${product.title} already unlocked` : isInCart ? `${product.title} added to cart` : `Add ${product.title} to cart`}
         onClick={handleAdd}
         animate={{ scale: phase === 'adding' ? .95 : 1, y: 0 }}
         transition={{ duration: phase === 'adding' ? .2 : .18, ease: [0.22, 1, 0.36, 1] }}
@@ -231,11 +245,13 @@ export const StoreAddToCartButton: React.FC<StoreAddToCartButtonProps> = ({
                   exit={buttonState === 'idle' ? { rotate: 45 } : undefined}
                   transition={{ duration: buttonState === 'added' ? .22 : .3, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  {buttonState === 'added'
+                  {canPractice
+                    ? <Play size={17} strokeWidth={2.2} />
+                    : buttonState === 'added'
                     ? <Check size={17} strokeWidth={2.2} />
                     : <Plus size={17} strokeWidth={2} />}
                 </motion.span>
-                <span>{buttonState === 'added' ? (isServerOwned ? 'Unlocked' : 'Added') : 'Add to cart'}</span>
+                <span>{isCheckingQuestionBankAccess ? 'Checking access...' : canPractice ? (includedPackage ? 'Included - Practice' : 'Practice now') : buttonState === 'added' ? (isServerOwned ? 'Unlocked' : 'Added') : 'Add to cart'}</span>
               </motion.span>
             )}
 

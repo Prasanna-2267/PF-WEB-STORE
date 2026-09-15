@@ -291,6 +291,14 @@
 .pf-publish-access small { color: var(--admin-muted); font-size: 8px; }
 .pf-publish-paid > label span { display: flex; justify-content: space-between; }
 .pf-publish-paid > label b { color: var(--admin-danger); font-size: 7px; text-transform: uppercase; }
+.pf-publish-duration { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, .7fr); gap: 10px; margin-top: 10px; }
+.pf-publish-duration label { display: grid; gap: 5px; color: var(--admin-ink-soft); font-size: 9px; font-weight: 700; }
+.pf-publish-duration label > span { display: flex; justify-content: space-between; }
+.pf-publish-duration b { color: var(--admin-danger); font-size: 7px; text-transform: uppercase; }
+.pf-publish-duration input,
+.pf-publish-duration select { width: 100%; min-height: 38px; padding: 8px 10px; color: var(--admin-ink); border: 1px solid var(--admin-line-strong); border-radius: 9px; outline: none; background: var(--admin-panel-solid); font: inherit; }
+.pf-publish-duration input:focus,
+.pf-publish-duration select:focus { border-color: var(--admin-primary); box-shadow: 0 0 0 3px var(--admin-accent-soft); }
 
 .pf-publish-location-card {
   margin-bottom: 14px;
@@ -507,6 +515,7 @@
   .pf-publish-selection-list > header { align-items: flex-start; flex-direction: column; }
   .pf-publish-selection-list > header > span { color: var(--admin-success); }
   .pf-publish-access { grid-template-columns: 1fr; }
+  .pf-publish-duration { grid-template-columns: 1fr; }
   .pf-publish-samples > div { grid-template-columns: 1fr; }
   .pf-publish-review > header { align-items: flex-start; flex-direction: column; }
   .pf-publish-review > header > strong { max-width: 100%; text-align: left; }

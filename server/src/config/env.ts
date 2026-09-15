@@ -56,9 +56,11 @@ const environmentSchema = z
     SMTP_PASSWORD: optionalTrimmedString,
     SMTP_FROM: optionalTrimmedString,
     CONTACT_RECIPIENT_EMAIL: optionalTrimmedString,
+    PUBLIC_APP_URL: optionalTrimmedString,
+    PUBLIC_LOGO_URL: optionalTrimmedString,
+    SUPPORT_EMAIL: optionalTrimmedString,
     SMS_WEBHOOK_URL: optionalTrimmedString,
     SMS_WEBHOOK_BEARER_TOKEN: optionalTrimmedString,
-    SMS_OTP_DEV_BYPASS_ENABLED: booleanFromString,
     PAYMENT_CHECKOUT_URL: optionalTrimmedString,
     PAYMENT_WEBHOOK_SECRET: optionalTrimmedString,
     PAYMENT_BEARER_TOKEN: optionalTrimmedString,
@@ -87,15 +89,11 @@ const environmentSchema = z
       const smtpConfigured = Boolean(value.SMTP_HOST && value.SMTP_USER && value.SMTP_PASSWORD && value.SMTP_FROM);
       if (value.EMAIL_PROVIDER === "smtp" && !smtpConfigured) context.addIssue({ code: "custom", path: ["SMTP_HOST"], message: "complete SMTP configuration is required when production staged registration is enabled" });
       if (value.EMAIL_PROVIDER === "http" && !value.EMAIL_WEBHOOK_URL) context.addIssue({ code: "custom", path: ["EMAIL_WEBHOOK_URL"], message: "is required when production staged registration is enabled" });
-      if (!value.SMS_WEBHOOK_URL) context.addIssue({ code: "custom", path: ["SMS_WEBHOOK_URL"], message: "is required when production staged registration is enabled" });
     }
     if (value.EMAIL_PROVIDER === "smtp") {
       for (const field of ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"] as const) {
         if (!value[field]) context.addIssue({ code: "custom", path: [field], message: "is required when EMAIL_PROVIDER=smtp" });
       }
-    }
-    if (value.NODE_ENV === "production" && value.SMS_OTP_DEV_BYPASS_ENABLED) {
-      context.addIssue({ code: "custom", path: ["SMS_OTP_DEV_BYPASS_ENABLED"], message: "must be false in production" });
     }
     if (value.NODE_ENV === "production" && value.FAKE_PAYMENT_ENABLED) {
       context.addIssue({ code: "custom", path: ["FAKE_PAYMENT_ENABLED"], message: "must be false in production" });
@@ -151,7 +149,8 @@ export interface AppConfig {
     contactRecipient?: string;
     smtp: { host?: string; port: number; secure: boolean; user?: string; password?: string; from?: string };
   };
-  sms: { webhookUrl?: string; bearerToken?: string; developmentOtpBypassEnabled: boolean };
+  branding: { appUrl: string; logoUrl: string; supportEmail: string };
+  sms: { webhookUrl?: string; bearerToken?: string };
   payment: { providerName: string; checkoutUrl?: string; webhookSecret?: string; bearerToken?: string; fakePaymentEnabled: boolean };
   push: { endpoint: string; accessToken?: string };
 }
@@ -196,6 +195,14 @@ export const parseEnvironment = (input: NodeJS.ProcessEnv): AppConfig => {
   const secretAccessKey = env.STORAGE_S3_SECRET_ACCESS_KEY || env.R2_SECRET_ACCESS_KEY;
   const hasS3Config = Boolean(endpoint && bucket && accessKeyId && secretAccessKey);
   const driver = env.STORAGE_DRIVER === "s3" || hasS3Config ? "s3" : "disabled";
+  const appUrl = env.PUBLIC_APP_URL ?? corsOrigins.values().next().value;
+  if (!appUrl) throw new Error("Invalid server configuration: PUBLIC_APP_URL is required when no CORS origin is configured");
+  const parsedAppUrl = new URL(appUrl);
+  if (!/^https?:$/.test(parsedAppUrl.protocol)) throw new Error("Invalid server configuration: PUBLIC_APP_URL must use HTTP or HTTPS");
+  const logoUrl = env.PUBLIC_LOGO_URL ?? new URL("/logo.png", parsedAppUrl).toString();
+  const parsedLogoUrl = new URL(logoUrl);
+  if (!/^https?:$/.test(parsedLogoUrl.protocol)) throw new Error("Invalid server configuration: PUBLIC_LOGO_URL must use HTTP or HTTPS");
+  const senderAddress = env.SMTP_FROM?.match(/<([^>]+)>/)?.[1] ?? env.SMTP_FROM;
 
   return {
     environment: env.NODE_ENV,
@@ -240,7 +247,12 @@ export const parseEnvironment = (input: NodeJS.ProcessEnv): AppConfig => {
       contactRecipient: env.CONTACT_RECIPIENT_EMAIL,
       smtp: { host: env.SMTP_HOST, port: env.SMTP_PORT, secure: env.SMTP_SECURE, user: env.SMTP_USER, password: env.SMTP_PASSWORD, from: env.SMTP_FROM },
     },
-    sms: { webhookUrl: env.SMS_WEBHOOK_URL, bearerToken: env.SMS_WEBHOOK_BEARER_TOKEN, developmentOtpBypassEnabled: env.SMS_OTP_DEV_BYPASS_ENABLED },
+    branding: {
+      appUrl: parsedAppUrl.toString(),
+      logoUrl: parsedLogoUrl.toString(),
+      supportEmail: env.SUPPORT_EMAIL ?? env.CONTACT_RECIPIENT_EMAIL ?? senderAddress ?? "support@parallaxflow.com",
+    },
+    sms: { webhookUrl: env.SMS_WEBHOOK_URL, bearerToken: env.SMS_WEBHOOK_BEARER_TOKEN },
     payment: { providerName: env.PAYMENT_PROVIDER_NAME, checkoutUrl: env.PAYMENT_CHECKOUT_URL, webhookSecret: env.PAYMENT_WEBHOOK_SECRET, bearerToken: env.PAYMENT_BEARER_TOKEN, fakePaymentEnabled: env.FAKE_PAYMENT_ENABLED },
     push: { endpoint: env.EXPO_PUSH_ENDPOINT, accessToken: env.EXPO_ACCESS_TOKEN },
   };

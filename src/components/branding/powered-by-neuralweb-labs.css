@@ -1,0 +1,34 @@
+.pf-powered-brand {
+  display: inline-block;
+  color: transparent !important;
+  background: linear-gradient(110deg, #397ce2 0%, #7baaff 25%, #ffffff 50%, #7baaff 75%, #397ce2 100%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-decoration: none !important;
+  animation: pf-powered-brand-wave 3s infinite linear;
+}
+
+.pf-powered-brand strong {
+  color: inherit;
+  font: inherit;
+}
+
+.pf-powered-brand:hover,
+.pf-powered-brand:focus-visible {
+  color: transparent !important;
+  text-decoration: none !important;
+  filter: brightness(1.3);
+}
+
+@keyframes pf-powered-brand-wave {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-powered-brand { animation: none; background-position: 50% 0; }
+}

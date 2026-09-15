@@ -32,7 +32,9 @@ test("mounted API domains enforce their outer authentication boundaries", { skip
     "/api/academy/context", "/api/academy/settings", "/api/academy/analytics/overview",
     "/api/academy/admissions/codes", "/api/academy/content", "/api/academy/questions",
     "/api/academy/broadcasts", "/api/academy/notifications", "/api/student/bootstrap", "/api/student/me",
-    "/api/student/admissions/codes/claim", "/api/student/notifications", "/api/student/orders", "/api/student/practice/sources", "/api/student/practice/tracker", "/api/checkout",
+    "/api/student/admissions/codes/claim", "/api/student/notifications", "/api/student/orders", "/api/student/practice/sources", "/api/student/practice/modes",
+    "/api/student/practice/search", "/api/student/practice/question-banks", "/api/student/practice/sessions/resume", "/api/student/practice/wrong-answers",
+    "/api/student/practice/tracker", "/api/checkout",
   ];
   try {
     for (const route of protectedRoutes) {

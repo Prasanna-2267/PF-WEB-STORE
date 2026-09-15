@@ -211,20 +211,22 @@ describe('Academies production list layout', () => {
       expect.objectContaining({ search: 'notification' }),
     ));
 
-    await user.selectOptions(screen.getByLabelText('Status'), 'PENDING');
+    await user.click(screen.getByRole('combobox', { name: 'Status' }));
+    await user.click(screen.getByRole('option', { name: 'Pending' }));
     await waitFor(() => expect(listHook).toHaveBeenLastCalledWith(
       'super-admin-a',
       expect.objectContaining({ status: 'PENDING' }),
     ));
 
-    await user.selectOptions(screen.getByLabelText('Sort'), 'oldest');
+    await user.click(screen.getByRole('combobox', { name: 'Sort' }));
+    await user.click(screen.getByRole('option', { name: 'Oldest first' }));
     await waitFor(() => expect(listHook).toHaveBeenLastCalledWith(
       'super-admin-a',
       expect.objectContaining({ sort: 'oldest' }),
     ));
 
     await user.click(screen.getByRole('button', { name: /add academy/i }));
-    expect(screen.getByRole('dialog', { name: 'New Academy' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Create Academy' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Close modal' }));
     await user.click(screen.getByLabelText('Actions for Notification Academy A'));

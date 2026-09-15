@@ -14,6 +14,7 @@ import {
   Menu,
   Moon,
   QrCode,
+  Settings,
   Sun,
   UsersRound,
   X,
@@ -25,6 +26,7 @@ import { useAuthStore } from '@/app/store/useAuthStore';
 import { useThemeStore } from '@/app/store/useThemeStore';
 import { ROUTES } from '@/config/routes';
 import { SeoHead } from '@/seo/SeoHead';
+import { PoweredByNeuralWebLabs } from '@/components/branding/PoweredByNeuralWebLabs';
 import '@/features/admin/admin.css';
 
 const ADMIN_EASE = [0.22, 1, 0.36, 1] as const;
@@ -47,6 +49,7 @@ const academyNavigation = [
   { label: 'Content', to: ROUTES.ACADEMY_CONTENT, icon: LibraryBig },
   { label: 'Questions', to: ROUTES.ACADEMY_QUESTIONS, icon: BadgeHelp },
   { label: 'Broadcast', to: ROUTES.ACADEMY_BROADCAST, icon: Megaphone },
+  { label: 'Settings', to: ROUTES.ACADEMY_SETTINGS, icon: Settings },
 ] as const;
 
 const getSectionLabel = (pathname: string): string => {
@@ -202,7 +205,6 @@ export const AcademyLayout: React.FC = () => {
             id="pf-admin-navigation"
             className={`pf-admin-sidebar${sidebarVisible ? ' is-open' : ''}`}
             aria-label="Academy Navigation"
-            aria-hidden={!sidebarVisible ? true : undefined}
             role={isCompact ? 'dialog' : undefined}
             aria-modal={isCompact ? true : undefined}
             data-lenis-prevent
@@ -253,6 +255,7 @@ export const AcademyLayout: React.FC = () => {
                   <LogOut size={18} aria-hidden="true" />
                 </button>
               </div>
+              <PoweredByNeuralWebLabs className="pf-admin-powered-by" />
             </div>
           </aside>
 

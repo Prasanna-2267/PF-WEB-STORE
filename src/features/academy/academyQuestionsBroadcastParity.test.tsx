@@ -11,6 +11,7 @@ import { BroadcastPage } from '@/features/admin/broadcast/BroadcastPage';
 import type { BroadcastState } from '@/app/store/useBroadcastStore';
 import type { Broadcast } from '@/features/admin/broadcast/types/broadcast';
 import type { AdminCourse } from '@/features/admin/types/admin';
+import * as api from '@/lib/api/client';
 
 const academyId = '11111111-1111-4111-8111-111111111111';
 const courseId = '22222222-2222-4222-8222-222222222222';
@@ -85,6 +86,12 @@ const broadcastStore = (): BroadcastState => ({
 
 describe('Academy Questions and Broadcast shared-module parity', () => {
   beforeEach(() => {
+    vi.spyOn(api, 'apiRequest').mockImplementation(async (path: string) => {
+      if (path.startsWith('/api/academy/courses')) return { data: [academyCourse] } as never;
+      if (path.includes('/questions/files')) return [{ id: 'file-a', name: 'Academy Note.pdf', mimeType: 'application/pdf', accessType: 'FREE', status: 'PUBLISHED' }] as never;
+      if (path.startsWith('/api/academy/questions?')) return { data: [{ id: 'question-a', kind: 'NORMAL_MCQ', status: 'PUBLISHED', difficulty: 'INTERMEDIATE', questionHtml: '<p>Academy-scoped question?</p>', caseHtml: '', correctOptionId: 'A', correctExplanationHtml: '', premiumWrongOptionsExplanationHtml: '', options: [{ optionLabel: 'A', html: '<p>Yes</p>' }, { optionLabel: 'B', html: '<p>No</p>' }], subQuestions: [], courseId, contentLinks: [{ contentItemId: 'file-a', contentItem: { id: 'file-a', name: 'Academy Note.pdf', mimeType: 'application/pdf', accessType: 'FREE', status: 'PUBLISHED' } }], createdAt: now, updatedAt: now }], pagination: { page: 1, total: 1, totalPages: 1 } } as never;
+      return {} as never;
+    });
     useAcademyQuestionStore.setState({
       scopeKey: `academy:${academyId}`,
       loading: false,
@@ -121,11 +128,12 @@ describe('Academy Questions and Broadcast shared-module parity', () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     window.sessionStorage.clear();
     useAcademyQuestionStore.setState({ scopeKey: '', questions: [], taxonomy: null, loading: false, error: null });
   });
 
-  it('renders the complete shared Questions workspace with only Academy taxonomy', () => {
+  it.skip('renders the legacy taxonomy Questions workspace', () => {
     renderPage(<QuestionsPage scope="academy" academyId={academyId} academyName="Academy A" />);
 
     expect(screen.getByRole('button', { name: /Import questions/i })).toBeInTheDocument();
@@ -147,6 +155,35 @@ describe('Academy Questions and Broadcast shared-module parity', () => {
     expect(screen.getByRole('combobox', { name: 'Filter by status' })).toBeInTheDocument();
   });
 
+  it('renders the finalized course and file-scoped Questions workspace', async () => {
+    renderPage(<QuestionsPage scope="academy" academyId={academyId} academyName="Academy A" />);
+    expect(screen.getByRole('button', { name: 'Overview' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Questions' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Taxonomy' })).not.toBeInTheDocument();
+    expect(await screen.findByText('Academy-scoped question?')).toBeInTheDocument();
+    expect(screen.getAllByText('Academy Note.pdf').length).toBeGreaterThan(0);
+    const courseFilter = screen.getByRole('combobox', { name: 'Working course' });
+    await userEvent.click(courseFilter);
+    expect(screen.getByRole('option', { name: 'Academy Course' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Question type' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Linked file' })).toBeInTheDocument();
+  });
+
+  it('keeps the Questions page visible when a published case-study list row omits nested arrays', async () => {
+    vi.mocked(api.apiRequest).mockImplementation(async (path: string) => {
+      if (path.startsWith('/api/academy/courses')) return { data: [academyCourse] } as never;
+      if (path.includes('/questions/files')) return [] as never;
+      if (path.includes('/questions/banks')) return [] as never;
+      if (path.startsWith('/api/academy/questions?')) return { data: [{ id: 'case-a', kind: 'CASE_MCQ', status: 'PUBLISHED', difficulty: 'INTERMEDIATE', questionHtml: '', caseHtml: '<p>Published case study</p>', correctOptionId: null, correctExplanationHtml: '', premiumWrongOptionsExplanationHtml: '', courseId, contentLinks: undefined, options: undefined, subQuestions: undefined, createdAt: now, updatedAt: now }], pagination: { page: 1, total: 1, totalPages: 1 } } as never;
+      return [] as never;
+    });
+
+    renderPage(<QuestionsPage scope="academy" academyId={academyId} academyName="Academy A" />);
+
+    expect(await screen.findByText('Published case study')).toBeInTheDocument();
+    expect(screen.getByText('0 sub-questions')).toBeInTheDocument();
+  });
+
   it('renders shared Broadcast stats, filters, listing, and Academy-only editor choices', async () => {
     const user = userEvent.setup();
     renderPage(<BroadcastPage scope="academy" academyId={academyId} academyName="Academy A" storeOverride={broadcastStore()} academyCourses={[academyCourse]} />);
@@ -157,10 +194,11 @@ describe('Academy Questions and Broadcast shared-module parity', () => {
     expect(screen.getByRole('textbox', { name: 'Search broadcasts' })).toBeInTheDocument();
     expect(screen.getAllByText('Academy examination notice').length).toBeGreaterThan(0);
 
-    const typeFilter = screen.getAllByRole('combobox').find((select) => within(select).queryByRole('option', { name: 'All types' }));
-    expect(typeFilter).toBeDefined();
-    expect(within(typeFilter!).queryByRole('option', { name: 'Store' })).not.toBeInTheDocument();
-    expect(within(typeFilter!).queryByRole('option', { name: 'Promotion' })).not.toBeInTheDocument();
+    const typeFilter = screen.getByRole('combobox', { name: 'Type' });
+    await user.click(typeFilter);
+    expect(screen.queryByRole('option', { name: 'Store' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Promotion' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
 
     await user.click(screen.getByRole('button', { name: /New broadcast/i }));
     const dialog = screen.getByRole('dialog', { name: 'New broadcast' });
@@ -173,5 +211,9 @@ describe('Academy Questions and Broadcast shared-module parity', () => {
     expect(within(dialog).getByRole('button', { name: /Specific courses/i })).toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: /All Parallax Flow users/i })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: /Specific packages/i })).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: /Display/ }));
+    await waitFor(() => expect(within(dialog).getByText('Mobile app')).toBeInTheDocument());
+    expect(within(dialog).queryByText('Website')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('App & website')).not.toBeInTheDocument();
   });
 });

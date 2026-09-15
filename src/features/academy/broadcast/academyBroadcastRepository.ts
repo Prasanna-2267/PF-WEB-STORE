@@ -24,7 +24,7 @@ const adapt = (dto: BackendBroadcastDto, image: BroadcastImage | null = null): B
   image,
   cta: dto.cta ? { enabled: dto.cta.enabled, text: dto.cta.text, action: dto.cta.action as Broadcast['cta']['action'], destination: dto.cta.destination } : { enabled: false, text: '', action: 'INTERNAL_ROUTE', destination: '' },
   audience: { kind: safeAudience(dto), courseIds: dto.courseTargets?.map((target) => target.course.id) ?? [], packageIds: [], academyIds: [] },
-  platform: (dto.platform ?? 'BOTH') as Broadcast['platform'], placements: (dto.placements?.map((entry) => entry.placement) ?? ['NOTIFICATION']) as Broadcast['placements'],
+  platform: 'APP', placements: (dto.placements?.map((entry) => entry.placement).filter((placement) => placement !== 'STORE') ?? ['NOTIFICATION']) as Broadcast['placements'],
   startAt: dto.startAt ?? null, endAt: dto.endAt ?? null, frequency: (dto.frequency ?? 'ONCE') as Broadcast['frequency'], dismissible: dto.dismissible ?? true,
   presentation: (dto.presentation ?? 'NOTIFICATION') as Broadcast['presentation'], displayOrder: (dto.displayOrder ?? 'AUTOMATIC') as Broadcast['displayOrder'], customOrderWeight: dto.customOrderWeight ?? 50,
   acknowledgementRequired: dto.acknowledgementRequired ?? false, repeatBehavior: (dto.repeatBehavior ?? 'NEVER') as Broadcast['repeatBehavior'], showInWhatsNew: dto.showInWhatsNew ?? false,
@@ -44,11 +44,13 @@ async function hydrate(dto: BackendBroadcastDto): Promise<Broadcast> {
 const academyPayload = (input: BroadcastInput) => {
   if (!['ACADEMY_STUDENTS', 'COURSES'].includes(input.audience.kind)) throw new BroadcastRepositoryError('VALIDATION_ERROR', 'Academy broadcasts can target only this Academy or one of its courses.');
   if (input.audience.kind === 'COURSES' && input.audience.courseIds.length !== 1) throw new BroadcastRepositoryError('VALIDATION_ERROR', 'Select exactly one Academy course.');
+  const placements = input.placements.filter((placement) => placement !== 'STORE');
+  const type = ['PROMOTION', 'STORE'].includes(input.type) ? 'ANNOUNCEMENT' : input.type;
   return {
-    title: input.title, subtitle: input.subtitle || undefined, message: input.message, type: input.type, priority: input.priority,
+    title: input.title, subtitle: input.subtitle || undefined, message: input.message, type, priority: input.priority,
     targetCourseId: input.audience.kind === 'COURSES' ? input.audience.courseIds[0] : null,
     startAt: input.startAt ?? undefined, endAt: input.endAt ?? undefined,
-    platform: input.platform, placements: input.placements.filter((placement) => placement !== 'STORE'),
+    platform: 'APP' as const, placements: placements.length > 0 ? placements : ['NOTIFICATION'],
     cta: input.cta, frequency: input.frequency, dismissible: input.dismissible, presentation: input.presentation,
     displayOrder: input.displayOrder, customOrderWeight: input.customOrderWeight, acknowledgementRequired: input.acknowledgementRequired,
     repeatBehavior: input.repeatBehavior, showInWhatsNew: input.showInWhatsNew,
@@ -62,9 +64,9 @@ async function uploadImage(broadcastId: string, image: BroadcastImage | null) {
   const intent = await apiRequest<{ uploadId: string; uploadUrl: string; headers: Record<string, string> }>(`${basePath}/${encodeURIComponent(broadcastId)}/image/upload-intent`, {
     method: 'POST', body: { fileName: image.name, mimeType: image.mimeType, sizeBytes: blob.size, checksumSha256 },
   });
-  const response = await fetch(intent.uploadUrl, { method: 'PUT', headers: intent.headers, body: blob });
-  if (!response.ok) throw new BroadcastRepositoryError('STORAGE_ERROR', 'The broadcast image could not be uploaded.');
-  await apiRequest(`${basePath}/${encodeURIComponent(broadcastId)}/image`, { method: 'POST', body: { uploadId: intent.uploadId } });
+  await apiRequest(`${basePath}/${encodeURIComponent(broadcastId)}/image/uploads/${encodeURIComponent(intent.uploadId)}`, {
+    method: 'PUT', headers: { 'content-type': image.mimeType }, body: blob, timeoutMs: 60_000,
+  });
 }
 
 async function detail(id: string) { return hydrate(await apiRequest<BackendBroadcastDto>(`${basePath}/${encodeURIComponent(id)}`)); }

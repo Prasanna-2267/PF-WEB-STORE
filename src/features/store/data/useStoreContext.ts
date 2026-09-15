@@ -10,6 +10,15 @@ export interface StoreContextState {
   initializeForStudent: (enrolledSlugs: readonly string[]) => void;
 }
 
+export const resolveStoreCourseSelection = (
+  current: StoreCourseFilter,
+  enrolledSlugs: readonly string[],
+): StoreCourseFilter => {
+  if (!enrolledSlugs.length) return 'all';
+  if (enrolledSlugs.includes(current)) return current;
+  return enrolledSlugs[0] as StoreCourseFilter;
+};
+
 export const useStoreContextStore = create<StoreContextState>()(
   persist(
     (set, get) => ({
@@ -17,18 +26,8 @@ export const useStoreContextStore = create<StoreContextState>()(
       setSelectedCourseSlug: (slug) => set({ selectedCourseSlug: slug }),
       initializeForStudent: (enrolledSlugs) => {
         const current = get().selectedCourseSlug;
-        if (!enrolledSlugs.length) {
-          if (current !== 'all') set({ selectedCourseSlug: 'all' });
-          return;
-        }
-        // If single course enrolment, auto-select it
-        if (enrolledSlugs.length === 1) {
-          const single = enrolledSlugs[0] as StoreCourseFilter;
-          if (current !== single) set({ selectedCourseSlug: single });
-        } else if (current !== 'all' && !enrolledSlugs.includes(current)) {
-          // If current selection is invalid for student, select first active enrolment
-          set({ selectedCourseSlug: enrolledSlugs[0] as StoreCourseFilter });
-        }
+        const next = resolveStoreCourseSelection(current, enrolledSlugs);
+        if (current !== next) set({ selectedCourseSlug: next });
       },
     }),
     {

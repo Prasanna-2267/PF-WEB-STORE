@@ -8,7 +8,7 @@ import type {
   ContentSampleImage,
   ContentSearchResult,
   ContentStoreSection,
-  ContentValidityMode,
+  AccessDurationUnit,
   ContentUploadInput,
   CreateContentFolderInput,
 } from '../types/content';
@@ -61,8 +61,8 @@ export interface ContentRepository {
     description?: string,
     sampleImages?: ContentSampleImage[],
     storeSections?: ContentStoreSection[],
-    validityMode?: ContentValidityMode,
-    validityOffsetDays?: number | null
+    accessDurationValue?: number | null,
+    accessDurationUnit?: AccessDurationUnit | null
   ): Promise<ContentItem>;
   markOpened(itemId: string): Promise<void>;
   getFileSource(itemId: string): File | undefined;

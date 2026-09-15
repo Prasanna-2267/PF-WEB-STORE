@@ -33,8 +33,6 @@ export const ROUTES = {
   ADMIN_BROADCAST_DETAILS: '/admin/broadcast/:broadcastId',
   ADMIN_ACADEMIES: '/admin/academies',
   ADMIN_ACADEMY: '/admin/academies/:academyId',
-  ADMIN_ACCOUNT: '/admin/account',
-  ADMIN_SETTINGS: '/admin/settings',
 
   // Academy Tenant Portal
   ACADEMY: '/academy',
@@ -49,6 +47,7 @@ export const ROUTES = {
   ACADEMY_CONTENT: '/academy/content',
   ACADEMY_QUESTIONS: '/academy/questions',
   ACADEMY_BROADCAST: '/academy/broadcast',
+  ACADEMY_SETTINGS: '/academy/settings',
 
   // Student Admission Experience
   STUDENT_JOIN: '/student/join',

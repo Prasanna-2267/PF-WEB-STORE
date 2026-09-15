@@ -1,12 +1,8 @@
-export type CourseSlug =
-  | 'ca-foundation'
-  | 'ca-intermediate'
-  | 'ca-final'
-  | 'jee'
-  | 'neet'
-  | 'upsc';
+// Courses are database-owned. Do not constrain production records to the
+// handful of legacy catalogue slugs that originally powered the UI mock-up.
+export type CourseSlug = string;
 
-export type CourseFamily = 'CA' | 'JEE' | 'NEET' | 'UPSC';
+export type CourseFamily = string;
 
 export type StoreProductType =
   | 'visual-notes'
@@ -15,6 +11,7 @@ export type StoreProductType =
   | 'question-bank'
   | 'formula-sheet'
   | 'mock-test'
+  | 'monthly-report'
   | 'bundle'
   | 'subscription';
 
@@ -41,6 +38,7 @@ export interface StorePreviewImage {
   src: string;
   alt: string;
   kind: StorePreviewKind;
+  role?: 'PDF_FIRST_PAGE' | 'ADMIN_PREVIEW';
 }
 
 /**
@@ -85,6 +83,9 @@ export interface StoreProduct {
   audience: readonly string[];
   pageCount?: number;
   deepLink: string;
+  /** Access metadata used by Question Bank cards and checkout guards. */
+  accessType?: 'FREE' | 'PAID';
+  includedPackages?: ReadonlyArray<{ id: string; title: string; slug: string }>;
   /** Real admin-entered store sections (heading + content). Only render when non-empty. */
   storeSections?: ReadonlyArray<{ id: string; heading: string; content: string; displayOrder: number }>;
 }

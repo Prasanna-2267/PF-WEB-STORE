@@ -1,7 +1,8 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { type FormEvent, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, Building2, CheckCircle2, Gift, Info, KeyRound, Lock, MonitorSmartphone, Search, ShieldCheck, ShieldX, UsersRound } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { AlertTriangle, ArrowLeft, Building2, Gift, Info, KeyRound, Lock, MonitorSmartphone, Search, ShieldCheck, ShieldX, UsersRound } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '@/app/store/useAuthStore';
 import { buildAdminStudentPath, ROUTES } from '@/config/routes';
 import { AdminDialog, AdminEmptyState, AdminPageHeader, AdminSkeleton, AdminStatusBadge } from '@/features/admin/AdminUi';
@@ -12,16 +13,16 @@ import { getReadOnlyErrorCopy, ReadOnlyQueryState } from '@/components/ReadOnlyQ
 import { ApiError } from '@/lib/api/client';
 import {
   type AdminAccountStatus,
-  type EntitlementResourceType,
   useAdminEntitlements,
-  useAdminEntitlementResources,
   useAdminStudentReadOnly,
   useAdminStudentsReadOnly,
-  useGrantEntitlement,
   useRevokeAdminStudentSessions,
   useRevokeEntitlement,
   useUpdateAdminStudentStatus,
+  approveAdminStudentDeviceReset,
+  permanentlyDeleteAdminStudent,
 } from './adminReadOnlyApi';
+import { GrantAccessDialog } from './GrantAccessDialog';
 import '@/features/admin/admin-pages.css';
 
 const PAGE_LIMIT = 25;
@@ -121,11 +122,11 @@ export const AdminStudentsReadOnlyPage: React.FC = () => {
 
           <label className="pf-admin-field">
             <span>Account status</span>
-            <select className="pf-admin-select" value={status} onChange={(event) => { setStatus(event.target.value as AdminAccountStatus | ''); setPage(1); }}>
+            <AppSelect className="pf-admin-select" value={status} onChange={(event) => { setStatus(event.target.value as AdminAccountStatus | ''); setPage(1); }}>
               <option value="">All statuses</option>
               <option value="ACTIVE">Active</option>
               <option value="DISABLED">Disabled</option>
-            </select>
+            </AppSelect>
           </label>
           <div className="pf-admin-field">
             <span>Platform role</span>
@@ -292,6 +293,7 @@ export const AdminStudentsReadOnlyPage: React.FC = () => {
 };
 
 export const AdminStudentReadOnlyDetailPage: React.FC = () => {
+  const navigate = useNavigate();
   const userId = useAuthStore((state) => state.user?.id ?? null);
   const { studentId = '' } = useParams<{ studentId: string }>();
 
@@ -300,21 +302,16 @@ export const AdminStudentReadOnlyDetailPage: React.FC = () => {
 
   const updateStatusMutation = useUpdateAdminStudentStatus(userId);
   const revokeSessionsMutation = useRevokeAdminStudentSessions(userId);
-  const grantEntitlementMutation = useGrantEntitlement(userId);
   const revokeEntitlementMutation = useRevokeEntitlement(userId, studentId);
 
   const [isGrantOpen, setIsGrantOpen] = useState(false);
-  const [grantResourceType, setGrantResourceType] = useState<EntitlementResourceType>('COURSE');
-  const [grantResourceId, setGrantResourceId] = useState('');
-  const [grantAccessType, setGrantAccessType] = useState<'PERMANENT' | 'TIME_LIMITED'>('PERMANENT');
-  const [grantExpiresAt, setGrantExpiresAt] = useState('');
-  const [grantReason, setGrantReason] = useState('');
 
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [revokeSessionsOpen, setRevokeSessionsOpen] = useState(false);
   const [revokeEntitlementTarget, setRevokeEntitlementTarget] = useState<{ id: string; title: string } | null>(null);
   const [revokeEntitlementReason, setRevokeEntitlementReason] = useState('');
-  const resourceOptionsQuery = useAdminEntitlementResources(userId, grantResourceType, isGrantOpen);
+  const [governanceBusy, setGovernanceBusy] = useState(false);
+  const [deviceGovernanceNotice, setDeviceGovernanceNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
 
   if (query.isPending) return <AdminSkeleton rows={8} variant="detail" label="Loading Super Admin student" />;
   if (query.isError) return <div className="pf-admin-page"><ReadOnlyQueryState error={query.error} onRetry={() => void query.refetch()} resource="Super Admin student" /><div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}><Link className="pf-admin-button pf-admin-button--secondary" to={ROUTES.ADMIN_STUDENTS}><ArrowLeft size={16} /> Back to Students</Link></div></div>;
@@ -338,35 +335,6 @@ export const AdminStudentReadOnlyDetailPage: React.FC = () => {
       setRevokeSessionsOpen(false);
     } catch {
       // The mutation owns the backend error and keeps this confirmation open.
-    }
-  };
-
-  const handleGrantSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    const selectedResource = resourceOptionsQuery.data?.find((resource) => resource.id === grantResourceId);
-    if (!selectedResource || !grantReason.trim()) return;
-    const resourceReference = grantResourceType === 'COURSE'
-      ? { courseId: selectedResource.id }
-      : grantResourceType === 'PACKAGE'
-        ? { packageId: selectedResource.id }
-        : grantResourceType === 'SUBJECT'
-          ? { subjectId: selectedResource.id }
-          : { contentItemId: selectedResource.id };
-    try {
-      await grantEntitlementMutation.mutateAsync({
-        userId: student.id,
-        resourceType: grantResourceType,
-        resourceTitle: selectedResource.title,
-        ...resourceReference,
-        accessType: grantAccessType,
-        expiresAt: grantAccessType === 'TIME_LIMITED' && grantExpiresAt ? new Date(`${grantExpiresAt}T23:59:59.999`).toISOString() : undefined,
-        reason: grantReason.trim(),
-      });
-      setIsGrantOpen(false);
-      setGrantResourceId('');
-      setGrantReason('');
-    } catch {
-      // The mutation owns the backend error and keeps this form open.
     }
   };
 
@@ -395,7 +363,7 @@ export const AdminStudentReadOnlyDetailPage: React.FC = () => {
             <button
               type="button"
               className="pf-admin-button"
-              onClick={() => { grantEntitlementMutation.reset(); setGrantResourceId(''); setIsGrantOpen(true); }}
+              onClick={() => setIsGrantOpen(true)}
             >
               <Gift size={16} aria-hidden="true" /> Grant Access
             </button>
@@ -435,20 +403,27 @@ export const AdminStudentReadOnlyDetailPage: React.FC = () => {
 
       <div className="pf-admin-detail-layout" style={{ marginTop: 24 }}>
         <div className="pf-admin-detail-main">
+          <section className="pf-admin-card">
+            <header className="pf-admin-section__header"><div><h2>Learning signals</h2><p>Calculated from real practice attempts after at least {student.performanceInsights.minimumAttempts} attempts per concept.</p></div></header>
+            <div className="pf-admin-detail-layout">
+              <div><h3>Weak concepts</h3>{student.performanceInsights.weakConcepts.length ? student.performanceInsights.weakConcepts.map((item) => <p key={`${item.courseId}:${item.chapterName}:${item.conceptName}`} className="pf-admin-muted-copy"><strong>{item.conceptName}</strong> · {item.chapterName} · {item.accuracyPercent}% ({item.attempts} attempts)</p>) : <p className="pf-admin-muted-copy">No weak concept has crossed the evidence threshold.</p>}</div>
+              <div><h3>Strong concepts</h3>{student.performanceInsights.strongConcepts.length ? student.performanceInsights.strongConcepts.map((item) => <p key={`${item.courseId}:${item.chapterName}:${item.conceptName}`} className="pf-admin-muted-copy"><strong>{item.conceptName}</strong> · {item.chapterName} · {item.accuracyPercent}% ({item.attempts} attempts)</p>) : <p className="pf-admin-muted-copy">No strong concept has crossed the evidence threshold.</p>}</div>
+            </div>
+          </section>
           {/* Entitlements & Granted Access Section */}
           <section className="pf-admin-card">
             <header className="pf-admin-section__header">
               <div>
-                <h2>Platform Entitlements & Granted Access</h2>
-                <p>Backend-authoritative resource access granted to this student.</p>
+                <h2>Existing / Granted Access</h2>
+                <p>Manual access history is retained separately from Store purchases.</p>
               </div>
               <button
                 type="button"
                 className="pf-admin-button pf-admin-button--secondary"
                 style={{ fontSize: 13 }}
-                onClick={() => { grantEntitlementMutation.reset(); setGrantResourceId(''); setIsGrantOpen(true); }}
+                onClick={() => setIsGrantOpen(true)}
               >
-                <Gift size={15} /> Grant Resource
+                <Gift size={15} /> Grant Access
               </button>
             </header>
 
@@ -466,8 +441,8 @@ export const AdminStudentReadOnlyDetailPage: React.FC = () => {
                       <span className="pf-admin-record-list__icon" aria-hidden="true"><KeyRound size={17} /></span>
                       <div>
                         <strong>{entitlement.resourceTitle}</strong>
-                        <p>{entitlement.resourceType} · {entitlement.accessType}{entitlement.expiresAt ? ` · Expires ${formatDate(entitlement.expiresAt)}` : ''}</p>
-                        <small style={{ color: '#94a3b8' }}>Granted {formatDate(entitlement.grantedAt)}</small>
+                        <p>{entitlement.resourceType.replaceAll('_', ' ')} · {entitlement.course?.name ?? 'Course unavailable'}</p>
+                        <small style={{ color: '#94a3b8' }}>Granted {formatDate(entitlement.grantedAt)} · {entitlement.expiresAt ? `Expires ${formatDate(entitlement.expiresAt)}` : 'No expiry'}</small>
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -556,6 +531,7 @@ export const AdminStudentReadOnlyDetailPage: React.FC = () => {
         </div>
 
         <aside className="pf-admin-detail-side">
+          <section className="pf-admin-card"><h2>Device governance</h2><p className="pf-admin-muted-copy">A reset approval can be consumed once when this learner moves to a replacement phone. If no phone is linked yet, the next successful mobile login becomes the approved device.</p>{!student.deviceBinding ? <p role="status" style={{ color: '#047857', fontSize: 13 }}>No device is currently linked. No approval is required; the next successful mobile login will securely establish the approved device.</p> : <p className="pf-admin-muted-copy" style={{ fontSize: 13 }}>Linked device: <strong>{student.deviceBinding.deviceName || student.deviceBinding.platform}</strong> · Last verified {formatDate(student.deviceBinding.lastVerifiedAt)}</p>}{deviceGovernanceNotice ? <p role={deviceGovernanceNotice.tone === 'error' ? 'alert' : 'status'} style={{ color: deviceGovernanceNotice.tone === 'error' ? '#dc2626' : '#047857', fontSize: 13 }}>{deviceGovernanceNotice.message}</p> : null}<button className="pf-admin-button pf-admin-button--secondary" type="button" disabled={governanceBusy || !student.deviceBinding} title={!student.deviceBinding ? 'The learner has no linked device to replace.' : undefined} onClick={async () => { if (!student.deviceBinding || !window.confirm('Approve one device change for this student?')) return; setGovernanceBusy(true); setDeviceGovernanceNotice(null); try { const result = await approveAdminStudentDeviceReset(student.id); setDeviceGovernanceNotice({ tone: 'success', message: result.message }); await query.refetch(); } catch (error) { setDeviceGovernanceNotice({ tone: 'error', message: error instanceof Error ? error.message : 'The device change could not be approved.' }); } finally { setGovernanceBusy(false); } }}>{governanceBusy ? 'Approving…' : student.deviceBinding ? 'Approve device change' : 'Awaiting first device login'}</button><button className="pf-admin-button pf-admin-button--danger" type="button" disabled={governanceBusy} onClick={async () => { if (window.prompt('Type PERMANENTLY DELETE to anonymise this student and remove learning data.') !== 'PERMANENTLY DELETE') return; setGovernanceBusy(true); try { await permanentlyDeleteAdminStudent(student.id); navigate(ROUTES.ADMIN_STUDENTS, { replace: true }); } finally { setGovernanceBusy(false); } }}>Permanently delete</button></section>
           <section className="pf-admin-card">
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Account record</h2>
             <p className="pf-admin-muted-copy" style={{ margin: '6px 0', fontSize: 14 }}>Phone: <strong>{student.phone || 'Unavailable'}</strong></p>
@@ -575,121 +551,7 @@ export const AdminStudentReadOnlyDetailPage: React.FC = () => {
         </aside>
       </div>
 
-      {/* Grant Entitlement Modal */}
-      {isGrantOpen ? (
-        <AdminDialog
-          open={isGrantOpen}
-          onClose={() => { if (!grantEntitlementMutation.isPending) setIsGrantOpen(false); }}
-          title="Grant Resource Access"
-          description={`Assign platform entitlement directly to ${student.name}.`}
-          icon={
-            <div style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              background: '#eff6ff',
-              border: '1px solid #dbeafe',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#1d4ed8',
-              flexShrink: 0,
-            }}>
-              <Gift size={22} />
-            </div>
-          }
-          size="small"
-          footer={
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', width: '100%' }}>
-              <button
-                className="pf-admin-button pf-admin-button--secondary"
-                type="button"
-                onClick={() => setIsGrantOpen(false)}
-                disabled={grantEntitlementMutation.isPending}
-                style={{
-                  background: '#ffffff',
-                  border: '1px solid #cbd5e1',
-                  color: '#334155',
-                  fontWeight: 500,
-                  borderRadius: 8,
-                  padding: '8px 18px',
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                className="pf-admin-button pf-admin-button--primary"
-                type="submit"
-                form="grant-entitlement-form"
-                disabled={grantEntitlementMutation.isPending || resourceOptionsQuery.isPending || !grantResourceId || !grantReason.trim() || (grantAccessType === 'TIME_LIMITED' && !grantExpiresAt)}
-                style={{
-                  background: '#1d4ed8',
-                  color: '#ffffff',
-                  fontWeight: 600,
-                  borderRadius: 8,
-                  padding: '8px 18px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                {grantEntitlementMutation.isPending ? (
-                  'Granting…'
-                ) : (
-                  <>
-                    <CheckCircle2 size={15} /> Grant Entitlement
-                  </>
-                )}
-              </button>
-            </div>
-          }
-        >
-          <form id="grant-entitlement-form" onSubmit={(e) => void handleGrantSubmit(e)} style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '4px 0 6px' }}>
-            <label className="pf-admin-field" style={{ margin: 0 }}>
-              <span style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Resource Type</span>
-              <select className="pf-admin-select" value={grantResourceType} onChange={(e) => { setGrantResourceType(e.target.value as EntitlementResourceType); setGrantResourceId(''); grantEntitlementMutation.reset(); }} style={{ height: 38, borderRadius: 6, fontSize: 13, background: '#ffffff' }}>
-                <option value="COURSE">Course</option>
-                <option value="LESSON">Lesson</option>
-                <option value="PREMIUM_NOTES">Premium Notes</option>
-                <option value="PACKAGE">Package</option>
-                <option value="SUBJECT">Subject</option>
-                <option value="OTHER">Other Resource</option>
-              </select>
-            </label>
-
-            <label className="pf-admin-field" style={{ margin: 0 }}>
-              <span style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Resource</span>
-              <select className="pf-admin-select" required value={grantResourceId} onChange={(e) => setGrantResourceId(e.target.value)} disabled={resourceOptionsQuery.isPending || resourceOptionsQuery.isError} style={{ height: 38, borderRadius: 6, fontSize: 13, background: '#ffffff' }}>
-                <option value="">{resourceOptionsQuery.isPending ? 'Loading resources…' : 'Select a real backend resource'}</option>
-                {resourceOptionsQuery.data?.map((resource) => <option key={resource.id} value={resource.id}>{resource.title} — {resource.subtitle}</option>)}
-              </select>
-            </label>
-            {resourceOptionsQuery.isError ? <ReadOnlyQueryState error={resourceOptionsQuery.error} onRetry={() => void resourceOptionsQuery.refetch()} resource="Entitlement resources" /> : null}
-            {resourceOptionsQuery.isSuccess && resourceOptionsQuery.data.length === 0 ? <p className="pf-admin-muted-copy" style={{ fontSize: 12, margin: '-6px 0 0' }}>No active resources of this type are available to grant.</p> : null}
-
-            <label className="pf-admin-field" style={{ margin: 0 }}>
-              <span style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Access Type</span>
-              <select className="pf-admin-select" value={grantAccessType} onChange={(e) => setGrantAccessType(e.target.value as 'PERMANENT' | 'TIME_LIMITED')} style={{ height: 38, borderRadius: 6, fontSize: 13, background: '#ffffff' }}>
-                <option value="PERMANENT">Permanent</option>
-                <option value="TIME_LIMITED">Time Limited</option>
-              </select>
-            </label>
-
-            {grantAccessType === 'TIME_LIMITED' ? (
-              <label className="pf-admin-field" style={{ margin: 0 }}>
-                <span style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Expiration Date</span>
-                <input className="pf-admin-input" type="date" required min={new Date().toISOString().slice(0, 10)} value={grantExpiresAt} onChange={(e) => setGrantExpiresAt(e.target.value)} style={{ height: 38, borderRadius: 6, fontSize: 13, background: '#ffffff' }} />
-              </label>
-            ) : null}
-
-            <label className="pf-admin-field" style={{ margin: 0 }}>
-              <span style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>Grant Reason (Mandatory Audit Note)</span>
-              <input className="pf-admin-input" type="text" required minLength={3} placeholder="Reason for manual access grant" value={grantReason} onChange={(e) => setGrantReason(e.target.value)} style={{ height: 38, borderRadius: 6, fontSize: 13, background: '#ffffff' }} />
-            </label>
-            <MutationErrorNotice error={grantEntitlementMutation.error} action="Entitlement grant" />
-          </form>
-        </AdminDialog>
-      ) : null}
+      <GrantAccessDialog open={isGrantOpen} userId={userId} student={{ id: student.id, name: student.name, email: student.email }} onClose={() => setIsGrantOpen(false)} onGranted={() => void entitlementsQuery.refetch()} />
 
       {/* Revoke Sessions Modal */}
       {revokeSessionsOpen ? (

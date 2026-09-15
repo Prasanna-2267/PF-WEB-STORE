@@ -25,11 +25,13 @@ const timeParts = (date: Date, timezone: string) => {
 };
 const isQuiet = (time: string, start: string, end: string) => start < end ? time >= start && time < end : time >= start || time < end;
 
-async function effectiveScheduledFor(userId: string, category: LearnerNotificationCategory, requested: Date) {
+type NotificationDbClient = Prisma.TransactionClient | typeof prisma;
+
+async function effectiveScheduledFor(userId: string, category: LearnerNotificationCategory, requested: Date, client: NotificationDbClient) {
   if (category === "SECURITY") return requested;
   const [preference, learner] = await Promise.all([
-    prisma.learnerNotificationPreference.findUnique({ where: { userId } }),
-    prisma.learnerPreference.findUnique({ where: { userId }, select: { timezone: true } }),
+    client.learnerNotificationPreference.findUnique({ where: { userId } }),
+    client.learnerPreference.findUnique({ where: { userId }, select: { timezone: true } }),
   ]);
   if (!preference?.quietHoursEnabled) return requested;
   const timezone = learner?.timezone ?? "Asia/Kolkata";
@@ -58,8 +60,8 @@ export async function revokePushToken(userId: string, installationId: string) {
   return { installationId, revoked: true };
 }
 
-export async function getNotificationPreferences(userId: string) {
-  return (await prisma.learnerNotificationPreference.findUnique({ where: { userId } })) ?? { userId, ...DEFAULT_PREFERENCES };
+export async function getNotificationPreferences(userId: string, client: NotificationDbClient = prisma) {
+  return (await client.learnerNotificationPreference.findUnique({ where: { userId } })) ?? { userId, ...DEFAULT_PREFERENCES };
 }
 
 export async function patchNotificationPreferences(userId: string, input: Partial<typeof DEFAULT_PREFERENCES>) {
@@ -77,18 +79,18 @@ export async function patchNotificationPreferences(userId: string, input: Partia
   });
 }
 
-export async function createLearnerNotification(input: { userId: string; category: LearnerNotificationCategory; title: string; body: string; sourceKey: string; data?: Record<string, unknown>; scheduledFor?: Date }) {
-  const preferences = await getNotificationPreferences(input.userId);
-  if (!preferences[preferenceKey[input.category]]) return null;
-  const scheduledFor = await effectiveScheduledFor(input.userId, input.category, input.scheduledFor ?? new Date());
-  const notification = await prisma.learnerNotification.upsert({
+export async function createLearnerNotification(input: { userId: string; category: LearnerNotificationCategory; title: string; body: string; sourceKey: string; data?: Record<string, unknown>; scheduledFor?: Date; required?: boolean }, client: NotificationDbClient = prisma) {
+  const preferences = await getNotificationPreferences(input.userId, client);
+  if (!input.required && !preferences[preferenceKey[input.category]]) return null;
+  const scheduledFor = input.required ? (input.scheduledFor ?? new Date()) : await effectiveScheduledFor(input.userId, input.category, input.scheduledFor ?? new Date(), client);
+  const notification = await client.learnerNotification.upsert({
     where: { userId_sourceKey: { userId: input.userId, sourceKey: input.sourceKey } },
     create: { userId: input.userId, category: input.category, title: input.title, body: input.body, sourceKey: input.sourceKey, data: input.data as Prisma.InputJsonValue | undefined, scheduledFor },
     update: {},
   });
   if (preferences.pushEnabled) {
-    const tokens = await prisma.mobilePushToken.findMany({ where: { userId: input.userId, enabled: true, revokedAt: null }, select: { id: true } });
-    if (tokens.length) await prisma.learnerNotificationPushDelivery.createMany({ data: tokens.map((token) => ({ notificationId: notification.id, pushTokenId: token.id })), skipDuplicates: true });
+    const tokens = await client.mobilePushToken.findMany({ where: { userId: input.userId, enabled: true, revokedAt: null }, select: { id: true } });
+    if (tokens.length) await client.learnerNotificationPushDelivery.createMany({ data: tokens.map((token) => ({ notificationId: notification.id, pushTokenId: token.id })), skipDuplicates: true });
   }
   return notification;
 }

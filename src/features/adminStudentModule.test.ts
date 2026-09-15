@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   fetchAdminEntitlements,
   fetchAdminEntitlementResources,
+  fetchAdminGrantAccessCatalog,
   fetchAdminStudent,
   fetchAdminStudents,
-  mutateGrantEntitlement,
+  mutateGrantStudentAccess,
   mutateRevokeAdminStudentSessions,
   mutateRevokeEntitlement,
 } from './admin/readOnly/adminReadOnlyApi';
@@ -129,35 +130,9 @@ describe('Super Admin Student Module API Client', () => {
 
     const result = await fetchAdminEntitlements('user-1');
 
-    expect(apiRequest).toHaveBeenCalledWith('/api/admin/entitlements?userId=user-1', expect.any(Object));
+    expect(apiRequest).toHaveBeenCalledWith('/api/admin/entitlements?userId=user-1&source=ADMIN_GRANT', expect.any(Object));
     expect(result).toHaveLength(1);
     expect(result[0].resourceTitle).toBe('CA Foundation Full Access');
-  });
-
-  it('mutateGrantEntitlement calls POST /api/admin/entitlements with body', async () => {
-    const grantInput = {
-      userId: 'user-1',
-      resourceType: 'COURSE' as const,
-      resourceTitle: 'CA Foundation Full Access',
-      accessType: 'PERMANENT' as const,
-      reason: 'Manual grant by Super Admin',
-    };
-
-    vi.mocked(apiRequest).mockResolvedValueOnce({
-      id: 'ent-1',
-      ...grantInput,
-      status: 'ACTIVE',
-      grantedAt: '2026-08-23T00:00:00.000Z',
-      expiresAt: null,
-    });
-
-    const result = await mutateGrantEntitlement(grantInput);
-
-    expect(apiRequest).toHaveBeenCalledWith('/api/admin/entitlements', {
-      method: 'POST',
-      body: grantInput,
-    });
-    expect(result.id).toBe('ent-1');
   });
 
   it('mutateRevokeEntitlement calls POST /api/admin/entitlements/:id/revoke', async () => {
@@ -181,5 +156,21 @@ describe('Super Admin Student Module API Client', () => {
 
     expect(apiRequest).toHaveBeenCalledWith('/api/admin/entitlement-resources?resourceType=COURSE&limit=100', expect.any(Object));
     expect(result).toEqual([{ id: 'course-1', resourceType: 'COURSE', title: 'CA Foundation', subtitle: 'CAF · Academy A' }]);
+  });
+
+  it('loads the course-scoped four-category grant catalog for a student', async () => {
+    const catalog = { studentId: 'user-1', courses: [{ id: 'course-1', name: 'CA Foundation', code: 'CAF' }], selectedCourseId: 'course-1', resources: { notes: [], questionBanks: [], bundles: [], subscriptions: [] } };
+    vi.mocked(apiRequest).mockResolvedValueOnce(catalog);
+
+    await expect(fetchAdminGrantAccessCatalog('user-1', 'course-1')).resolves.toEqual(catalog);
+    expect(apiRequest).toHaveBeenCalledWith('/api/admin/students/user-1/grant-access/catalog?courseId=course-1', expect.any(Object));
+  });
+
+  it('posts all selected categories in one atomic grant request', async () => {
+    const input = { courseId: 'course-1', selections: { notes: ['note-1'], questionBanks: ['qb-1'], bundles: [], subscriptions: [] }, expiresAt: null };
+    vi.mocked(apiRequest).mockResolvedValueOnce({ grantedCount: 2, entitlements: [] });
+
+    await expect(mutateGrantStudentAccess('user-1', input)).resolves.toMatchObject({ grantedCount: 2 });
+    expect(apiRequest).toHaveBeenCalledWith('/api/admin/students/user-1/grant-access', { method: 'POST', body: input });
   });
 });

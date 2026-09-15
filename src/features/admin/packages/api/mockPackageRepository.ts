@@ -11,6 +11,8 @@ interface BackendPackageDto {
   slug?: string;
   description?: string | null;
   price: number | string;
+  accessDurationValue?: number | null;
+  accessDurationUnit?: 'DAYS' | 'WEEKS' | 'MONTHS' | null;
   status: string;
   contentItemIds?: string[];
   createdAt?: string;
@@ -26,10 +28,13 @@ function adaptBackendPackage(dto: BackendPackageDto): LearningPackage {
     slug: dto.slug || dto.id,
     description: dto.description || '',
     price: numPrice,
+    accessDurationValue: dto.accessDurationValue ?? null,
+    accessDurationUnit: dto.accessDurationUnit ?? null,
     status: (dto.status === 'PUBLISHED' ? 'published' : dto.status === 'ARCHIVED' ? 'archived' : 'draft') as any,
     courseId: dto.courseId || null,
     coverImageId: null,
     items: contentItemIds.map((id) => ({ contentItemId: id, addedAt: new Date().toISOString() })),
+    questionBanks: [],
     createdAt: dto.createdAt || new Date().toISOString(),
     updatedAt: dto.updatedAt || new Date().toISOString(),
   };

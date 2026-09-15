@@ -1,0 +1,817 @@
+/* Container & Dialog */
+.pf-academy-create {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  background: #ffffff;
+  color: #0f172a;
+  font-family: inherit;
+}
+
+.pf-academy-create-dialog {
+  display: flex !important;
+  min-height: 0 !important;
+  flex-direction: column;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border-radius: 20px !important;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25) !important;
+}
+
+/* Hero Header */
+.pf-academy-create__hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 32px 20px;
+  background: linear-gradient(135deg, #f8fafc 0%, #edf2fe 100%);
+  border-bottom: 1px solid #e2e8f0;
+  flex: 0 0 auto;
+}
+
+.pf-academy-create__eyebrow {
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.12em !important;
+  color: #2563eb !important;
+  text-transform: uppercase;
+}
+
+.pf-academy-create__hero h2 {
+  margin: 4px 0 6px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+.pf-academy-create__hero p {
+  margin: 0;
+  font-size: 13.5px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+/* Step Progress Nav */
+.pf-academy-create__steps {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0;
+  padding: 0 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  overflow-x: auto;
+  flex: 0 0 auto;
+}
+
+.pf-academy-create__steps button {
+  min-width: 110px;
+  border: 0;
+  background: none;
+  padding: 14px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #94a3b8;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.pf-academy-create__steps button span {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #f1f5f9;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  transition: all 0.18s ease;
+}
+
+.pf-academy-create__steps button b {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pf-academy-create__steps button.is-active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+}
+
+.pf-academy-create__steps button.is-active span,
+.pf-academy-create__steps button.is-complete span {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.pf-academy-create__steps button.is-complete {
+  color: #0f172a;
+}
+
+/* Main Form Body */
+.pf-academy-create__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 28px 36px 36px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pf-academy-create__body section {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+/* Section Headings */
+.pf-academy-create__section-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 26px;
+}
+
+.pf-academy-create__section-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #2563eb;
+  background: #eff6ff;
+  flex-shrink: 0;
+}
+
+.pf-academy-create__section-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.pf-academy-create__section-head p {
+  margin: 0;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pf-academy-create__section-head h3 {
+  margin: 4px 0 3px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.pf-academy-create__section-head span {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Form Fields Grid */
+.pf-academy-create__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 24px;
+}
+
+.pf-academy-create__wide {
+  grid-column: 1 / -1;
+}
+
+.pf-admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-admin-field > span {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.pf-admin-field > span b {
+  color: #dc2626;
+}
+
+.pf-admin-input,
+.pf-admin-select,
+.pf-admin-textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  color: #0f172a;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pf-admin-input:focus,
+.pf-admin-select:focus,
+.pf-admin-textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+  outline: none;
+}
+
+.pf-admin-input[aria-invalid="true"],
+.pf-admin-select[aria-invalid="true"] {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12) !important;
+}
+
+.pf-admin-textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.pf-academy-create__auto {
+  min-height: 44px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 13px;
+}
+
+.pf-academy-create__error {
+  display: block;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.pf-academy-create__alert {
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 13px;
+  font-weight: 500;
+  margin: 24px auto 0;
+  max-width: 980px;
+  line-height: 1.5;
+}
+
+/* Contacts section */
+.pf-academy-create__subhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  margin: 32px 0 16px;
+  padding-top: 24px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.pf-academy-create__subhead h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.pf-academy-create__subhead p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 12.5px;
+}
+
+.pf-academy-create__contact {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr 1.35fr 1.15fr 42px;
+  gap: 12px;
+  margin: 12px 0;
+  align-items: center;
+}
+
+.pf-academy-create__contact button {
+  height: 42px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #dc2626;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pf-academy-create__contact button:hover {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+/* Section Subtitles & Address Titles */
+.pf-academy-create__section-title {
+  margin: 36px 0 18px;
+  padding-top: 24px;
+  border-top: 1px solid #e2e8f0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: -0.01em;
+}
+
+.pf-academy-create__section-title::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 18px;
+  border-radius: 4px;
+  background: #2563eb;
+}
+
+.pf-academy-create__check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 24px 0 16px;
+  padding: 14px 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  width: fit-content;
+  transition: all 0.15s ease;
+}
+
+.pf-academy-create__check:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.pf-academy-create__check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+/* Category Chips */
+.pf-academy-create__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 20px;
+}
+
+.pf-academy-create__chips button {
+  min-height: 40px;
+  border: 1px solid #cbd5e1;
+  border-radius: 20px;
+  background: #ffffff;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pf-academy-create__chips button.is-selected {
+  color: #1d4ed8;
+  border-color: #3b82f6;
+  background: #eff6ff;
+  font-weight: 600;
+}
+
+/* Review Section */
+.pf-academy-create__review {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.pf-academy-create__review article {
+  min-height: 96px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  background: #f8fafc;
+}
+
+.pf-academy-create__review article div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-academy-create__review span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+}
+
+.pf-academy-create__review strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.45;
+}
+
+.pf-academy-create__review button {
+  border: 0;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.pf-academy-create__review button:hover {
+  background: #dbeafe;
+}
+
+.pf-academy-create__assurance {
+  display: flex;
+  gap: 14px;
+  margin-top: 24px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.pf-academy-create__assurance p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* Footer Controls */
+.pf-academy-create__footer {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 36px;
+  border-top: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+
+.pf-academy-create__footer span {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.pf-academy-create__footer .pf-admin-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 22px;
+  font-size: 13.5px;
+  border-radius: 10px;
+}
+
+/* Success Screen Polish */
+.pf-academy-create__success {
+  min-height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  padding: 48px 32px 40px;
+}
+
+.pf-academy-create__success-icon {
+  width: 68px;
+  height: 68px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 14px 30px rgba(16, 185, 129, 0.28);
+  margin-bottom: 20px;
+}
+
+.pf-academy-create__success h2 {
+  font-size: 26px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.02em;
+}
+
+.pf-academy-create__success > p {
+  max-width: 480px;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 28px 0;
+}
+
+.pf-academy-create__success-grid {
+  width: min(640px, 100%);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 0 0 32px 0;
+}
+
+.pf-academy-create__success-grid span {
+  padding: 16px 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: left;
+}
+
+.pf-academy-create__success-grid strong {
+  display: block;
+  color: #0f172a;
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* In-place morphing custom input & PIN code styles */
+.pf-academy-create__custom-input-wrap,
+.pf-academy-create__pincode-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.pf-academy-create__custom-input-wrap input,
+.pf-academy-create__pincode-wrap input {
+  width: 100%;
+  padding-right: 36px;
+}
+
+.pf-academy-create__custom-reset {
+  position: absolute;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(226, 232, 240, 0.7);
+  color: #64748b;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.pf-academy-create__custom-reset:hover {
+  background: #cbd5e1;
+  color: #1e293b;
+}
+
+.pf-academy-create__pincode-spinner {
+  position: absolute;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2563eb;
+}
+
+@keyframes pf-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pf-academy-create__pincode-spinner svg {
+  animation: pf-spin 0.8s linear infinite;
+}
+
+.pf-academy-create__pincode-status {
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.pf-academy-create__pincode-status.is-success {
+  color: #166534;
+}
+
+.pf-academy-create__pincode-status.is-warning {
+  color: #b45309;
+}
+
+/* Custom File Upload Dropzone Polish */
+.pf-academy-create__upload-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.pf-academy-create__upload-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.pf-academy-create__upload {
+  position: relative;
+  min-height: 68px;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.pf-academy-create__upload:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.pf-academy-create__upload input[type="file"] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.pf-academy-create__upload-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #2563eb;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.pf-academy-create__upload:hover .pf-academy-create__upload-icon {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.pf-academy-create__upload-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pf-academy-create__upload-text strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.pf-academy-create__upload-text small {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.pf-academy-create__upload-badge {
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: all 0.2s ease;
+}
+
+.pf-academy-create__upload:hover .pf-academy-create__upload-badge {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.pf-academy-create__upload.is-ready {
+  border-style: solid;
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+
+.pf-academy-create__upload.is-ready .pf-academy-create__upload-icon {
+  background: #dcfce7;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.pf-academy-create__upload-badge.is-ready {
+  background: #166534;
+  border-color: #166534;
+  color: #ffffff;
+}
+
+@media (max-width: 760px) {
+  .pf-academy-create {
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+  }
+
+  .pf-academy-create__hero,
+  .pf-academy-create__body {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .pf-academy-create__grid,
+  .pf-academy-create__review {
+    grid-template-columns: 1fr;
+  }
+
+  .pf-academy-create__contact {
+    grid-template-columns: 1fr;
+  }
+
+  .pf-academy-create__contact button {
+    height: 42px;
+  }
+
+  .pf-academy-create__success-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pf-academy-create__footer {
+    padding: 14px 18px;
+  }
+
+  .pf-academy-create__footer > span {
+    display: none;
+  }
+}

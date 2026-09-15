@@ -2,16 +2,30 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../db/prisma.js";
 import { conflict, forbidden } from "../errors/api-error.js";
 import { addLearnerDays, databaseDate, databaseDateKey, learnerDateKey } from "./learnerTime.js";
+import { ALLOWED_CONTENT_MIME_TYPES } from "../utils/upload-validation.js";
 
 type RevisionFilter = "all" | "due" | "not_started";
 
-const publishedPdfWhere = (courseId: string): Prisma.ContentItemWhereInput => ({
+const publishedNoteWhere = (courseId: string): Prisma.ContentItemWhereInput => ({
   courseId,
   kind: "FILE",
-  mimeType: "application/pdf",
+  mimeType: { in: [...ALLOWED_CONTENT_MIME_TYPES] },
   status: "PUBLISHED",
   deletedAt: null,
+  OR: [{ entityType: null }, { entityType: { not: "MONTHLY_REPORT" } }],
 });
+
+export function calculateExamCountdown(examDate: Date | null, todayKey: string) {
+  if (!examDate) return { dateKey: null, daysRemaining: null, pressurePercent: null };
+  // examDate is a calendar date stored at UTC midnight. Passing it through a
+  // timezone conversion can move it to an adjacent day, so compare date-only
+  // UTC values with the learner's already-normalized today key.
+  const dateKey = databaseDateKey(examDate);
+  const difference = Math.round((databaseDate(dateKey).getTime() - databaseDate(todayKey).getTime()) / 86_400_000);
+  const daysRemaining = Math.max(0, difference);
+  const pressurePercent = Math.max(0, Math.min(100, Math.round(100 - (Math.min(daysRemaining, 365) / 365) * 100)));
+  return { dateKey, daysRemaining, pressurePercent };
+}
 
 async function learnerContext(userId: string) {
   const preference = await prisma.learnerPreference.findUnique({
@@ -80,9 +94,9 @@ export async function getTrackerSummary(userId: string, days: 7 | 30 | 90) {
       select: { focusSeconds: true, readingSeconds: true, practiceSeconds: true, revisionSeconds: true },
     }),
     prisma.learnerStreakState.findUnique({ where: { userId }, select: { currentStreak: true, longestStreak: true, lastQualifiedDate: true } }),
-    prisma.contentItem.count({ where: publishedPdfWhere(course.id) }),
+    prisma.contentItem.count({ where: publishedNoteWhere(course.id) }),
     prisma.learnerNoteState.aggregate({
-      where: { userId, contentItem: publishedPdfWhere(course.id) },
+      where: { userId, contentItem: publishedNoteWhere(course.id) },
       _count: { _all: true, completed: true },
       _sum: { revisionCount: true },
     }),
@@ -110,9 +124,9 @@ export async function getTrackerSummary(userId: string, days: 7 | 30 | 90) {
   const previousSeconds = previousActivity.reduce((sum, entry) => sum + activitySeconds(entry), 0);
   const changePercent = previousSeconds > 0 ? Math.round(((totalSeconds - previousSeconds) / previousSeconds) * 100) : totalSeconds > 0 ? 100 : 0;
   const bestDay = consistency.reduce<(typeof consistency)[number] | null>((best, entry) => !best || entry.totalSeconds > best.totalSeconds ? entry : best, null);
-  const completedNotes = await prisma.learnerNoteState.count({ where: { userId, completed: true, contentItem: publishedPdfWhere(course.id) } });
+  const completedNotes = await prisma.learnerNoteState.count({ where: { userId, completed: true, contentItem: publishedNoteWhere(course.id) } });
   const examDate = preference.examDate;
-  const daysRemaining = examDate ? Math.max(0, Math.ceil((databaseDate(learnerDateKey(examDate, preference.timezone)).getTime() - databaseDate(today).getTime()) / 86_400_000)) : null;
+  const exam = calculateExamCountdown(examDate, today);
 
   return {
     range: { days, from: firstDate, to: today, timezone: preference.timezone },
@@ -139,10 +153,10 @@ export async function getTrackerSummary(userId: string, days: 7 | 30 | 90) {
       notesWithActivity: noteTotals._count._all,
     },
     exam: {
-      date: examDate,
+      date: exam.dateKey,
       precision: preference.examDatePrecision,
-      daysRemaining,
-      pressurePercent: daysRemaining === null ? null : Math.max(0, Math.min(100, Math.round(100 - (Math.min(daysRemaining, 365) / 365) * 100))),
+      daysRemaining: exam.daysRemaining,
+      pressurePercent: exam.pressurePercent,
     },
     serverTime: now,
   };
@@ -176,13 +190,13 @@ export async function getRevisionChapters(userId: string, input: { filter: Revis
   const { preference, course } = await learnerContext(userId);
   const [items, states] = await Promise.all([
     prisma.contentItem.findMany({
-      where: { courseId: course.id, status: "PUBLISHED", deletedAt: null, OR: [{ kind: "FOLDER" }, { kind: "FILE", mimeType: "application/pdf" }] },
+      where: { courseId: course.id, status: "PUBLISHED", deletedAt: null, OR: [{ kind: "FOLDER" }, { kind: "FILE", mimeType: { in: [...ALLOWED_CONTENT_MIME_TYPES] } }] },
       orderBy: [{ displayOrder: "asc" }, { name: "asc" }, { id: "asc" }],
       select: { id: true, parentId: true, kind: true, name: true, entityType: true, displayOrder: true },
       take: 5000,
     }),
     prisma.learnerNoteState.findMany({
-      where: { userId, contentItem: publishedPdfWhere(course.id) },
+      where: { userId, contentItem: publishedNoteWhere(course.id) },
       select: {
         contentItemId: true,
         completed: true,
@@ -251,7 +265,7 @@ export async function getRevisionChapters(userId: string, input: { filter: Revis
 
 export async function getRevisionHistory(userId: string, input: { page: number; limit: number }) {
   const { course } = await learnerContext(userId);
-  const where: Prisma.NoteRevisionEventWhereInput = { userId, noteState: { contentItem: publishedPdfWhere(course.id) } };
+  const where: Prisma.NoteRevisionEventWhereInput = { userId, noteState: { contentItem: publishedNoteWhere(course.id) } };
   const [events, total] = await Promise.all([
     prisma.noteRevisionEvent.findMany({
       where,

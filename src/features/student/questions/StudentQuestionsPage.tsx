@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { useState, useEffect } from 'react';
 import {
   BookOpen,
@@ -79,7 +80,7 @@ export const StudentQuestionsPage: React.FC = () => {
         <div className="pf-sq-filter-item">
           <Filter size={16} />
           <span className="pf-sq-filter-label">Filter by Type:</span>
-          <select
+          <AppSelect
             value={selectedKind}
             onChange={(e) => setSelectedKind(e.target.value)}
             className="pf-sq-select"
@@ -89,13 +90,13 @@ export const StudentQuestionsPage: React.FC = () => {
             <option value="NORMAL_DESCRIPTIVE">Normal Descriptive</option>
             <option value="CASE_MCQ">Case MCQ</option>
             <option value="CASE_DESCRIPTIVE">Case Descriptive</option>
-          </select>
+          </AppSelect>
         </div>
 
         <div className="pf-sq-filter-item">
           <Layers size={16} />
           <span className="pf-sq-filter-label">Difficulty:</span>
-          <select
+          <AppSelect
             value={selectedDifficulty}
             onChange={(e) => setSelectedDifficulty(e.target.value)}
             className="pf-sq-select"
@@ -104,7 +105,7 @@ export const StudentQuestionsPage: React.FC = () => {
             <option value="FOUNDATION">Foundation</option>
             <option value="INTERMEDIATE">Intermediate</option>
             <option value="ADVANCED">Advanced</option>
-          </select>
+          </AppSelect>
         </div>
 
         <button onClick={loadQuestions} className="pf-sq-btn-reload" title="Refresh Questions">

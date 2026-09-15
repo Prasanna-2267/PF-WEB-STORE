@@ -3,10 +3,12 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../db/prisma.js";
 import { badRequest, conflict, notFound } from "../errors/api-error.js";
 import { sanitizeRichText } from "../utils/sanitize-html.js";
+import { accessibleContentIdsForCourse } from "./noteCatalogService.js";
+import { assertQuestionBankForWrite } from "./questionBankService.js";
 
 export interface QuestionScope { academyId?: string; actorId: string }
 export interface OptionInput { optionLabel: string; html: string }
-export interface SubQuestionInput { questionHtml: string; answerHtml?: string; correctOptionId?: string; correctExplanationHtml?: string; premiumWrongOptionsExplanationHtml?: string; courseId?: string; subjectId?: string; chapterId?: string; lessonId?: string; topicId?: string; options?: OptionInput[] }
+export interface SubQuestionInput { questionHtml: string; answerHtml?: string; correctOptionId?: string; correctExplanationHtml?: string; premiumWrongOptionsExplanationHtml?: string; courseId?: string; subjectId?: string; chapterId?: string; lessonId?: string; topicId?: string; examName?: string; chapterName?: string; conceptName?: string; options?: OptionInput[] }
 export interface QuestionInput {
   kind: "NORMAL_MCQ" | "NORMAL_DESCRIPTIVE" | "CASE_MCQ" | "CASE_DESCRIPTIVE";
   status?: "DRAFT" | "PUBLISHED";
@@ -14,6 +16,10 @@ export interface QuestionInput {
   questionHtml?: string; answerHtml?: string; caseHtml?: string; classificationMode?: "ENTIRE_CASE" | "INDIVIDUAL_SUB_QUESTIONS";
   correctOptionId?: string; correctExplanationHtml?: string; premiumWrongOptionsExplanationHtml?: string;
   courseId?: string; subjectId?: string; chapterId?: string; lessonId?: string; topicId?: string;
+  examName?: string; chapterName?: string; conceptName?: string;
+  contentItemIds?: string[];
+  questionBankId?: string;
+  practiceCollection?: "PYQ" | "RTP" | "MTP" | "ORIGINAL" | "QUESTION_BANK";
   options?: OptionInput[]; subQuestions?: SubQuestionInput[];
 }
 
@@ -21,7 +27,7 @@ const scopeWhere = (scope: QuestionScope): Prisma.QuestionWhereInput => scope.ac
 const rich = (value?: string) => sanitizeRichText(value ?? "");
 const normalizeOptions = (options: OptionInput[] = []) => {
   const normalized = options.map((option, index) => ({ optionLabel: option.optionLabel.toUpperCase(), html: rich(option.html), displayOrder: index }));
-  if (new Set(normalized.map((option) => option.optionLabel)).size !== normalized.length || normalized.some((option) => !option.html)) throw badRequest("INVALID_OPTIONS", "Option labels must be unique and option content cannot be empty.");
+  if (normalized.length > 4 || new Set(normalized.map((option) => option.optionLabel)).size !== normalized.length || normalized.some((option) => !/^[A-D]$/.test(option.optionLabel) || !option.html)) throw badRequest("INVALID_OPTIONS", "Supply two to four unique, non-empty options labelled A through D.");
   return normalized;
 };
 
@@ -36,7 +42,28 @@ async function validateTaxonomy(scope: QuestionScope, input: Pick<QuestionInput,
   if (input.topicId && !await tx.taxonomyTopic.findFirst({ where: { id: input.topicId, ...(input.lessonId ? { lessonId: input.lessonId } : { lesson: { chapter: { courseId: input.courseId } } }) }, select: { id: true } })) throw badRequest("INVALID_TOPIC", "topicId does not belong to the selected taxonomy.");
 }
 
+async function validateLinkedFiles(scope: QuestionScope, courseId: string | undefined, contentItemIds: string[] | undefined, tx: Prisma.TransactionClient) {
+  if (!courseId) throw badRequest("COURSE_REQUIRED", "A course is required for every question.");
+  const ids = [...new Set(contentItemIds ?? [])];
+  // Legacy/hidden descriptive records may remain unlinked. Every active MCQ
+  // route requires at least one ID at validation time.
+  if (!ids.length) return ids;
+  const files = await tx.contentItem.findMany({
+    where: {
+      id: { in: ids }, courseId, kind: "FILE", deletedAt: null,
+      course: { deletedAt: null, ...(scope.academyId ? { academyId: scope.academyId } : { academyId: null }) },
+    },
+    select: { id: true, courseId: true },
+  });
+  if (files.length !== ids.length) throw badRequest("INVALID_QUESTION_FILES", "Every linked item must be an existing file in the selected course and current tenant.");
+  return ids;
+}
+
 export function validateQuestionShape(input: QuestionInput) {
+  if (input.practiceCollection === "QUESTION_BANK" && !input.kind.endsWith("MCQ")) throw badRequest("QUESTION_BANK_MCQ_ONLY", "Question Banks support Normal MCQ and Case-based MCQ questions only.");
+  if (input.practiceCollection === "QUESTION_BANK" && !input.questionBankId) throw badRequest("QUESTION_BANK_REQUIRED", "Select a Question Bank before adding Question Bank questions.");
+  if (input.practiceCollection !== "QUESTION_BANK" && input.questionBankId) throw badRequest("QUESTION_BANK_NOT_ALLOWED", "questionBankId is only valid for Question Bank questions.");
+  if (input.practiceCollection !== "QUESTION_BANK" && ["NORMAL_MCQ", "CASE_MCQ"].includes(input.kind) && !(input.contentItemIds?.length)) throw badRequest("QUESTION_FILES_REQUIRED", "Link at least one course file to an ordinary practice question.");
   const isCase = input.kind.startsWith("CASE_");
   const isMcq = input.kind.endsWith("MCQ");
   const options = normalizeOptions(input.options);
@@ -61,11 +88,13 @@ async function audit(tx: Prisma.TransactionClient, scope: QuestionScope, action:
   await tx.systemAuditLog.create({ data: { action, entityType: "Question", entityId: id, actorId: scope.actorId, academyId: scope.academyId, description } });
 }
 
-const fullInclude = { options: { orderBy: { displayOrder: "asc" as const } }, subQuestions: { orderBy: { displayOrder: "asc" as const }, include: { options: { orderBy: { displayOrder: "asc" as const } } } }, course: { select: { id: true, name: true } }, subject: { select: { id: true, name: true } }, chapter: true, lesson: true, topic: true };
+const linkedFileInclude = { contentItem: { select: { id: true, name: true, mimeType: true, accessType: true, status: true, courseId: true } } };
+const fullInclude = { options: { orderBy: { displayOrder: "asc" as const } }, subQuestions: { orderBy: { displayOrder: "asc" as const }, include: { options: { orderBy: { displayOrder: "asc" as const } } } }, contentLinks: { include: linkedFileInclude, orderBy: { createdAt: "asc" as const } }, questionBank: { select: { id: true, name: true, accessType: true, status: true } }, course: { select: { id: true, name: true } }, subject: { select: { id: true, name: true } }, chapter: true, lesson: true, topic: true };
 
-export async function listQuestions(scope: QuestionScope, input: { page: number; limit: number; status?: "DRAFT" | "PUBLISHED" | "ARCHIVED"; kind?: QuestionInput["kind"]; difficulty?: QuestionInput["difficulty"]; courseId?: string; search?: string; includeDeleted?: boolean }) {
-  const where: Prisma.QuestionWhereInput = { ...scopeWhere(scope), ...(input.includeDeleted ? {} : { deletedAt: null }), ...(input.status ? { status: input.status } : {}), ...(input.kind ? { kind: input.kind } : {}), ...(input.difficulty ? { difficulty: input.difficulty } : {}), ...(input.courseId ? { courseId: input.courseId } : {}), ...(input.search ? { OR: [{ questionHtml: { contains: input.search, mode: "insensitive" } }, { caseHtml: { contains: input.search, mode: "insensitive" } }] } : {}) };
-  const [data, total] = await Promise.all([prisma.question.findMany({ where, skip: (input.page - 1) * input.limit, take: input.limit, orderBy: [{ createdAt: "desc" }, { id: "desc" }], include: { course: { select: { id: true, name: true } }, _count: { select: { options: true, subQuestions: true } } } }), prisma.question.count({ where })]);
+export async function listQuestions(scope: QuestionScope, input: { page: number; limit: number; status?: "DRAFT" | "PUBLISHED" | "ARCHIVED"; kind?: QuestionInput["kind"]; practiceCollection?: QuestionInput["practiceCollection"]; difficulty?: QuestionInput["difficulty"]; courseId?: string; questionBankId?: string; contentItemId?: string; examName?: string; chapterName?: string; createdFrom?: Date; createdTo?: Date; updatedFrom?: Date; updatedTo?: Date; search?: string; includeDeleted?: boolean }) {
+  if (!input.courseId) throw badRequest("COURSE_REQUIRED", "Select a course before loading questions.");
+  const where: Prisma.QuestionWhereInput = { ...scopeWhere(scope), courseId: input.courseId, ...(input.includeDeleted ? {} : { deletedAt: null }), ...(input.status ? { status: input.status } : {}), ...(input.kind ? { kind: input.kind } : {}), ...(input.practiceCollection ? { practiceCollection: input.practiceCollection } : {}), ...(input.questionBankId ? { questionBankId: input.questionBankId } : {}), ...(input.difficulty ? { difficulty: input.difficulty } : {}), ...(input.examName ? { examName: { contains: input.examName, mode: "insensitive" } } : {}), ...(input.chapterName ? { chapterName: { contains: input.chapterName, mode: "insensitive" } } : {}), ...(input.contentItemId ? { contentLinks: { some: { contentItemId: input.contentItemId } } } : {}), ...((input.createdFrom || input.createdTo) ? { createdAt: { ...(input.createdFrom ? { gte: input.createdFrom } : {}), ...(input.createdTo ? { lte: input.createdTo } : {}) } } : {}), ...((input.updatedFrom || input.updatedTo) ? { updatedAt: { ...(input.updatedFrom ? { gte: input.updatedFrom } : {}), ...(input.updatedTo ? { lte: input.updatedTo } : {}) } } : {}), ...(input.search ? { OR: [{ questionHtml: { contains: input.search, mode: "insensitive" } }, { caseHtml: { contains: input.search, mode: "insensitive" } }, { contentLinks: { some: { contentItem: { name: { contains: input.search, mode: "insensitive" } } } } }] } : {}) };
+  const [data, total] = await Promise.all([prisma.question.findMany({ where, skip: (input.page - 1) * input.limit, take: input.limit, orderBy: [{ createdAt: "desc" }, { id: "desc" }], include: { ...fullInclude, _count: { select: { options: true, subQuestions: true } } } }), prisma.question.count({ where })]);
   return { data, pagination: { page: input.page, limit: input.limit, total, totalPages: Math.ceil(total / input.limit) } };
 }
 
@@ -75,15 +104,31 @@ export async function getQuestion(scope: QuestionScope, questionId: string) {
   return question;
 }
 
-function questionData(scope: QuestionScope, input: QuestionInput, options: ReturnType<typeof normalizeOptions>): Prisma.QuestionUncheckedCreateInput {
+export async function listQuestionFiles(scope: QuestionScope, input: { courseId: string; search?: string }) {
+  const course = await prisma.course.findFirst({
+    where: { id: input.courseId, deletedAt: null, ...(scope.academyId ? { academyId: scope.academyId } : { academyId: null }) },
+    select: { id: true },
+  });
+  if (!course) throw notFound("COURSE_NOT_FOUND", "The selected course was not found in the current tenant.");
+  return prisma.contentItem.findMany({
+    where: { courseId: input.courseId, kind: "FILE", deletedAt: null, ...(input.search ? { name: { contains: input.search, mode: "insensitive" } } : {}) },
+    select: { id: true, name: true, mimeType: true, status: true, accessType: true, parentId: true },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+    take: 1000,
+  });
+}
+
+function questionData(scope: QuestionScope, input: QuestionInput, options: ReturnType<typeof normalizeOptions>, contentItemIds: string[]): Prisma.QuestionUncheckedCreateInput {
   return {
     academyId: scope.academyId, kind: input.kind, status: input.status ?? "DRAFT", difficulty: input.difficulty ?? "INTERMEDIATE",
     questionHtml: rich(input.questionHtml), answerHtml: rich(input.answerHtml), caseHtml: rich(input.caseHtml), caseId: input.kind.startsWith("CASE_") ? randomUUID() : null,
     classificationMode: input.classificationMode ?? "ENTIRE_CASE", correctOptionId: input.correctOptionId?.toUpperCase(),
     correctExplanationHtml: rich(input.correctExplanationHtml), premiumWrongOptionsExplanationHtml: rich(input.premiumWrongOptionsExplanationHtml),
     courseId: input.courseId, subjectId: input.subjectId, chapterId: input.chapterId, lessonId: input.lessonId, topicId: input.topicId,
+    practiceCollection: input.practiceCollection ?? "ORIGINAL", questionBankId: input.questionBankId ?? null, examName: input.examName?.trim() ?? "", chapterName: input.chapterName?.trim() ?? "", conceptName: input.conceptName?.trim() ?? "",
     options: options.length ? { create: options } : undefined,
-    subQuestions: input.subQuestions?.length ? { create: input.subQuestions.map((sub, index) => ({ questionHtml: rich(sub.questionHtml), answerHtml: rich(sub.answerHtml), correctOptionId: sub.correctOptionId?.toUpperCase(), correctExplanationHtml: rich(sub.correctExplanationHtml), premiumWrongOptionsExplanationHtml: rich(sub.premiumWrongOptionsExplanationHtml), displayOrder: index, courseId: sub.courseId ?? input.courseId, subjectId: sub.subjectId ?? input.subjectId, chapterId: sub.chapterId ?? input.chapterId, lessonId: sub.lessonId ?? input.lessonId, topicId: sub.topicId ?? input.topicId, options: sub.options?.length ? { create: normalizeOptions(sub.options) } : undefined })) } : undefined,
+    contentLinks: { create: contentItemIds.map((contentItemId) => ({ contentItemId })) },
+    subQuestions: input.subQuestions?.length ? { create: input.subQuestions.map((sub, index) => ({ questionHtml: rich(sub.questionHtml), answerHtml: rich(sub.answerHtml), correctOptionId: sub.correctOptionId?.toUpperCase(), correctExplanationHtml: rich(sub.correctExplanationHtml), premiumWrongOptionsExplanationHtml: rich(sub.premiumWrongOptionsExplanationHtml), displayOrder: index, courseId: sub.courseId ?? input.courseId, subjectId: sub.subjectId ?? input.subjectId, chapterId: sub.chapterId ?? input.chapterId, lessonId: sub.lessonId ?? input.lessonId, topicId: sub.topicId ?? input.topicId, examName: sub.examName?.trim() ?? input.examName?.trim() ?? "", chapterName: sub.chapterName?.trim() ?? input.chapterName?.trim() ?? "", conceptName: sub.conceptName?.trim() ?? input.conceptName?.trim() ?? "", options: sub.options?.length ? { create: normalizeOptions(sub.options) } : undefined })) } : undefined,
   };
 }
 
@@ -91,11 +136,31 @@ export async function createQuestion(scope: QuestionScope, input: QuestionInput)
   const options = validateQuestionShape(input);
   return prisma.$transaction(async (tx) => {
     await validateTaxonomy(scope, input, tx);
+    if (input.questionBankId) await assertQuestionBankForWrite(tx, scope, input.questionBankId, input.courseId!);
+    const contentItemIds = await validateLinkedFiles(scope, input.courseId, input.contentItemIds, tx);
     for (const sub of input.subQuestions ?? []) await validateTaxonomy(scope, { courseId: sub.courseId ?? input.courseId, subjectId: sub.subjectId ?? input.subjectId, chapterId: sub.chapterId ?? input.chapterId, lessonId: sub.lessonId ?? input.lessonId, topicId: sub.topicId ?? input.topicId }, tx);
-    const question = await tx.question.create({ data: questionData(scope, input, options), include: fullInclude });
+    const question = await tx.question.create({ data: questionData(scope, input, options, contentItemIds), include: fullInclude });
     await audit(tx, scope, "QUESTION_CREATED", question.id, "Created a question.");
     return question;
   });
+}
+
+export async function createQuestionsAtomically(scope: QuestionScope, inputs: QuestionInput[]) {
+  if (!inputs.length) throw badRequest("EMPTY_IMPORT", "The import does not contain any questions.");
+  return prisma.$transaction(async (tx) => {
+    const created = [];
+    for (const input of inputs) {
+      const options = validateQuestionShape(input);
+      await validateTaxonomy(scope, input, tx);
+      if (input.questionBankId) await assertQuestionBankForWrite(tx, scope, input.questionBankId, input.courseId!);
+      const contentItemIds = await validateLinkedFiles(scope, input.courseId, input.contentItemIds, tx);
+      for (const sub of input.subQuestions ?? []) await validateTaxonomy(scope, { courseId: sub.courseId ?? input.courseId, subjectId: sub.subjectId ?? input.subjectId, chapterId: sub.chapterId ?? input.chapterId, lessonId: sub.lessonId ?? input.lessonId, topicId: sub.topicId ?? input.topicId }, tx);
+      const question = await tx.question.create({ data: questionData(scope, input, options, contentItemIds), include: fullInclude });
+      await audit(tx, scope, "QUESTION_IMPORTED", question.id, "Imported a validated question from an Excel workbook.");
+      created.push(question);
+    }
+    return created;
+  }, { timeout: 60_000 });
 }
 
 export async function updateQuestion(scope: QuestionScope, questionId: string, input: QuestionInput) {
@@ -105,10 +170,13 @@ export async function updateQuestion(scope: QuestionScope, questionId: string, i
     if (!existing) throw notFound("QUESTION_NOT_FOUND", "The question was not found in the current scope.");
     if (existing.status === "ARCHIVED") throw conflict("QUESTION_ARCHIVED", "Restore the question before editing it.");
     await validateTaxonomy(scope, input, tx);
+    if (input.questionBankId) await assertQuestionBankForWrite(tx, scope, input.questionBankId, input.courseId!);
+    const contentItemIds = await validateLinkedFiles(scope, input.courseId, input.contentItemIds, tx);
     for (const sub of input.subQuestions ?? []) await validateTaxonomy(scope, { courseId: sub.courseId ?? input.courseId, subjectId: sub.subjectId ?? input.subjectId, chapterId: sub.chapterId ?? input.chapterId, lessonId: sub.lessonId ?? input.lessonId, topicId: sub.topicId ?? input.topicId }, tx);
     await tx.questionOption.deleteMany({ where: { questionId } });
     await tx.caseSubQuestion.deleteMany({ where: { questionId } });
-    const data = questionData(scope, input, options);
+    await tx.questionContentLink.deleteMany({ where: { questionId } });
+    const data = questionData(scope, input, options, contentItemIds);
     delete (data as { academyId?: string }).academyId;
     const updated = await tx.question.update({ where: { id: questionId }, data, include: fullInclude });
     await audit(tx, scope, "QUESTION_UPDATED", questionId, "Updated a question and its answer structure.");
@@ -118,14 +186,15 @@ export async function updateQuestion(scope: QuestionScope, questionId: string, i
 
 export async function cloneQuestion(scope: QuestionScope, questionId: string) {
   const source = await getQuestion(scope, questionId);
-  const input: QuestionInput = { kind: source.kind, status: "DRAFT", difficulty: source.difficulty, questionHtml: source.questionHtml, answerHtml: source.answerHtml, caseHtml: source.caseHtml, classificationMode: source.classificationMode, correctOptionId: source.correctOptionId ?? undefined, correctExplanationHtml: source.correctExplanationHtml, premiumWrongOptionsExplanationHtml: source.premiumWrongOptionsExplanationHtml, courseId: source.courseId ?? undefined, subjectId: source.subjectId ?? undefined, chapterId: source.chapterId ?? undefined, lessonId: source.lessonId ?? undefined, topicId: source.topicId ?? undefined, options: source.options.map((option) => ({ optionLabel: option.optionLabel, html: option.html })), subQuestions: source.subQuestions.map((sub) => ({ questionHtml: sub.questionHtml, answerHtml: sub.answerHtml, correctOptionId: sub.correctOptionId ?? undefined, correctExplanationHtml: sub.correctExplanationHtml, premiumWrongOptionsExplanationHtml: sub.premiumWrongOptionsExplanationHtml, courseId: sub.courseId ?? undefined, subjectId: sub.subjectId ?? undefined, chapterId: sub.chapterId ?? undefined, lessonId: sub.lessonId ?? undefined, topicId: sub.topicId ?? undefined, options: sub.options.map((option) => ({ optionLabel: option.optionLabel, html: option.html })) })) };
+  const input: QuestionInput = { kind: source.kind as QuestionInput["kind"], status: "DRAFT", difficulty: source.difficulty, practiceCollection: source.practiceCollection, questionBankId: source.questionBankId ?? undefined, questionHtml: source.questionHtml, answerHtml: source.answerHtml, caseHtml: source.caseHtml, classificationMode: source.classificationMode, correctOptionId: source.correctOptionId ?? undefined, correctExplanationHtml: source.correctExplanationHtml, premiumWrongOptionsExplanationHtml: source.premiumWrongOptionsExplanationHtml, courseId: source.courseId ?? undefined, contentItemIds: source.contentLinks.map((link) => link.contentItemId), subjectId: source.subjectId ?? undefined, chapterId: source.chapterId ?? undefined, lessonId: source.lessonId ?? undefined, topicId: source.topicId ?? undefined, examName: source.examName, chapterName: source.chapterName, conceptName: source.conceptName, options: source.options.map((option) => ({ optionLabel: option.optionLabel, html: option.html })), subQuestions: source.subQuestions.map((sub) => ({ questionHtml: sub.questionHtml, answerHtml: sub.answerHtml, correctOptionId: sub.correctOptionId ?? undefined, correctExplanationHtml: sub.correctExplanationHtml, premiumWrongOptionsExplanationHtml: sub.premiumWrongOptionsExplanationHtml, courseId: sub.courseId ?? undefined, subjectId: sub.subjectId ?? undefined, chapterId: sub.chapterId ?? undefined, lessonId: sub.lessonId ?? undefined, topicId: sub.topicId ?? undefined, examName: sub.examName, chapterName: sub.chapterName, conceptName: sub.conceptName, options: sub.options.map((option) => ({ optionLabel: option.optionLabel, html: option.html })) })) };
   return createQuestion(scope, input);
 }
 
 export async function setQuestionLifecycle(scope: QuestionScope, questionId: string, action: "archive" | "restore" | "publish") {
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.question.findFirst({ where: { id: questionId, ...scopeWhere(scope) } });
+    const existing = await tx.question.findFirst({ where: { id: questionId, ...scopeWhere(scope) }, include: { _count: { select: { contentLinks: true } } } });
     if (!existing) throw notFound("QUESTION_NOT_FOUND", "The question was not found in the current scope.");
+    if (action === "publish" && existing.practiceCollection !== "QUESTION_BANK" && ["NORMAL_MCQ", "CASE_MCQ"].includes(existing.kind) && existing._count.contentLinks < 1) throw conflict("QUESTION_FILES_REQUIRED", "Link at least one course file before publishing this question.");
     const data = action === "archive" ? { status: "ARCHIVED" as const, deletedAt: new Date() } : action === "restore" ? { status: "DRAFT" as const, deletedAt: null } : { status: "PUBLISHED" as const, deletedAt: null };
     const updated = await tx.question.update({ where: { id: questionId }, data, include: fullInclude });
     const auditAction = action === "publish" ? "QUESTION_PUBLISHED" : action === "archive" ? "QUESTION_ARCHIVED" : "QUESTION_RESTORED";
@@ -247,24 +316,28 @@ export async function listStudentQuestions(
     });
     if (!membership) throw notFound("ACADEMY_QUESTIONS_NOT_FOUND", "The requested question bank was not found.");
   }
-  if (input.courseId) {
+  const resolvedCourseId = input.courseId ?? (await prisma.learnerPreference.findUnique({ where: { userId: actorId }, select: { selectedCourseId: true } }))?.selectedCourseId ?? undefined;
+  if (resolvedCourseId) {
     const course = await prisma.course.findFirst({
-      where: { id: input.courseId, deletedAt: null, academyId: academyId ?? null },
+      where: { id: resolvedCourseId, deletedAt: null, academyId: academyId ?? null },
       select: { id: true },
     });
     if (!course) throw notFound("COURSE_NOT_FOUND", "The requested course was not found.");
   }
+  if (!resolvedCourseId) throw badRequest("COURSE_REQUIRED", "Select a course before loading practice questions.");
+  const accessibleContentIds = [...await accessibleContentIdsForCourse(actorId, resolvedCourseId)];
 
   const where: Prisma.QuestionWhereInput = {
     status: "PUBLISHED",
     deletedAt: null,
     academyId: academyId ?? null,
-    ...(input.courseId ? { courseId: input.courseId } : {}),
+    courseId: resolvedCourseId,
+    kind: input.kind && ["NORMAL_MCQ", "CASE_MCQ"].includes(input.kind) ? input.kind : { in: ["NORMAL_MCQ", "CASE_MCQ"] },
+    contentLinks: { some: { contentItemId: { in: accessibleContentIds } } },
     ...(input.subjectId ? { subjectId: input.subjectId } : {}),
     ...(input.chapterId ? { chapterId: input.chapterId } : {}),
     ...(input.lessonId ? { lessonId: input.lessonId } : {}),
     ...(input.topicId ? { topicId: input.topicId } : {}),
-    ...(input.kind ? { kind: input.kind } : {}),
     ...(input.difficulty ? { difficulty: input.difficulty } : {}),
   };
 

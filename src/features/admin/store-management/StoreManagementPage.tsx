@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -16,7 +17,7 @@ import {
 import { apiRequest } from '@/lib/api/client';
 import { courseRepository } from '@/features/admin/courses/courseRepository';
 import { fetchPublicCatalog } from '@/features/store/data/publicCatalogApi';
-import { AdminDialog } from '../AdminUi';
+import { AdminDialog, AdminToast } from '../AdminUi';
 
 export interface MerchandisingSection {
   id: string;
@@ -102,7 +103,6 @@ export const StoreManagementPage: React.FC = () => {
       void queryClient.invalidateQueries({ queryKey: ['public', 'catalog'] });
       setEditingForm(null);
       setToastMessage('Store merchandising configuration saved.');
-      setTimeout(() => setToastMessage(''), 4000);
     },
   });
 
@@ -254,7 +254,7 @@ export const StoreManagementPage: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 10, padding: '8px 14px', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}>
           <Filter size={16} color="#0284c7" />
           <span style={{ fontSize: 13, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>Course Filter:</span>
-          <select
+          <AppSelect
             className="pf-admin-select"
             style={{ minWidth: 200, padding: '6px 32px 6px 12px', fontSize: 13, fontWeight: 700, border: 'none', backgroundPosition: 'right 8px center' }}
             value={selectedCourseId}
@@ -266,16 +266,14 @@ export const StoreManagementPage: React.FC = () => {
                 {c.name} ({c.code})
               </option>
             ))}
-          </select>
+          </AppSelect>
         </div>
       </header>
 
-      {toastMessage && (
-        <div style={{ marginBottom: 20, padding: '12px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, color: '#166534', display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
-          <CheckCircle2 size={18} />
-          <span>{toastMessage}</span>
-        </div>
-      )}
+      <AdminToast
+        toast={toastMessage ? { id: 'store-merchandising-saved', title: 'Store settings saved', message: toastMessage, tone: 'success' } : null}
+        onDismiss={() => setToastMessage('')}
+      />
 
       {/* KPI OVERVIEW GRID */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 16 }}>
@@ -410,7 +408,7 @@ export const StoreManagementPage: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <label className="pf-admin-field">
                 <span>Merchandising Mode</span>
-                <select
+                <AppSelect
                   className="pf-admin-select"
                   value={editingForm.mode}
                   onChange={(e) => setEditingForm({ ...editingForm, mode: e.target.value as any })}
@@ -418,7 +416,7 @@ export const StoreManagementPage: React.FC = () => {
                   <option value="AUTO">AUTO (Algorithmic)</option>
                   <option value="HYBRID">HYBRID (Auto + Pinned Overrides)</option>
                   <option value="MANUAL">MANUAL (Pinned Only)</option>
-                </select>
+                </AppSelect>
               </label>
 
               <label className="pf-admin-field">
@@ -437,7 +435,7 @@ export const StoreManagementPage: React.FC = () => {
             {editingForm.key === 'best-sellers' && (
               <label className="pf-admin-field">
                 <span>Date Window (Days for Order Volume)</span>
-                <select
+                <AppSelect
                   className="pf-admin-select"
                   value={editingForm.dateWindowDays ?? ''}
                   onChange={(e) => setEditingForm({ ...editingForm, dateWindowDays: e.target.value ? Number(e.target.value) : null })}
@@ -446,7 +444,7 @@ export const StoreManagementPage: React.FC = () => {
                   <option value="30">Last 30 Days</option>
                   <option value="90">Last 90 Days</option>
                   <option value="">All Time</option>
-                </select>
+                </AppSelect>
               </label>
             )}
 

@@ -33,7 +33,9 @@ describe('central API client', () => {
   });
 
   it('uses one refresh request for concurrent 401 responses and retries once', async () => {
-    setSessionCredentials({ accessToken: 'expired', refreshToken: 'rotate-me', expiresAt: Date.now() - 1 });
+    // The client believes this token is current, while the server rejects it.
+    // Both 401 responses must share one refresh and retry independently.
+    setSessionCredentials({ accessToken: 'expired', refreshToken: 'rotate-me', expiresAt: Date.now() + 60_000 });
     let protectedCalls = 0;
     let refreshCalls = 0;
     let releaseRefresh!: () => void;
@@ -74,5 +76,33 @@ describe('central API client', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ error: { code: 'INVALID_CREDENTIALS', message: 'Invalid credentials' } }, 401));
     await expect(apiRequest('/api/auth/login', { method: 'POST', auth: false, body: {} })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('refreshes an expired access token before sending a protected mutation', async () => {
+    setSessionCredentials({ accessToken: 'expired', refreshToken: 'rotate-me', expiresAt: Date.now() - 1 });
+    const requests: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push(url);
+      if (url.endsWith('/api/auth/refresh')) {
+        return json({ accessToken: 'fresh', refreshToken: 'rotated', tokenType: 'Bearer', expiresIn: 900, user: { id: 'u1', email: 'admin@test', fullName: 'Admin', role: 'super_admin', permissions: ['students:manage'] } });
+      }
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer fresh');
+      return json({ state: 'RESET_APPROVED' });
+    });
+
+    await expect(apiRequest('/api/admin/students/u1/device-reset/approve', { method: 'POST' })).resolves.toEqual({ state: 'RESET_APPROVED' });
+    expect(requests).toHaveLength(2);
+  });
+
+  it('clears a stale authenticated UI session after a terminal 401', async () => {
+    const terminal = vi.fn();
+    setTerminalAuthFailureHandler(terminal);
+    setSessionCredentials({ accessToken: 'rejected', refreshToken: 'still-present', expiresAt: Date.now() + 60_000 });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } }, 401));
+
+    await expect(apiRequest('/api/admin/students/u1/device-reset/approve', { method: 'POST', retryAfterRefresh: false })).rejects.toMatchObject({ status: 401 });
+    expect(getSessionCredentials()).toBeNull();
+    expect(terminal).toHaveBeenCalledTimes(1);
   });
 });

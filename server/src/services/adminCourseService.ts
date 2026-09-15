@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma.js";
 import { badRequest, conflict, notFound } from "../errors/api-error.js";
+import { ensureMonthlyReportProduct } from "./monthlyReportService.js";
 
 export interface ListCoursesQuery {
   page?: number;
@@ -295,6 +296,7 @@ export async function createAdminCourse(input: CourseInputDto) {
       status,
     },
   });
+  if (created.status === "ACTIVE") await ensureMonthlyReportProduct(created.id);
 
   return {
     id: created.id,

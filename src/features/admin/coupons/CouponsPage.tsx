@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -15,6 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ROUTES } from '@/config/routes';
+import { AdminDatePicker } from '../AdminDatePicker';
 import { useCouponStore } from '@/app/store/useCouponStore';
 import { usePackageStore } from '@/app/store/usePackageStore';
 import { contentRepository } from '@/app/store/useContentStore';
@@ -283,7 +285,7 @@ const CouponEditor: React.FC<{
               <button type="button" className={form.expiryMode === 'none' ? 'is-active' : ''} onClick={() => update('expiryMode', 'none')}>No expiry</button>
               <button type="button" className={form.expiryMode === 'date' ? 'is-active' : ''} onClick={() => update('expiryMode', 'date')}>Choose date</button>
             </div>
-            {form.expiryMode === 'date' ? <input className="pf-admin-input" type="date" value={form.expiresAt} onChange={(event) => update('expiresAt', event.target.value)} /> : null}
+            {form.expiryMode === 'date' ? <AdminDatePicker value={form.expiresAt} onChange={(value) => update('expiresAt', value)} min={new Date().toISOString().slice(0, 10)} placeholder="Choose expiry date" /> : null}
             {submitted && errors.expiresAt ? <em className="pf-coupon-field-error">{errors.expiresAt}</em> : null}
           </fieldset>
         </div>
@@ -367,10 +369,10 @@ const CouponsPage: React.FC = () => {
             <span className="pf-admin-sr-only">Search coupon code</span>
             <input className="pf-admin-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search coupon code" />
           </label>
-          <label className="pf-admin-field"><span>Status</span><select className="pf-admin-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="EXPIRED">Expired</option><option value="EXHAUSTED">Exhausted</option><option value="DISABLED">Disabled</option></select></label>
-          <label className="pf-admin-field"><span>Type</span><select className="pf-admin-select" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}><option value="ALL">All types</option><option value="PERCENT">Percentage</option><option value="FLAT">Flat amount</option></select></label>
-          <label className="pf-admin-field"><span>Scope</span><select className="pf-admin-select" value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value as typeof scopeFilter)}><option value="ALL_FILTER">All scopes</option><option value="ALL">Everything</option><option value="PACKAGES">Packages</option><option value="SUBJECTS">Subjects</option></select></label>
-          <label className="pf-admin-field"><span>Sort</span><select className="pf-admin-select" value={sort} onChange={(event) => setSort(event.target.value as CouponSort)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="code-asc">Code A–Z</option><option value="value-high">Highest discount</option><option value="value-low">Lowest discount</option></select></label>
+          <label className="pf-admin-field"><span>Status</span><AppSelect className="pf-admin-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="EXPIRED">Expired</option><option value="EXHAUSTED">Exhausted</option><option value="DISABLED">Disabled</option></AppSelect></label>
+          <label className="pf-admin-field"><span>Type</span><AppSelect className="pf-admin-select" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}><option value="ALL">All types</option><option value="PERCENT">Percentage</option><option value="FLAT">Flat amount</option></AppSelect></label>
+          <label className="pf-admin-field"><span>Scope</span><AppSelect className="pf-admin-select" value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value as typeof scopeFilter)}><option value="ALL_FILTER">All scopes</option><option value="ALL">Everything</option><option value="PACKAGES">Packages</option><option value="SUBJECTS">Subjects</option></AppSelect></label>
+          <label className="pf-admin-field"><span>Sort</span><AppSelect className="pf-admin-select" value={sort} onChange={(event) => setSort(event.target.value as CouponSort)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="code-asc">Code A–Z</option><option value="value-high">Highest discount</option><option value="value-low">Lowest discount</option></AppSelect></label>
         </div>
 
         {status === 'loading' && !coupons.length ? <AdminSkeleton variant="table" rows={6} label="Loading coupons" /> : null}

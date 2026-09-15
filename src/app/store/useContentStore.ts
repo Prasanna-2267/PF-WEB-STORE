@@ -61,8 +61,8 @@ interface ContentState {
     description?: string,
     sampleImages?: import('@/features/admin/content/types/content').ContentSampleImage[],
     storeSections?: import('@/features/admin/content/types/content').ContentStoreSection[],
-    validityMode?: import('@/features/admin/content/types/content').ContentValidityMode,
-    validityOffsetDays?: number | null
+    accessDurationValue?: number | null,
+    accessDurationUnit?: import('@/features/admin/content/types/content').AccessDurationUnit | null
   ) => Promise<ContentItem>;
   markOpened: (itemId: string) => Promise<void>;
   clearCompletedUploads: () => void;
@@ -304,8 +304,8 @@ export const createContentStore = (repository: ContentRepository = mockContentRe
       await refresh();
       return item;
     },
-    updateAccessType: async (itemId, accessType, price, applyToChildren, description, sampleImages, storeSections, validityMode, validityOffsetDays) => {
-      const item = await repository.updateAccessType(itemId, accessType, price, applyToChildren, description, sampleImages, storeSections, validityMode, validityOffsetDays);
+    updateAccessType: async (itemId, accessType, price, applyToChildren, description, sampleImages, storeSections, accessDurationValue, accessDurationUnit) => {
+      const item = await repository.updateAccessType(itemId, accessType, price, applyToChildren, description, sampleImages, storeSections, accessDurationValue, accessDurationUnit);
       await refresh();
       return item;
     },

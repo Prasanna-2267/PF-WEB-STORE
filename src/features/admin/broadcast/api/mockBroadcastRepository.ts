@@ -35,7 +35,7 @@ function adaptBackendBroadcast(dto: BackendBroadcastDto): Broadcast {
     image: null,
     cta: { enabled: false, text: '', action: 'INTERNAL_ROUTE', destination: '' },
     audience: { kind: audienceKind, courseIds: [], packageIds: [], academyIds: targetAcademyIds },
-    platform: 'BOTH',
+    platform: 'APP',
     placements: ['NOTIFICATION', 'HOME'],
     startAt: dto.startAt || null,
     endAt: dto.endAt || null,

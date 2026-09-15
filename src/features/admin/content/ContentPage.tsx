@@ -1,3 +1,4 @@
+import { AppSelect } from '@/components/ui/AppSelect';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -43,6 +44,7 @@ import {
   ArrowDown,
   Undo2,
   Redo2,
+  Link2,
 } from 'lucide-react';
 import { useContentStore, contentRepository } from '@/app/store/useContentStore';
 import { useCourseStore } from '@/app/store/useCourseStore';
@@ -55,10 +57,12 @@ import type {
   ContentSearchResult,
   ContentSortField,
   ContentStoreSection,
+  AccessDurationUnit,
 } from './types/content';
 import { AdminDialog, AdminEmptyState, AdminPageHeader, AdminSkeleton, AdminToast, type AdminToastData } from '../AdminUi';
 import { CourseSelector } from '../CourseSelector';
 import { ContentPublishingWorkflow } from './ContentPublishingWorkflow';
+import { ContentAttachedLinksDialog } from './ContentAttachedLinksDialog';
 import './content.css';
 
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -235,6 +239,7 @@ export const ContentPage: React.FC = () => {
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<ContentSearchResult[]>([]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [linkTarget, setLinkTarget] = useState<ContentItem | null>(null);
   const [createMenu, setCreateMenu] = useState(false);
   const [toasts, setToasts] = useState<AdminToastData[]>([]);
 
@@ -626,8 +631,9 @@ export const ContentPage: React.FC = () => {
 
   const [accessTypeDraft, setAccessTypeDraft] = useState<'FREE' | 'PAID'>('FREE');
   const [accessPriceDraft, setAccessPriceDraft] = useState<string>('499');
-  const [accessValidityModeDraft, setAccessValidityModeDraft] = useState<'PERMANENT' | 'EXAM_DATE_OFFSET'>('PERMANENT');
-  const [accessValidityOffsetDraft, setAccessValidityOffsetDraft] = useState<string>('0');
+  const [accessDurationModeDraft, setAccessDurationModeDraft] = useState<'PERMANENT' | 'FIXED'>('PERMANENT');
+  const [accessDurationValueDraft, setAccessDurationValueDraft] = useState<string>('30');
+  const [accessDurationUnitDraft, setAccessDurationUnitDraft] = useState<AccessDurationUnit>('DAYS');
   const [accessDescriptionDraft, setAccessDescriptionDraft] = useState<string>('');
   const [accessSampleImages, setAccessSampleImages] = useState<ContentSampleImage[]>([]);
   const [accessStoreSections, setAccessStoreSections] = useState<ContentStoreSection[]>([
@@ -661,15 +667,22 @@ export const ContentPage: React.FC = () => {
     reader.readAsDataURL(file);
   });
 
-  const openAccessDialog = (item: ContentItem) => {
-    setTarget(item);
-    setAccessTypeDraft(item.accessType || 'FREE');
-    setAccessPriceDraft(item.price ? String(item.price) : '499');
-    setAccessValidityModeDraft(item.validityMode ?? 'PERMANENT');
-    setAccessValidityOffsetDraft(String(item.validityOffsetDays ?? 0));
-    setAccessDescriptionDraft(item.description || '');
-    setAccessSampleImages(item.sampleImages?.length ? item.sampleImages : []);
-    const initialSections = item.storeSections?.length ? item.storeSections : [
+  const openAccessDialog = async (item: ContentItem) => {
+    let current = item;
+    try {
+      current = await contentRepository.getItem(item.id, courseId);
+    } catch {
+      // Keep the already-loaded item available if the detail refresh fails.
+    }
+    setTarget(current);
+    setAccessTypeDraft(current.accessType || 'FREE');
+    setAccessPriceDraft(current.price ? String(current.price) : '499');
+    setAccessDurationModeDraft(current.accessDurationValue && current.accessDurationUnit ? 'FIXED' : 'PERMANENT');
+    setAccessDurationValueDraft(String(current.accessDurationValue ?? 30));
+    setAccessDurationUnitDraft(current.accessDurationUnit ?? 'DAYS');
+    setAccessDescriptionDraft(current.description || '');
+    setAccessSampleImages(current.sampleImages?.length ? current.sampleImages : []);
+    const initialSections = current.storeSections?.length ? current.storeSections : [
       { id: 'sec-1', heading: '', content: '', order: 0 },
       { id: 'sec-2', heading: '', content: '', order: 1 },
       { id: 'sec-3', heading: '', content: '', order: 2 },
@@ -710,8 +723,9 @@ export const ContentPage: React.FC = () => {
         notify('Valid price required', 'Paid content requires a positive price.', 'error');
         return;
       }
-      const validityDays = Number(accessValidityOffsetDraft);
-      if (accessValidityModeDraft === 'EXAM_DATE_OFFSET' && (!Number.isInteger(validityDays) || validityDays < 0 || validityDays > 3650)) {
+      const durationValue = Number(accessDurationValueDraft);
+      const max = accessDurationUnitDraft === 'DAYS' ? 3650 : accessDurationUnitDraft === 'WEEKS' ? 520 : 120;
+      if (accessDurationModeDraft === 'FIXED' && (!Number.isInteger(durationValue) || durationValue <= 0 || durationValue > max)) {
         notify('Valid expiry required', 'Enter a whole number from 0 to 3650 days after the learner’s exam date.', 'error');
         return;
       }
@@ -726,8 +740,8 @@ export const ContentPage: React.FC = () => {
         accessTypeDraft === 'PAID' ? accessDescriptionDraft.trim() : undefined,
         accessTypeDraft === 'PAID' ? accessSampleImages : [],
         accessTypeDraft === 'PAID' ? accessStoreSections : [],
-        accessTypeDraft === 'PAID' ? accessValidityModeDraft : 'PERMANENT',
-        accessTypeDraft === 'PAID' && accessValidityModeDraft === 'EXAM_DATE_OFFSET' ? Number(accessValidityOffsetDraft) : null
+        accessTypeDraft === 'PAID' && accessDurationModeDraft === 'FIXED' ? Number(accessDurationValueDraft) : null,
+        accessTypeDraft === 'PAID' && accessDurationModeDraft === 'FIXED' ? accessDurationUnitDraft : null
       );
       if (details && details.id === target.id) {
         setDetails(updated);
@@ -786,10 +800,13 @@ export const ContentPage: React.FC = () => {
 
   const openDetails = async (item: ContentItem) => {
     setDetails(item); setDescription(item.description); setContextMenu(null); setDetailsSummary(null);
-    const [path, folderSummary] = await Promise.all([
+    const [path, folderSummary, current] = await Promise.all([
       contentRepository.getBreadcrumb(item.parentId, courseId),
       item.kind === 'folder' ? contentRepository.getFolderSummary(item.id, courseId) : Promise.resolve(null),
+      contentRepository.getItem(item.id, courseId).catch(() => item),
     ]);
+    setDetails(current);
+    setDescription(current.description);
     setDetailsPath(path.map((part) => part.name).join(' / '));
     setDetailsSummary(folderSummary);
   };
@@ -1180,10 +1197,10 @@ export const ContentPage: React.FC = () => {
             {details.kind === 'folder' ? <>
               <div><dt>Folders</dt><dd>{detailsSummary?.folders ?? '—'}</dd></div>
               <div><dt>Files</dt><dd>{detailsSummary?.files ?? '—'}</dd></div>
-              <div><dt>Access</dt><dd style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span>{details.accessType === 'PAID' ? `Paid (₹${details.price?.toLocaleString('en-IN') ?? '0'}) · ${details.validityMode === 'EXAM_DATE_OFFSET' ? `Exam +${details.validityOffsetDays ?? 0}d` : 'Permanent'}` : 'Free'}</span><button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={() => openAccessDialog(details)} style={{ padding: '2px 8px', fontSize: 11 }}><ShoppingBag size={12} /> Edit</button></dd></div>
+              <div><dt>Access</dt><dd style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span>{details.accessType === 'PAID' ? `Paid (₹${details.price?.toLocaleString('en-IN') ?? '0'}) · ${details.accessDurationValue && details.accessDurationUnit ? `${details.accessDurationValue} ${details.accessDurationUnit.toLowerCase()}` : 'Permanent'}` : 'Free'}</span><button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={() => openAccessDialog(details)} style={{ padding: '2px 8px', fontSize: 11 }}><ShoppingBag size={12} /> Edit</button></dd></div>
             </> : <>
               <div><dt>Storage used</dt><dd>{formatBytes(details.size)}</dd></div>
-              <div><dt>Access</dt><dd style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span>{details.accessType === 'PAID' ? `Paid (₹${details.price?.toLocaleString('en-IN') ?? '0'}) · ${details.validityMode === 'EXAM_DATE_OFFSET' ? `Exam +${details.validityOffsetDays ?? 0}d` : 'Permanent'}` : 'Free'}</span><button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={() => openAccessDialog(details)} style={{ padding: '2px 8px', fontSize: 11 }}><ShoppingBag size={12} /> Edit</button></dd></div>
+              <div><dt>Access</dt><dd style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span>{details.accessType === 'PAID' ? `Paid (₹${details.price?.toLocaleString('en-IN') ?? '0'}) · ${details.accessDurationValue && details.accessDurationUnit ? `${details.accessDurationValue} ${details.accessDurationUnit.toLowerCase()}` : 'Permanent'}` : 'Free'}</span><button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={() => openAccessDialog(details)} style={{ padding: '2px 8px', fontSize: 11 }}><ShoppingBag size={12} /> Edit</button></dd></div>
               {details.accessType === 'PAID' ? <>
                 <div><dt>Sample images</dt><dd>{details.sampleImages.length}</dd></div>
                 <div><dt>Store sections</dt><dd>{details.storeSections.length}</dd></div>
@@ -1204,6 +1221,7 @@ export const ContentPage: React.FC = () => {
         <div className="pf-content-context" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
           <button type="button" onClick={() => { void openItem(contextMenu.item); setContextMenu(null); }}>{contextMenu.item.kind === 'folder' ? <FolderOpen /> : <FileText />} {contextMenu.item.kind === 'folder' ? 'Open' : 'Preview'}</button>
           <button type="button" onClick={() => { setTarget(contextMenu.item); setName(contextMenu.item.name); setDialog('rename'); setContextMenu(null); }}><Pencil /> Rename</button>
+          <button type="button" onClick={() => { setLinkTarget(contextMenu.item); setContextMenu(null); }}><Link2 /> Attach Link</button>
           <button type="button" onClick={() => openAccessDialog(contextMenu.item)}><ShoppingBag /> Convert Access (Free / Paid)</button>
           <button type="button" onClick={() => void openAction('move', contextMenu.item)}><Move /> Move to</button>
           <button type="button" onClick={() => void openAction('copy', contextMenu.item)}><ClipboardCopy /> Make a copy</button>
@@ -1212,6 +1230,14 @@ export const ContentPage: React.FC = () => {
           <hr /><button className="is-danger" type="button" onClick={() => void openAction('delete', contextMenu.item)}><Trash2 /> Delete</button>
         </div>
       ) : null}
+
+      <ContentAttachedLinksDialog
+        open={Boolean(linkTarget)}
+        contentId={linkTarget?.id ?? null}
+        contentName={linkTarget?.name ?? ''}
+        apiBase="/api/admin/content"
+        onClose={() => setLinkTarget(null)}
+      />
 
       {/* Convert Access (Free / Paid) Dialog */}
       <AdminDialog
@@ -1235,7 +1261,7 @@ export const ContentPage: React.FC = () => {
           <div style={{ display: 'flex', gap: 12 }}>
             <button
               type="button"
-              onClick={() => { setAccessTypeDraft('FREE'); setAccessValidityModeDraft('PERMANENT'); setAccessValidityOffsetDraft('0'); }}
+              onClick={() => { setAccessTypeDraft('FREE'); setAccessDurationModeDraft('PERMANENT'); setAccessDurationValueDraft(''); setAccessDurationUnitDraft('DAYS'); }}
               style={{
                 flex: 1, padding: '12px 14px', borderRadius: 8, border: accessTypeDraft === 'FREE' ? '2px solid #2563eb' : '1px solid #cbd5e1',
                 backgroundColor: accessTypeDraft === 'FREE' ? '#eff6ff' : '#ffffff', cursor: 'pointer', textAlign: 'left', fontWeight: 600, color: accessTypeDraft === 'FREE' ? '#1e40af' : '#475569',
@@ -1281,19 +1307,19 @@ export const ContentPage: React.FC = () => {
               </label>
 
               <label className="pf-admin-field">
-                <span>Access validity</span>
-                <select value={accessValidityModeDraft} onChange={(event) => setAccessValidityModeDraft(event.target.value as 'PERMANENT' | 'EXAM_DATE_OFFSET')}>
+                <span>Access duration</span>
+                <AppSelect value={accessDurationModeDraft} onChange={(event) => setAccessDurationModeDraft(event.target.value as 'PERMANENT' | 'FIXED')}>
                   <option value="PERMANENT">Permanent access</option>
-                  <option value="EXAM_DATE_OFFSET">Exam date + days</option>
-                </select>
-                <small style={{ color: '#64748b' }}>{accessValidityModeDraft === 'PERMANENT' ? 'The learner keeps access without a resource expiry date.' : 'The server calculates expiry separately from each learner’s saved exam date.'}</small>
+                  <option value="FIXED">Fixed duration</option>
+                </AppSelect>
+                <small style={{ color: '#64748b' }}>{accessDurationModeDraft === 'PERMANENT' ? 'Lifetime access to this content.' : 'The configured period starts after successful purchase.'}</small>
               </label>
 
-              {accessValidityModeDraft === 'EXAM_DATE_OFFSET' ? (
+              {accessDurationModeDraft === 'FIXED' ? (
                 <label className="pf-admin-field">
-                  <span>Days after exam date <b style={{ color: '#dc2626' }}>*Required</b></span>
-                  <input type="number" min="0" max="3650" step="1" value={accessValidityOffsetDraft} onChange={(event) => setAccessValidityOffsetDraft(event.target.value)} />
-                  <small style={{ color: '#64748b' }}>0 means access remains valid through the exam date.</small>
+                  <span>Duration <b style={{ color: '#dc2626' }}>*Required</b></span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><input type="number" min="1" step="1" value={accessDurationValueDraft} onChange={(event) => setAccessDurationValueDraft(event.target.value)} /><AppSelect value={accessDurationUnitDraft} onChange={(event) => setAccessDurationUnitDraft(event.target.value as AccessDurationUnit)}><option value="DAYS">Days</option><option value="WEEKS">Weeks</option><option value="MONTHS">Months</option></AppSelect></div>
+                  <small style={{ color: '#64748b' }}>Expiry is calculated and stored by the server when access is activated.</small>
                 </label>
               ) : null}
 

@@ -62,6 +62,15 @@ interface AdminStudentDetailDto extends AdminStudentDto {
     expiresAt: string;
     revokedAt: string | null;
   }>;
+  deviceBinding: {
+    deviceName: string | null;
+    platform: 'ANDROID' | 'WEB' | 'IOS' | 'UNKNOWN';
+    boundAt: string;
+    lastVerifiedAt: string;
+    bindingVersion: number;
+    resetApprovedAt: string | null;
+    resetConsumedAt: string | null;
+  } | null;
   academyMemberships: Array<{
     id: string;
     academyId: string;
@@ -69,12 +78,126 @@ interface AdminStudentDetailDto extends AdminStudentDto {
     status: string;
     academy: { name: string; slug: string };
   }>;
+  performanceInsights: PerformanceInsights;
 }
+
+export interface ConceptInsight { conceptName: string; chapterName: string; examName: string; courseId: string; courseName: string; attempts: number; correct: number; wrong: number; durationMs: number; accuracyPercent: number; lastAttemptAt: string }
+export interface PerformanceInsights { minimumAttempts: number; weakConcepts: ConceptInsight[]; strongConcepts: ConceptInsight[] }
+
+export interface AcademyProfileDto {
+  onboardingStatus: string;
+  createdById?: string;
+  logoStoragePath: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AcademyContactDto {
+  id: string;
+  role: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  isPrimary: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AcademyLegalProfileDto {
+  legalName: string | null;
+  entityType: string;
+  panStatus: string;
+  pan: string | null;
+  tan: string | null;
+  gstStatus: string;
+  gstin: string | null;
+  gstState: string | null;
+  gstRegistrationType: string | null;
+  gstRegistrationDate: string | null;
+  gstCertificateStoragePath: string | null;
+  placeOfSupply: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AcademyAddressDto {
+  id: string;
+  kind: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  state: string;
+  country: string;
+  postalCode: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AcademyBillingProfileDto {
+  invoiceDisplayName: string | null;
+  invoiceEmail: string | null;
+  billingContactName: string | null;
+  billingContactPhone: string | null;
+  purchaseOrderRequired: boolean;
+  currency: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AcademyAcademicOfferingDto {
+  id: string;
+  category: string;
+  program: string | null;
+  branch: string | null;
+  batch: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AcademyCommercialProfileDto {
+  planKey: string;
+  subscriptionStatus: string;
+  startDate: string;
+  endDate: string | null;
+  studentSeatLimit: number;
+  purchasedSeats: number;
+  activeSeats: number;
+  additionalSeats: number;
+  billingCycle: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AcademyIntegrationProfileDto {
+  zohoOrganizationId: string | null;
+  zohoCustomerId: string | null;
+  zohoCustomerNumber: string | null;
+  zohoContactId: string | null;
+  zohoCustomerName: string | null;
+  zohoSyncStatus: string;
+  zohoLastSyncedAt: string | null;
+  zohoLastSyncError: string | null;
+  zohoSyncVersion: number;
+  paymentCustomerId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const EMPTY_PERFORMANCE_INSIGHTS: PerformanceInsights = {
+  minimumAttempts: 3,
+  weakConcepts: [],
+  strongConcepts: [],
+};
 
 export interface AdminAcademyDto {
   id: string;
   slug: string;
   name: string;
+  displayName?: string;
+  academyCode?: string | null;
+  academyType?: string;
+  establishedYear?: number | null;
+  socialLinks?: unknown;
   email: string;
   phone: string;
   address: string;
@@ -103,6 +226,14 @@ export interface AdminAcademyDto {
 }
 
 export interface AdminAcademyDetailDto extends AdminAcademyDto {
+  profile: AcademyProfileDto | null;
+  contacts: AcademyContactDto[];
+  legalProfile: AcademyLegalProfileDto | null;
+  addresses: AcademyAddressDto[];
+  billingProfile: AcademyBillingProfileDto | null;
+  academicOfferings: AcademyAcademicOfferingDto[];
+  commercialProfile: AcademyCommercialProfileDto | null;
+  integrationProfile: AcademyIntegrationProfileDto | null;
   metrics: {
     studentsCount: number;
     activeStudentsCount: number;
@@ -220,6 +351,18 @@ export interface AdminAcademyDetailDto extends AdminAcademyDto {
     publishedAt: string | null;
     createdAt: string;
   }>;
+  admissions: Array<{
+    id: string;
+    email: string;
+    studentName: string;
+    method: 'BULK_IMPORT' | 'QR_CODE' | 'ADMISSION_CODE';
+    status: string;
+    failureReason: string | null;
+    createdAt: string;
+    completedAt: string | null;
+    student: { id: string; fullName: string; email: string } | null;
+    batch: { id: string; fileName: string } | null;
+  }>;
   systemAuditLogs?: Array<{
     id: string;
     action: string;
@@ -246,6 +389,7 @@ export interface AdminStudentDetailViewModel extends AdminStudentViewModel {
   updatedAt: string;
   permissions: string[];
   sessions: AdminStudentDetailDto['sessions'];
+  deviceBinding: AdminStudentDetailDto['deviceBinding'];
   memberships: Array<{
     id: string;
     academyId: string;
@@ -254,12 +398,18 @@ export interface AdminStudentDetailViewModel extends AdminStudentViewModel {
     role: string;
     status: string;
   }>;
+  performanceInsights: PerformanceInsights;
 }
 
 export interface AdminAcademyViewModel {
   id: string;
   slug: string;
   name: string;
+  displayName: string;
+  academyCode: string | null;
+  academyType: string;
+  establishedYear: number | null;
+  socialLinks: unknown;
   email: string;
   phone: string;
   address: string;
@@ -289,6 +439,14 @@ export interface AdminAcademyViewModel {
 }
 
 export interface AdminAcademyDetailViewModel extends AdminAcademyViewModel {
+  profile: AdminAcademyDetailDto['profile'];
+  contacts: AdminAcademyDetailDto['contacts'];
+  legalProfile: AdminAcademyDetailDto['legalProfile'];
+  addresses: AdminAcademyDetailDto['addresses'];
+  billingProfile: AdminAcademyDetailDto['billingProfile'];
+  academicOfferings: AdminAcademyDetailDto['academicOfferings'];
+  commercialProfile: AdminAcademyDetailDto['commercialProfile'];
+  integrationProfile: AdminAcademyDetailDto['integrationProfile'];
   metrics: AdminAcademyDetailDto['metrics'];
   administrator: AdminAcademyDetailDto['administrator'];
   admins: AdminAcademyDetailDto['admins'];
@@ -307,10 +465,11 @@ export interface AdminAcademyDetailViewModel extends AdminAcademyViewModel {
   packages: AdminAcademyDetailDto['packages'];
   orders: AdminAcademyDetailDto['orders'];
   broadcasts: AdminAcademyDetailDto['broadcasts'];
+  admissions: AdminAcademyDetailDto['admissions'];
   systemAuditLogs: NonNullable<AdminAcademyDetailDto['systemAuditLogs']>;
 }
 
-export type AdminAcademyDetailResource = 'students' | 'courses' | 'content' | 'questions' | 'broadcasts' | 'audit';
+export type AdminAcademyDetailResource = 'students' | 'courses' | 'content' | 'questions' | 'broadcasts' | 'admissions' | 'audit';
 
 export interface AdminAcademyDetailResourceMap {
   students: AdminAcademyDetailDto['students'][number];
@@ -318,6 +477,7 @@ export interface AdminAcademyDetailResourceMap {
   content: AdminAcademyDetailDto['contentItems'][number];
   questions: AdminAcademyDetailDto['questions'][number];
   broadcasts: AdminAcademyDetailDto['broadcasts'][number];
+  admissions: AdminAcademyDetailDto['admissions'][number];
   audit: NonNullable<AdminAcademyDetailDto['systemAuditLogs']>[number];
 }
 
@@ -348,6 +508,8 @@ export const adminReadOnlyKeys = {
     ['admin', userId, 'academies', 'detail', academyId, resource, page] as const,
   entitlementResources: (userId: string, resourceType: EntitlementResourceType) =>
     ['admin', userId, 'entitlement-resources', resourceType] as const,
+  studentGrantCatalog: (userId: string, studentId: string, courseId?: string) =>
+    ['admin', userId, 'students', studentId, 'grant-access', courseId ?? 'courses'] as const,
 };
 
 export function adaptAdminStudent(dto: AdminStudentDto): AdminStudentViewModel {
@@ -369,6 +531,11 @@ export function adaptAdminAcademy(dto: AdminAcademyDto): AdminAcademyViewModel {
     id: dto.id,
     slug: dto.slug,
     name: dto.name,
+    displayName: dto.displayName || dto.name,
+    academyCode: dto.academyCode ?? null,
+    academyType: dto.academyType || 'OTHER',
+    establishedYear: dto.establishedYear ?? null,
+    socialLinks: dto.socialLinks ?? null,
     email: dto.email,
     phone: dto.phone,
     address: dto.address,
@@ -427,6 +594,7 @@ export async function fetchAdminStudent(studentId: string, signal?: AbortSignal)
     updatedAt: result.updatedAt,
     permissions: result.role.rolePermissions.map(({ permission }) => permission.key),
     sessions: result.sessions,
+    deviceBinding: result.deviceBinding,
     memberships: result.academyMemberships.map((membership) => ({
       id: membership.id,
       academyId: membership.academyId,
@@ -435,7 +603,24 @@ export async function fetchAdminStudent(studentId: string, signal?: AbortSignal)
       role: membership.role,
       status: membership.status,
     })),
+    performanceInsights: result.performanceInsights ?? EMPTY_PERFORMANCE_INSIGHTS,
   };
+}
+
+export async function approveAdminStudentDeviceReset(studentId: string) {
+  return apiRequest<{
+    userId: string;
+    state: 'AWAITING_FIRST_BINDING' | 'RESET_APPROVED';
+    deviceName: string | null;
+    platform: string | null;
+    resetApprovedAt: string | null;
+    expiresAt: string | null;
+    message: string;
+  }>(`/api/admin/students/${encodeURIComponent(studentId)}/device-reset/approve`, { method: 'POST' });
+}
+
+export async function permanentlyDeleteAdminStudent(studentId: string) {
+  return apiRequest(`/api/admin/students/${encodeURIComponent(studentId)}`, { method: 'DELETE', body: { confirmation: 'PERMANENTLY DELETE' } });
 }
 
 export async function fetchAdminAcademiesSummary(signal?: AbortSignal): Promise<AdminAcademySummaryDto> {
@@ -459,6 +644,14 @@ export async function fetchAdminAcademy(academyId: string, signal?: AbortSignal)
   const base = adaptAdminAcademy(result);
   return {
     ...base,
+    profile: result.profile ?? null,
+    contacts: result.contacts || [],
+    legalProfile: result.legalProfile ?? null,
+    addresses: result.addresses || [],
+    billingProfile: result.billingProfile ?? null,
+    academicOfferings: result.academicOfferings || [],
+    commercialProfile: result.commercialProfile ?? null,
+    integrationProfile: result.integrationProfile ?? null,
     metrics: result.metrics,
     administrator: result.administrator ?? {
       id: null,
@@ -485,6 +678,7 @@ export async function fetchAdminAcademy(academyId: string, signal?: AbortSignal)
     packages: result.packages || [],
     orders: result.orders || [],
     broadcasts: result.broadcasts || [],
+    admissions: result.admissions || [],
     systemAuditLogs: result.systemAuditLogs || [],
   };
 }
@@ -628,7 +822,7 @@ export function useUpdateAdminAcademyStatus(userId: string | null) {
 // Student Session & Entitlement Management APIs
 // ---------------------------------------------------------------------------
 
-export type EntitlementResourceType = 'COURSE' | 'PACKAGE' | 'LESSON' | 'PREMIUM_NOTES' | 'SUBJECT' | 'OTHER';
+export type EntitlementResourceType = 'COURSE' | 'PACKAGE' | 'QUESTION_BANK' | 'LESSON' | 'PREMIUM_NOTES' | 'SUBJECT' | 'OTHER';
 
 export interface AdminEntitlementDto {
   id: string;
@@ -637,8 +831,11 @@ export interface AdminEntitlementDto {
   resourceTitle: string;
   accessType: 'PERMANENT' | 'TIME_LIMITED';
   status: 'ACTIVE' | 'EXPIRED' | 'REVOKED';
+  source: 'PURCHASE' | 'ADMIN_GRANT' | 'SUBSCRIPTION' | 'PROMOTION';
   grantedAt: string;
   expiresAt: string | null;
+  revokedAt: string | null;
+  course: { id: string; name: string } | null;
 }
 
 export interface AdminEntitlementResourceDto {
@@ -648,24 +845,11 @@ export interface AdminEntitlementResourceDto {
   subtitle: string;
 }
 
-export interface GrantEntitlementInput {
-  userId: string;
-  resourceType: EntitlementResourceType;
-  contentItemId?: string;
-  packageId?: string;
-  subjectId?: string;
-  courseId?: string;
-  resourceTitle: string;
-  accessType?: 'PERMANENT' | 'TIME_LIMITED';
-  expiresAt?: string;
-  reason: string;
-}
-
 export async function fetchAdminEntitlements(
   userId: string,
   signal?: AbortSignal,
 ): Promise<AdminEntitlementDto[]> {
-  const query = queryString({ userId });
+  const query = queryString({ userId, source: 'ADMIN_GRANT' });
   const result = await apiRequest<PageDto<AdminEntitlementDto>>(`/api/admin/entitlements?${query}`, { signal });
   return result.data;
 }
@@ -679,13 +863,35 @@ export async function fetchAdminEntitlementResources(
   return result.data;
 }
 
-export async function mutateGrantEntitlement(
-  input: GrantEntitlementInput,
-): Promise<AdminEntitlementDto> {
-  return apiRequest<AdminEntitlementDto>('/api/admin/entitlements', {
-    method: 'POST',
-    body: input,
-  });
+export type GrantAccessCategory = 'notes' | 'questionBanks' | 'bundles' | 'subscriptions';
+
+export interface AdminGrantAccessResourceDto {
+  id: string;
+  title: string;
+  subtitle: string;
+}
+
+export interface AdminGrantAccessCatalogDto {
+  studentId: string;
+  courses: Array<{ id: string; name: string; code: string }>;
+  selectedCourseId: string | null;
+  resources: Record<GrantAccessCategory, AdminGrantAccessResourceDto[]> | null;
+  activeManualGrantIds: Record<GrantAccessCategory, string[]> | null;
+}
+
+export interface GrantStudentAccessInput {
+  courseId: string;
+  selections: Record<GrantAccessCategory, string[]>;
+  expiresAt?: string | null;
+}
+
+export async function fetchAdminGrantAccessCatalog(studentId: string, courseId?: string, signal?: AbortSignal, scope: 'admin' | 'academy' = 'admin') {
+  const query = queryString({ courseId });
+  return apiRequest<AdminGrantAccessCatalogDto>(`/api/${scope}/students/${encodeURIComponent(studentId)}/grant-access/catalog${query ? `?${query}` : ''}`, { signal });
+}
+
+export async function mutateGrantStudentAccess(studentId: string, input: GrantStudentAccessInput, scope: 'admin' | 'academy' = 'admin') {
+  return apiRequest<{ grantedCount: number; alreadyActiveCount: number; entitlements: AdminEntitlementDto[] }>(`/api/${scope}/students/${encodeURIComponent(studentId)}/grant-access`, { method: 'POST', body: input });
 }
 
 export async function mutateRevokeEntitlement(
@@ -733,14 +939,22 @@ export function useAdminEntitlementResources(
   });
 }
 
-export function useGrantEntitlement(userId: string | null) {
+export function useAdminGrantAccessCatalog(userId: string | null, studentId: string, courseId?: string, enabled = true, scope: 'admin' | 'academy' = 'admin') {
+  return useQuery({
+    queryKey: [scope, userId ?? 'anonymous', 'students', studentId, 'grant-access', courseId ?? 'courses'],
+    queryFn: ({ signal }) => fetchAdminGrantAccessCatalog(studentId, courseId, signal, scope),
+    enabled: Boolean(userId && studentId && enabled),
+    staleTime: 15_000,
+  });
+}
+
+export function useGrantStudentAccess(userId: string | null, studentId: string, scope: 'admin' | 'academy' = 'admin') {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: GrantEntitlementInput) => mutateGrantEntitlement(input),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ['admin', userId ?? 'anonymous', 'entitlements', variables.userId],
-      });
+    mutationFn: (input: GrantStudentAccessInput) => mutateGrantStudentAccess(studentId, input, scope),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [scope, userId ?? 'anonymous', 'entitlements', studentId] });
+      queryClient.invalidateQueries({ queryKey: [scope, userId ?? 'anonymous', 'students', studentId, 'grant-access'] });
     },
   });
 }
@@ -796,8 +1010,22 @@ export interface CreateAcademyInput {
   adminPhone?: string;
 }
 
-export async function mutateCreateAdminAcademy(input: CreateAcademyInput) {
-  return apiRequest<{ academy: AdminAcademyDto }>('/api/admin/academies', {
+export interface AcademyProvisioningInput {
+  requestKey: string;
+  academy: { name: string; displayName: string; type: 'CA_COACHING' | 'COMMERCE_COACHING' | 'SCHOOL' | 'COLLEGE' | 'UNIVERSITY' | 'PROFESSIONAL_COACHING' | 'COMPETITIVE_EXAM' | 'OTHER' | (string & {}); email: string; phone: string; website?: string; description?: string; establishedYear?: number; socialLinks?: Record<string, string>; logoUploadId?: string };
+  primaryAdmin: { fullName: string; email: string; mobile: string };
+  contacts: Array<{ role: 'OWNER' | 'DIRECTOR' | 'ACADEMIC_HEAD' | 'OPERATIONS_MANAGER' | 'FINANCE' | 'IT_ADMIN' | 'OTHER' | (string & {}); fullName: string; email?: string; phone?: string }>;
+  legal: { legalName?: string; entityType: 'INDIVIDUAL' | 'PARTNERSHIP' | 'LLP' | 'PRIVATE_LIMITED' | 'PUBLIC_LIMITED' | 'TRUST' | 'SOCIETY' | 'EDUCATIONAL_INSTITUTION' | 'OTHER' | 'NOT_APPLICABLE' | (string & {}); panStatus: 'AVAILABLE' | 'NOT_AVAILABLE' | 'NOT_APPLICABLE' | 'OTHER' | (string & {}); pan?: string; tan?: string; gstStatus: 'YES' | 'NO' | 'NOT_APPLICABLE' | 'OTHER' | (string & {}); gstin?: string; gstState?: string; gstRegistrationType?: 'REGULAR' | 'COMPOSITION' | 'OTHER' | (string & {}); gstRegistrationDate?: string; gstCertificateUploadId?: string; placeOfSupply?: string };
+  addresses: { academy: AcademyProvisioningAddress; billingSameAsAcademy: boolean; billing?: AcademyProvisioningAddress };
+  billing: { invoiceDisplayName?: string; invoiceEmail?: string; billingContactName?: string; billingContactPhone?: string; purchaseOrderRequired: boolean; currency: string };
+  academic: { categories: string[]; programs: string[]; initialBranch?: string; initialBatch?: string };
+  commercial: { planKey: string; subscriptionStatus: 'TRIAL' | 'ACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'CANCELLED' | 'OTHER' | (string & {}); startDate: string; endDate?: string; studentSeatLimit: number; billingCycle: 'MONTHLY' | 'ANNUAL' | 'CUSTOM' | 'OTHER' | (string & {}) };
+}
+export interface AcademyProvisioningAddress { addressLine1: string; addressLine2?: string; city: string; state: string; country: string; postalCode: string }
+export interface AcademyProvisioningResult { academy: AdminAcademyDto & { code: string; onboardingStatus: string }; administratorId: string; membershipId: string; invitationQueued: boolean }
+
+export async function mutateCreateAdminAcademy(input: CreateAcademyInput | AcademyProvisioningInput) {
+  return apiRequest<AcademyProvisioningResult>('/api/admin/academies', {
     method: 'POST',
     body: input,
   });
@@ -819,7 +1047,7 @@ export async function mutateAcademyLifecycle(academyId: string, action: 'activat
 export function useCreateAdminAcademy(userId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateAcademyInput) => mutateCreateAdminAcademy(input),
+    mutationFn: (input: CreateAcademyInput | AcademyProvisioningInput) => mutateCreateAdminAcademy(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', userId ?? 'anonymous', 'academies'] });
     },

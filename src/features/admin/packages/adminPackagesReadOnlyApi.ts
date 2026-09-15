@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api/client';
-import type { LearningPackage, PackageInput, PackageStatus } from './types/package';
+import type { AccessDurationUnit, LearningPackage, PackageInput, PackageStatus } from './types/package';
 
 export interface BackendPackageDto {
   id: string;
@@ -9,6 +9,8 @@ export interface BackendPackageDto {
   slug: string;
   description: string;
   price: number | string;
+  accessDurationValue?: number | null;
+  accessDurationUnit?: AccessDurationUnit | null;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   createdAt: string;
   updatedAt: string;
@@ -27,6 +29,21 @@ export interface BackendPackageDto {
       status: string;
       kind?: string;
       size?: number;
+    };
+  }>;
+  questionBanks?: Array<{
+    questionBankId: string;
+    displayOrder: number;
+    addedAt?: string;
+    questionBank: {
+      id: string;
+      name: string;
+      slug: string;
+      description?: string | null;
+      accessType: 'FREE' | 'PAID';
+      status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+      price: number | string;
+      _count?: { questions?: number };
     };
   }>;
 }
@@ -58,6 +75,8 @@ export function adaptBackendPackage(dto: BackendPackageDto): LearningPackage {
     slug: dto.slug || dto.id,
     description: dto.description || '',
     price: numPrice,
+    accessDurationValue: dto.accessDurationValue ?? null,
+    accessDurationUnit: dto.accessDurationUnit ?? null,
     status: (dto.status === 'PUBLISHED' ? 'published' : dto.status === 'ARCHIVED' ? 'archived' : 'draft'),
     courseId: dto.courseId,
     coverImageId: null,
@@ -65,6 +84,21 @@ export function adaptBackendPackage(dto: BackendPackageDto): LearningPackage {
       contentItemId: item.contentItemId,
       addedAt: item.addedAt || new Date().toISOString(),
       displayOrder: item.displayOrder ?? 0,
+    })),
+    questionBanks: (dto.questionBanks ?? []).map((reference) => ({
+      questionBankId: reference.questionBankId,
+      displayOrder: reference.displayOrder ?? 0,
+      addedAt: reference.addedAt || new Date().toISOString(),
+      questionBank: {
+        id: reference.questionBank.id,
+        name: reference.questionBank.name,
+        slug: reference.questionBank.slug,
+        description: reference.questionBank.description || '',
+        accessType: reference.questionBank.accessType,
+        status: reference.questionBank.status,
+        price: typeof reference.questionBank.price === 'number' ? reference.questionBank.price : parseFloat(reference.questionBank.price) || 0,
+        questionCount: reference.questionBank._count?.questions ?? 0,
+      },
     })),
     createdAt: dto.createdAt || new Date().toISOString(),
     updatedAt: dto.updatedAt || new Date().toISOString(),
@@ -110,8 +144,11 @@ export async function createAdminPackage(input: PackageInput): Promise<LearningP
       title: input.title,
       description: input.description,
       price: input.price,
+      accessDurationValue: input.accessDurationValue ?? null,
+      accessDurationUnit: input.accessDurationUnit ?? null,
       status: input.status === 'published' ? 'PUBLISHED' : 'DRAFT',
       contentItemIds: input.contentItemIds,
+      questionBankIds: input.questionBankIds,
     },
   });
   return adaptBackendPackage(dto);
@@ -124,8 +161,11 @@ export async function updateAdminPackage(packageId: string, input: PackageInput)
       title: input.title,
       description: input.description,
       price: input.price,
+      accessDurationValue: input.accessDurationValue ?? null,
+      accessDurationUnit: input.accessDurationUnit ?? null,
       status: input.status === 'published' ? 'PUBLISHED' : input.status === 'archived' ? 'ARCHIVED' : 'DRAFT',
       contentItemIds: input.contentItemIds,
+      questionBankIds: input.questionBankIds,
     },
   });
   return adaptBackendPackage(dto);
