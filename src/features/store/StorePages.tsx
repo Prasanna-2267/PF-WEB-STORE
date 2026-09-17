@@ -76,9 +76,11 @@ import {
   checkoutKeys,
   completeFakePayment,
   createStoreCheckout,
+  previewStoreCheckout,
   useStoreEntitlements,
   useStoreOrders,
   useStoreReceipt,
+  type CheckoutQuote,
   type CheckoutResponse,
   type StoreReceipt,
 } from './data/checkoutApi';
@@ -844,6 +846,8 @@ export const StoreCheckoutPage: React.FC = () => {
   const [integrationMessage, setIntegrationMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [couponCode, setCouponCode] = useState('');
+  const [couponQuote, setCouponQuote] = useState<CheckoutQuote | null>(null);
+  const [couponMessage, setCouponMessage] = useState('');
   const [createdOrder, setCreatedOrder] = useState<CheckoutResponse | null>(null);
   const catalog = useCompleteStoreCatalog();
   const directKey = searchParams.get('product') || '';
@@ -852,10 +856,44 @@ export const StoreCheckoutPage: React.FC = () => {
   const products = directProduct ? [directProduct] : itemIds.map((id) => catalogById.get(id)).filter((product): product is StoreProduct => Boolean(product));
   const validProducts = products.filter((product) => !user?.enrolledCourse || product.course === user.enrolledCourse.slug);
   const total = validProducts.reduce((sum, product) => sum + product.price, 0);
+  const checkoutItemKey = validProducts.map((product) => `${product.productType}:${product.id}`).sort().join('|');
   const pendingReceipt = useStoreReceipt(createdOrder?.orderId ?? '');
-  const checkoutSubtotal = createdOrder?.subtotal ?? total;
-  const checkoutDiscount = createdOrder?.discountAmount ?? 0;
-  const checkoutTotal = createdOrder?.totalAmount ?? total;
+  const checkoutSubtotal = createdOrder?.subtotal ?? couponQuote?.subtotal ?? total;
+  const checkoutDiscount = createdOrder?.discountAmount ?? couponQuote?.discountAmount ?? 0;
+  const checkoutTotal = createdOrder?.totalAmount ?? couponQuote?.totalAmount ?? total;
+
+  useEffect(() => {
+    if (createdOrder) return undefined;
+    const code = couponCode.trim();
+    setCouponQuote(null);
+    if (!code) {
+      setCouponMessage('');
+      return undefined;
+    }
+    if (code.length < 3 || !validProducts.length) {
+      setCouponMessage(code.length < 3 ? 'Enter at least 3 characters.' : '');
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setCouponMessage('Checking coupon…');
+    const timeout = window.setTimeout(() => {
+      void previewStoreCheckout(validProducts, code, controller.signal)
+        .then((quote) => {
+          setCouponQuote(quote);
+          setCouponMessage(quote.discountAmount > 0 ? `${quote.couponCode ?? code} applied successfully.` : 'This coupon does not change the current total.');
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted) return;
+          setCouponQuote(null);
+          setCouponMessage(error instanceof Error ? error.message : 'This coupon could not be applied.');
+        });
+    }, 450);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [checkoutItemKey, couponCode, createdOrder]);
 
   const submitCheckout = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -897,7 +935,7 @@ export const StoreCheckoutPage: React.FC = () => {
           <div className="pf-store-checkout-layout">
             <form onSubmit={submitCheckout} className="pf-store-checkout-form">
               <section><span className="pf-store-checkout-step">01</span><div><h2>Account</h2><p>Purchases are attached to the same identity used in the Android app.</p><div className="pf-store-identity"><span>{user?.fullName?.charAt(0) || 'P'}</span><p><strong>{user?.fullName}</strong><small>{user?.email}</small></p><CheckCircle2 size={18} /></div></div></section>
-              <section><span className="pf-store-checkout-step">02</span><div><h2>Order details</h2><p>Your receipt and access are attached to this account. A coupon is optional.</p><div className="pf-store-form-grid"><label>Full name<input value={user?.fullName ?? ''} readOnly /></label><label>Email address<input value={user?.email ?? ''} readOnly /></label><label className="is-wide">Coupon code<input value={couponCode} onChange={(event) => setCouponCode(event.target.value.toUpperCase())} disabled={Boolean(createdOrder)} placeholder="Optional" /></label><label className="is-wide"><span><input type="checkbox" required /> I confirm this is a test purchase with no real payment.</span></label></div></div></section>
+              <section><span className="pf-store-checkout-step">02</span><div><h2>Order details</h2><p>Your receipt and access are attached to this account. A coupon is optional.</p><div className="pf-store-form-grid"><label>Full name<input value={user?.fullName ?? ''} readOnly /></label><label>Email address<input value={user?.email ?? ''} readOnly /></label><label className="is-wide">Coupon code<input value={couponCode} onChange={(event) => setCouponCode(event.target.value.toUpperCase())} disabled={Boolean(createdOrder)} placeholder="Optional" />{couponMessage ? <small role="status" style={{ color: couponQuote?.discountAmount ? '#15803d' : '#64748b', marginTop: 6 }}>{couponMessage}</small> : null}</label><label className="is-wide"><span><input type="checkbox" required /> I confirm this is a test purchase with no real payment.</span></label></div></div></section>
               <section><span className="pf-store-checkout-step">03</span><div><h2>{createdOrder ? 'Test payment' : 'Create order'}</h2><p>{createdOrder ? 'The order is stored. Complete the simulated paid transition to grant app access.' : 'The server verifies current prices before creating the order.'}</p><div className="pf-store-payment-placeholder"><CreditCard size={22} /><p><strong>{createdOrder ? 'Parallax test payment' : 'Server-verified order'}</strong><span>{createdOrder ? `${createdOrder.orderNumber} · ${formatPrice(createdOrder.totalAmount)}` : 'No card or banking details are collected.'}</span></p><ShieldCheck size={20} /></div>{integrationMessage && <div className="pf-store-integration-message" role="status">{integrationMessage}</div>}<button className="pf-store-button pf-store-button--dark pf-store-button--wide" type="submit" disabled={submitting}>{submitting ? 'Processing…' : createdOrder ? 'Complete fake payment' : 'Place test order'} <ArrowRight size={16} /></button></div></section>
             </form>
             <aside className="pf-store-checkout-summary">
@@ -908,10 +946,10 @@ export const StoreCheckoutPage: React.FC = () => {
               )) : validProducts.map((product) => <article key={product.id}><div><strong>{product.title}</strong><span>{product.subject} · {getProductTypeLabel(product.productType)}</span></div><span>×1</span><b>{formatPrice(product.price)}</b></article>)}
               <div className="pf-store-checkout-summary__totals">
                 <div><span>Actual amount</span><strong>{formatPrice(checkoutSubtotal)}</strong></div>
-                <div className={checkoutDiscount > 0 ? 'is-discount' : ''}><span>Coupon discount{createdOrder && couponCode ? ` (${couponCode})` : ''}</span><strong>{checkoutDiscount > 0 ? `−${formatPrice(checkoutDiscount)}` : formatPrice(0)}</strong></div>
+                <div className={checkoutDiscount > 0 ? 'is-discount' : ''}><span>Coupon discount{checkoutDiscount > 0 && couponCode ? ` (${couponCode})` : ''}</span><strong>{checkoutDiscount > 0 ? `−${formatPrice(checkoutDiscount)}` : formatPrice(0)}</strong></div>
                 <div className="is-total"><span>Amount payable</span><strong>{formatPrice(checkoutTotal)}</strong></div>
               </div>
-              <small><LockKeyhole size={13} /> {createdOrder ? 'Prices and coupon discount verified by the server.' : 'Place the order to validate current prices and coupon discount before payment.'}</small>
+              <small><LockKeyhole size={13} /> {createdOrder || couponQuote ? 'Prices and coupon discount verified by the server.' : 'Enter a coupon to preview server-verified pricing before payment.'}</small>
             </aside>
           </div>
         )}

@@ -34,6 +34,9 @@ interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
 
 let refreshPromise: Promise<AuthResult> | null = null;
 let terminalAuthFailureHandler: (() => void) | null = null;
+let refreshRetryAfter = 0;
+let transientRefreshError: unknown = null;
+let transientRefreshToken: string | null = null;
 
 export function setTerminalAuthFailureHandler(handler: (() => void) | null): void {
   terminalAuthFailureHandler = handler;
@@ -89,12 +92,25 @@ async function rawRefresh(): Promise<AuthResult> {
 }
 
 async function refreshSession(): Promise<AuthResult> {
+  if (!refreshPromise && transientRefreshError && transientRefreshToken === getSessionCredentials()?.refreshToken && Date.now() < refreshRetryAfter) {
+    throw transientRefreshError;
+  }
   refreshPromise ??= rawRefresh().finally(() => { refreshPromise = null; });
   try {
-    return await refreshPromise;
+    const result = await refreshPromise;
+    refreshRetryAfter = 0;
+    transientRefreshError = null;
+    transientRefreshToken = null;
+    return result;
   } catch (error) {
-    clearSessionCredentials();
-    terminalAuthFailureHandler?.();
+    if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+      clearSessionCredentials();
+      terminalAuthFailureHandler?.();
+    } else {
+      transientRefreshError = error;
+      transientRefreshToken = getSessionCredentials()?.refreshToken ?? null;
+      refreshRetryAfter = Date.now() + 15_000;
+    }
     throw error;
   }
 }

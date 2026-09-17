@@ -15,6 +15,14 @@ export interface CheckoutResponse {
   checkoutUrl?: string;
 }
 
+export interface CheckoutQuote {
+  currency: 'INR';
+  subtotal: number;
+  discountAmount: number;
+  totalAmount: number;
+  couponCode: string | null;
+}
+
 export interface PaidOrderResponse {
   orderId: string;
   orderNumber: string;
@@ -83,15 +91,28 @@ export const checkoutKeys = {
   orders: ['student', 'store', 'orders'] as const,
 };
 
+const checkoutItems = (products: StoreProduct[]) => products.map((product) => ({
+  resourceType: product.productType === 'question-bank' ? 'QUESTION_BANK' : product.productType === 'bundle' ? 'PACKAGE' : 'CONTENT',
+  resourceId: product.id,
+}));
+
+export function previewStoreCheckout(products: StoreProduct[], couponCode: string, signal?: AbortSignal) {
+  return apiRequest<CheckoutQuote>('/api/checkout/quote', {
+    method: 'POST',
+    signal,
+    body: {
+      items: checkoutItems(products),
+      couponCode: couponCode.trim(),
+    },
+  });
+}
+
 export function createStoreCheckout(products: StoreProduct[], couponCode?: string) {
   return apiRequest<CheckoutResponse>('/api/checkout', {
     method: 'POST',
     idempotencyKey: requestKey('checkout'),
     body: {
-      items: products.map((product) => ({
-        resourceType: product.productType === 'question-bank' ? 'QUESTION_BANK' : product.productType === 'bundle' ? 'PACKAGE' : 'CONTENT',
-        resourceId: product.id,
-      })),
+      items: checkoutItems(products),
       ...(couponCode?.trim() ? { couponCode: couponCode.trim() } : {}),
     },
   });

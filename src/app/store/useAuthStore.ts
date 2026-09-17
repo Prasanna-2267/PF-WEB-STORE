@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { authService } from '@/services/auth.service';
 import { clearSessionCredentials, getSessionCredentials, setSessionCredentials } from '@/lib/api/credentials';
-import { setTerminalAuthFailureHandler } from '@/lib/api/client';
+import { ApiError, setTerminalAuthFailureHandler } from '@/lib/api/client';
 import { queryClient } from '@/lib/queryClient';
 import type { AuthResult, AuthUser, UserRole } from '@/lib/api/contracts';
 
@@ -26,6 +26,12 @@ export const isAuthorizedSuperAdmin = (user: UserProfile | null | undefined): bo
   user?.role === 'super_admin' && user.permissions.includes('overview:read');
 
 type AuthStatus = 'restoring' | 'authenticated' | 'anonymous';
+let bootstrapRetryTimer: number | null = null;
+
+function cancelBootstrapRetry(): void {
+  if (bootstrapRetryTimer !== null && typeof window !== 'undefined') window.clearTimeout(bootstrapRetryTimer);
+  bootstrapRetryTimer = null;
+}
 
 interface AuthState {
   user: UserProfile | null;
@@ -39,6 +45,7 @@ interface AuthState {
 }
 
 function clearLocalSession(): void {
+  cancelBootstrapRetry();
   clearSessionCredentials();
   queryClient.clear();
   useAuthStore.setState({ user: null, status: 'anonymous', initialized: true, isAuthenticated: false });
@@ -62,6 +69,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
 
   completeAuthentication: (result) => {
+    cancelBootstrapRetry();
     setSessionCredentials({
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
@@ -81,8 +89,18 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const { user } = await authService.session();
       set({ user, status: 'authenticated', initialized: true, isAuthenticated: true });
-    } catch {
-      clearLocalSession();
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        clearLocalSession();
+        return;
+      }
+      set({ status: 'restoring', initialized: false });
+      if (typeof window !== 'undefined' && bootstrapRetryTimer === null) {
+        bootstrapRetryTimer = window.setTimeout(() => {
+          bootstrapRetryTimer = null;
+          void useAuthStore.getState().bootstrap();
+        }, 15_000);
+      }
     }
   },
 

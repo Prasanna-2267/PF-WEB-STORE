@@ -36,6 +36,19 @@ describe('authentication store', () => {
     expect(useAuthStore.getState().user).toEqual(changed);
   });
 
+  it('does not erase stored credentials during a temporary session restore outage', async () => {
+    vi.useFakeTimers();
+    setSessionCredentials({ accessToken: 'access', refreshToken: 'keep-refresh', expiresAt: Date.now() + 60_000 });
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));
+
+    await useAuthStore.getState().bootstrap();
+
+    expect(getSessionCredentials()?.refreshToken).toBe('keep-refresh');
+    expect(useAuthStore.getState()).toMatchObject({ status: 'restoring', initialized: false });
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
   it('clears local credentials even when server logout fails', async () => {
     useAcademyTenantStore.setState({ activeAcademyId: 'academy-a', status: 'ready' });
     useAuthStore.getState().completeAuthentication({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 60, tokenType: 'Bearer', user: serverUser });

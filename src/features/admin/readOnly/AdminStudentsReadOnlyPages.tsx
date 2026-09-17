@@ -311,6 +311,7 @@ export const AdminStudentReadOnlyDetailPage: React.FC = () => {
   const [revokeEntitlementTarget, setRevokeEntitlementTarget] = useState<{ id: string; title: string } | null>(null);
   const [revokeEntitlementReason, setRevokeEntitlementReason] = useState('');
   const [governanceBusy, setGovernanceBusy] = useState(false);
+  const [deviceApprovalOpen, setDeviceApprovalOpen] = useState(false);
   const [deviceGovernanceNotice, setDeviceGovernanceNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
 
   if (query.isPending) return <AdminSkeleton rows={8} variant="detail" label="Loading Super Admin student" />;
@@ -531,7 +532,28 @@ export const AdminStudentReadOnlyDetailPage: React.FC = () => {
         </div>
 
         <aside className="pf-admin-detail-side">
-          <section className="pf-admin-card"><h2>Device governance</h2><p className="pf-admin-muted-copy">A reset approval can be consumed once when this learner moves to a replacement phone. If no phone is linked yet, the next successful mobile login becomes the approved device.</p>{!student.deviceBinding ? <p role="status" style={{ color: '#047857', fontSize: 13 }}>No device is currently linked. No approval is required; the next successful mobile login will securely establish the approved device.</p> : <p className="pf-admin-muted-copy" style={{ fontSize: 13 }}>Linked device: <strong>{student.deviceBinding.deviceName || student.deviceBinding.platform}</strong> · Last verified {formatDate(student.deviceBinding.lastVerifiedAt)}</p>}{deviceGovernanceNotice ? <p role={deviceGovernanceNotice.tone === 'error' ? 'alert' : 'status'} style={{ color: deviceGovernanceNotice.tone === 'error' ? '#dc2626' : '#047857', fontSize: 13 }}>{deviceGovernanceNotice.message}</p> : null}<button className="pf-admin-button pf-admin-button--secondary" type="button" disabled={governanceBusy || !student.deviceBinding} title={!student.deviceBinding ? 'The learner has no linked device to replace.' : undefined} onClick={async () => { if (!student.deviceBinding || !window.confirm('Approve one device change for this student?')) return; setGovernanceBusy(true); setDeviceGovernanceNotice(null); try { const result = await approveAdminStudentDeviceReset(student.id); setDeviceGovernanceNotice({ tone: 'success', message: result.message }); await query.refetch(); } catch (error) { setDeviceGovernanceNotice({ tone: 'error', message: error instanceof Error ? error.message : 'The device change could not be approved.' }); } finally { setGovernanceBusy(false); } }}>{governanceBusy ? 'Approving…' : student.deviceBinding ? 'Approve device change' : 'Awaiting first device login'}</button><button className="pf-admin-button pf-admin-button--danger" type="button" disabled={governanceBusy} onClick={async () => { if (window.prompt('Type PERMANENTLY DELETE to anonymise this student and remove learning data.') !== 'PERMANENTLY DELETE') return; setGovernanceBusy(true); try { await permanentlyDeleteAdminStudent(student.id); navigate(ROUTES.ADMIN_STUDENTS, { replace: true }); } finally { setGovernanceBusy(false); } }}>Permanently delete</button></section>
+          <section className="pf-admin-card">
+            <h2>Device governance</h2>
+            <p className="pf-admin-muted-copy">A reset approval can be consumed once when this learner moves to a replacement phone. If no phone is linked yet, the next successful mobile login becomes the approved device.</p>
+            {!student.deviceBinding ? (
+              <p role="status" style={{ color: '#047857', fontSize: 13 }}>No device is currently linked. No approval is required; the next successful mobile login will securely establish the approved device.</p>
+            ) : (
+              <p className="pf-admin-muted-copy" style={{ fontSize: 13 }}>Linked device: <strong>{student.deviceBinding.deviceName || student.deviceBinding.platform}</strong> · Last verified {formatDate(student.deviceBinding.lastVerifiedAt)}</p>
+            )}
+            {deviceGovernanceNotice ? (
+              <p role={deviceGovernanceNotice.tone === 'error' ? 'alert' : 'status'} style={{ color: deviceGovernanceNotice.tone === 'error' ? '#dc2626' : '#047857', fontSize: 13 }}>{deviceGovernanceNotice.message}</p>
+            ) : null}
+            <button
+              className="pf-admin-button pf-admin-button--secondary"
+              type="button"
+              disabled={governanceBusy || !student.deviceBinding}
+              title={!student.deviceBinding ? 'The learner has no linked device to replace.' : undefined}
+              onClick={() => setDeviceApprovalOpen(true)}
+            >
+              {governanceBusy ? 'Approving…' : student.deviceBinding ? 'Approve device change' : 'Awaiting first device login'}
+            </button>
+            <button className="pf-admin-button pf-admin-button--danger" type="button" disabled={governanceBusy} onClick={async () => { if (window.prompt('Type PERMANENTLY DELETE to anonymise this student and remove learning data.') !== 'PERMANENTLY DELETE') return; setGovernanceBusy(true); try { await permanentlyDeleteAdminStudent(student.id); navigate(ROUTES.ADMIN_STUDENTS, { replace: true }); } finally { setGovernanceBusy(false); } }}>Permanently delete</button>
+          </section>
           <section className="pf-admin-card">
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Account record</h2>
             <p className="pf-admin-muted-copy" style={{ margin: '6px 0', fontSize: 14 }}>Phone: <strong>{student.phone || 'Unavailable'}</strong></p>
@@ -552,6 +574,54 @@ export const AdminStudentReadOnlyDetailPage: React.FC = () => {
       </div>
 
       <GrantAccessDialog open={isGrantOpen} userId={userId} student={{ id: student.id, name: student.name, email: student.email }} onClose={() => setIsGrantOpen(false)} onGranted={() => void entitlementsQuery.refetch()} />
+
+      <AdminDialog
+        open={deviceApprovalOpen}
+        onClose={() => { if (!governanceBusy) setDeviceApprovalOpen(false); }}
+        title="Approve device change?"
+        description={`Authorize one different replacement device for ${student.name}.`}
+        icon={
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#eff6ff', border: '1px solid #dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb', flexShrink: 0 }}>
+            <ShieldCheck size={22} />
+          </div>
+        }
+        size="small"
+        footer={
+          <>
+            <button className="pf-admin-button pf-admin-button--quiet" type="button" disabled={governanceBusy} onClick={() => setDeviceApprovalOpen(false)}>Cancel</button>
+            <button
+              className="pf-admin-button pf-admin-button--primary"
+              type="button"
+              disabled={governanceBusy || !student.deviceBinding}
+              onClick={async () => {
+                if (!student.deviceBinding) return;
+                setGovernanceBusy(true);
+                setDeviceGovernanceNotice(null);
+                try {
+                  const result = await approveAdminStudentDeviceReset(student.id);
+                  setDeviceGovernanceNotice({ tone: 'success', message: result.message });
+                  setDeviceApprovalOpen(false);
+                  await query.refetch();
+                } catch (error) {
+                  setDeviceGovernanceNotice({ tone: 'error', message: error instanceof Error ? error.message : 'The device change could not be approved.' });
+                } finally {
+                  setGovernanceBusy(false);
+                }
+              }}
+            >
+              {governanceBusy ? 'Approving…' : 'Approve device change'}
+            </button>
+          </>
+        }
+      >
+        <div style={{ display: 'grid', gap: 12, color: '#475569', fontSize: 14, lineHeight: 1.55 }}>
+          <p style={{ margin: 0 }}>All current sessions will be revoked immediately.</p>
+          <div style={{ padding: 12, borderRadius: 10, border: '1px solid #dbeafe', background: '#f8fbff' }}>
+            <strong style={{ color: '#1e3a8a' }}>What happens next</strong>
+            <p style={{ margin: '5px 0 0' }}>The learner must sign in from a different replacement device within 7 days. The currently linked device remains blocked and cannot consume this approval.</p>
+          </div>
+        </div>
+      </AdminDialog>
 
       {/* Revoke Sessions Modal */}
       {revokeSessionsOpen ? (

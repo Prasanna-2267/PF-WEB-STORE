@@ -1101,6 +1101,17 @@ a.pf-store-button--dark svg {
 }
 
 @media (max-width: 760px) {
+  .pf-store { overflow-x: clip; }
+  .pf-store-main,
+  .pf-store-home,
+  .pf-store-hero,
+  .pf-store-hero__copy,
+  .pf-store-section,
+  .pf-store-rail,
+  .pf-store-product-card { min-width: 0; max-width: 100%; }
+  .pf-store-hero__copy,
+  .pf-store-hero__copy > p,
+  .pf-store-product-card__content { overflow-wrap: anywhere; }
   .pf-store-home,
   .pf-store-category-page,
   .pf-store-product-page,
@@ -1119,7 +1130,16 @@ a.pf-store-button--dark svg {
   .pf-store-rail__heading { align-items: center; }
   .pf-store-rail__summary > span { display: none; }
   .pf-store-rail__track,
-  .pf-store-rail__track[data-item-count] { grid-auto-columns: minmax(0, 100%); }
+  .pf-store-rail__track[data-item-count] {
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+  }
+  .pf-store-rail__track > * {
+    flex: 0 0 100%;
+    width: 100%;
+    min-width: 0;
+  }
   .pf-store-course-grid { grid-template-columns: 1fr; }
   .pf-store-product-grid,
   .pf-store-catalog-results .pf-store-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1144,6 +1164,7 @@ a.pf-store-button--dark svg {
 }
 
 @media (max-width: 560px) {
+  .pf-store-header__actions { min-width: 0; }
   .pf-store-product-thumbnails { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pf-store-header__primary { min-height: 58px; padding: 7px 7px 7px 12px; gap: 8px; }
   .pf-store-brand { gap: 7px; }
@@ -1168,6 +1189,7 @@ a.pf-store-button--dark svg {
   .pf-store-product-grid,
   .pf-store-catalog-results .pf-store-product-grid { grid-template-columns: 1fr; }
   .pf-store-product-card__visual { min-height: 330px; }
+  .pf-store-product-card__actions > :where(a, button) { min-width: 0; padding-inline: 8px; text-align: center; }
   .pf-store-mobile-filters .pf-store-filters__fields { grid-template-columns: 1fr; }
   .pf-store-mobile-filters .pf-store-filter-note { grid-column: auto; }
   .pf-store-results-bar { align-items: flex-start; flex-direction: column; gap: 10px; }

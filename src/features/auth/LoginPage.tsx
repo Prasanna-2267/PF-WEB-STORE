@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate, type To } from 'react-router-dom';
-import { GoogleLogin, GoogleOAuthProvider, type CredentialResponse } from '@react-oauth/google';
+import { GoogleLogin, type CredentialResponse } from '@react-oauth/google';
 import { authService } from '@/services/auth.service';
 import {
   useAuthStore,
@@ -140,16 +140,14 @@ export const LoginPage: React.FC = () => {
 
         <div className="pf-auth-oauth-wrap" style={{ margin: '20px 0 16px', display: 'flex', justifyContent: 'center' }}>
           {import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ? (
-            <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID.trim()}>
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={handleGoogleError}
-                shape="pill"
-                theme="outline"
-                text="signin_with"
-                width="320"
-              />
-            </GoogleOAuthProvider>
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={handleGoogleError}
+              shape="pill"
+              theme="outline"
+              text="signin_with"
+              width="320"
+            />
           ) : <small>Google sign-in is not configured.</small>}
         </div>
 

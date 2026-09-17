@@ -329,7 +329,7 @@ const SingleAdminToast: React.FC<{
 
   useEffect(() => {
     if (toast.duration === 0 || isHovered) return undefined;
-    const timeout = window.setTimeout(() => onDismiss(toast.id), toast.duration ?? 3800);
+    const timeout = window.setTimeout(() => onDismiss(toast.id), toast.duration ?? 2200);
     return () => window.clearTimeout(timeout);
   }, [toast.duration, toast.id, isHovered, onDismiss]);
 

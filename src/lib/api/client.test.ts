@@ -72,6 +72,17 @@ describe('central API client', () => {
     expect(terminal).toHaveBeenCalledOnce();
   });
 
+  it('preserves credentials when refresh fails because the server is temporarily unreachable', async () => {
+    setSessionCredentials({ accessToken: 'expired', refreshToken: 'keep-me', expiresAt: 0 });
+    const terminal = vi.fn();
+    setTerminalAuthFailureHandler(terminal);
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+
+    await expect(apiRequest('/api/protected')).rejects.toThrow('Failed to fetch');
+    expect(getSessionCredentials()?.refreshToken).toBe('keep-me');
+    expect(terminal).not.toHaveBeenCalled();
+  });
+
   it('does not refresh a public login failure', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ error: { code: 'INVALID_CREDENTIALS', message: 'Invalid credentials' } }, 401));
     await expect(apiRequest('/api/auth/login', { method: 'POST', auth: false, body: {} })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });

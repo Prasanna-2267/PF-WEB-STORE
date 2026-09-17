@@ -1,7 +1,7 @@
 import { AppSelect } from '@/components/ui/AppSelect';
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, BookOpen, Gift, KeyRound, Search, UserPlus, UsersRound } from 'lucide-react';
+import { ArrowLeft, BookOpen, Gift, KeyRound, Search, ShieldCheck, UserPlus, UsersRound } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAcademyTenantStore } from '@/app/store/useAcademyTenantStore';
 import { buildAcademyStudentPath, ROUTES } from '@/config/routes';
@@ -149,6 +149,7 @@ export const AcademyStudentReadOnlyDetailPage: React.FC = () => {
   const [pendingStatus, setPendingStatus] = useState<'ACTIVE' | 'SUSPENDED' | 'REVOKED' | null>(null);
   const [courseId, setCourseId] = useState('');
   const [governanceBusy, setGovernanceBusy] = useState(false);
+  const [deviceApprovalOpen, setDeviceApprovalOpen] = useState(false);
   const [grantAccessOpen, setGrantAccessOpen] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<{ id: string; title: string } | null>(null);
   const [revokeReason, setRevokeReason] = useState('');
@@ -227,17 +228,7 @@ export const AcademyStudentReadOnlyDetailPage: React.FC = () => {
           <section className="pf-admin-card pf-admin-student-governance">
             <h2>Account & device</h2>
             <button className="pf-admin-button pf-admin-button--secondary" type="button" disabled={governanceBusy} onClick={async () => { setGovernanceBusy(true); try { await mutateAcademyStudentAccountStatus(student.studentId, student.accountStatus === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'); await query.refetch(); } finally { setGovernanceBusy(false); } }}>{student.accountStatus === 'ACTIVE' ? 'Disable account' : 'Enable account'}</button>
-            <button className="pf-admin-button pf-admin-button--secondary" type="button" disabled={governanceBusy} onClick={async () => {
-              if (!window.confirm('Approve one replacement-device login?')) return;
-              setGovernanceBusy(true);
-              try {
-                const result = await approveAcademyStudentDeviceReset(student.studentId);
-                await query.refetch();
-                setToast({ id: Date.now(), tone: 'success', title: result.state === 'RESET_APPROVED' ? 'Device change approved' : 'Device ready to link', message: result.message });
-              } catch (error) {
-                setToast({ id: Date.now(), tone: 'error', title: 'Device change not approved', message: error instanceof Error ? error.message : 'The server rejected the approval.' });
-              } finally { setGovernanceBusy(false); }
-            }}>{governanceBusy ? 'Approving…' : 'Approve device change'}</button>
+            <button className="pf-admin-button pf-admin-button--secondary" type="button" disabled={governanceBusy} onClick={() => setDeviceApprovalOpen(true)}>{governanceBusy ? 'Approving…' : 'Approve device change'}</button>
             <button className="pf-admin-button pf-admin-button--danger" type="button" disabled={governanceBusy} onClick={async () => {
               if (window.prompt('Type PERMANENTLY DELETE to confirm.') !== 'PERMANENTLY DELETE') return;
               setGovernanceBusy(true);
@@ -256,6 +247,33 @@ export const AcademyStudentReadOnlyDetailPage: React.FC = () => {
           <section className="pf-admin-card"><h2>Enroll in course</h2><label className="pf-admin-field"><span>Active Academy course</span><AppSelect className="pf-admin-select" value={courseId} onChange={(event) => setCourseId(event.target.value)}><option value="">Select a course</option>{courses.data?.items.filter((course) => course.status === 'ACTIVE' && !student.enrollments.some((enrollment) => enrollment.courseId === course.id && enrollment.status === 'ACTIVE')).map((course) => <option key={course.id} value={course.id}>{course.code} — {course.name}</option>)}</AppSelect></label><button className="pf-admin-button pf-admin-button--primary" type="button" disabled={!courseId || enrollmentMutation.isPending || student.membershipStatus !== 'ACTIVE'} onClick={() => enrollmentMutation.mutate()}>{enrollmentMutation.isPending ? 'Enrolling…' : 'Enroll student'}</button></section>
         </aside>
       </div>
+      <AdminDialog
+        open={deviceApprovalOpen}
+        onClose={() => { if (!governanceBusy) setDeviceApprovalOpen(false); }}
+        title="Approve device change?"
+        description={`Authorize one different replacement device for ${student.name}.`}
+        icon={<div style={{ width: 44, height: 44, borderRadius: 12, background: '#eff6ff', border: '1px solid #dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb', flexShrink: 0 }}><ShieldCheck size={22} /></div>}
+        size="small"
+        footer={<><button className="pf-admin-button pf-admin-button--quiet" type="button" disabled={governanceBusy} onClick={() => setDeviceApprovalOpen(false)}>Cancel</button><button className="pf-admin-button pf-admin-button--primary" type="button" disabled={governanceBusy} onClick={async () => {
+          setGovernanceBusy(true);
+          try {
+            const result = await approveAcademyStudentDeviceReset(student.studentId);
+            await query.refetch();
+            setDeviceApprovalOpen(false);
+            setToast({ id: Date.now(), tone: 'success', title: result.state === 'RESET_APPROVED' ? 'Device change approved' : 'Device ready to link', message: result.message });
+          } catch (error) {
+            setToast({ id: Date.now(), tone: 'error', title: 'Device change not approved', message: error instanceof Error ? error.message : 'The server rejected the approval.' });
+          } finally { setGovernanceBusy(false); }
+        }}>{governanceBusy ? 'Approving…' : 'Approve device change'}</button></>}
+      >
+        <div style={{ display: 'grid', gap: 12, color: '#475569', fontSize: 14, lineHeight: 1.55 }}>
+          <p style={{ margin: 0 }}>All current sessions will be revoked immediately.</p>
+          <div style={{ padding: 12, borderRadius: 10, border: '1px solid #dbeafe', background: '#f8fbff' }}>
+            <strong style={{ color: '#1e3a8a' }}>What happens next</strong>
+            <p style={{ margin: '5px 0 0' }}>The learner must sign in from a different replacement device within 7 days. The currently linked device remains blocked and cannot consume this approval.</p>
+          </div>
+        </div>
+      </AdminDialog>
       <AdminDialog open={Boolean(pendingStatus)} onClose={() => !statusMutation.isPending && setPendingStatus(null)} title={`${pendingStatus === 'ACTIVE' ? 'Activate' : pendingStatus === 'SUSPENDED' ? 'Suspend' : 'Revoke'} student membership?`} description={pendingStatus === 'REVOKED' ? 'This removes the student’s active access to this Academy. The action is audited.' : 'This changes Academy access immediately after backend confirmation.'} size="small" footer={<><button className="pf-admin-button pf-admin-button--quiet" type="button" disabled={statusMutation.isPending} onClick={() => setPendingStatus(null)}>Cancel</button><button className={`pf-admin-button ${pendingStatus === 'REVOKED' ? 'pf-admin-button--danger' : 'pf-admin-button--primary'}`} type="button" disabled={statusMutation.isPending} onClick={() => pendingStatus && statusMutation.mutate(pendingStatus)}>{statusMutation.isPending ? 'Working…' : 'Confirm'}</button></>} />
       <GrantAccessDialog open={grantAccessOpen} userId={activeAcademyId} student={{ id: student.studentId, name: student.name, email: student.email }} scope="academy" onClose={() => setGrantAccessOpen(false)} onGranted={() => { void query.refetch(); void entitlements.refetch(); void queryClient.invalidateQueries({ queryKey: ['academy', activeAcademyId, 'students'] }); }} />
       <AdminDialog open={Boolean(revokeTarget)} onClose={() => !revokeAccess.isPending && setRevokeTarget(null)} title="Revoke Granted Access" description={`Revoke access to “${revokeTarget?.title ?? ''}” while retaining its audit history.`} size="small" footer={<><button className="pf-admin-button pf-admin-button--quiet" type="button" disabled={revokeAccess.isPending} onClick={() => setRevokeTarget(null)}>Cancel</button><button className="pf-admin-button pf-admin-button--danger" type="button" disabled={revokeReason.trim().length < 3 || revokeAccess.isPending} onClick={() => revokeAccess.mutate()}>{revokeAccess.isPending ? 'Revoking…' : 'Revoke access'}</button></>}><label className="pf-admin-field"><span>Reason</span><input className="pf-admin-input" value={revokeReason} minLength={3} maxLength={500} onChange={(event) => setRevokeReason(event.target.value)} placeholder="Mandatory audit note" /></label></AdminDialog>
