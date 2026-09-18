@@ -21,6 +21,8 @@ interface NavigateOptions {
 
 interface ContentState {
   status: 'idle' | 'loading' | 'ready' | 'error';
+  hasLoadedView: boolean;
+  isRefreshing: boolean;
   error: string | null;
   courseId: string | null;
   currentFolderId: string | null;
@@ -75,34 +77,65 @@ const initialView = (): ContentViewMode => {
 
 export const createContentStore = (repository: ContentRepository = mockContentRepository) => create<ContentState>((set, get) => {
   let request = 0;
+  const viewCache = new Map<string, Pick<ContentState, 'items' | 'breadcrumbs' | 'pageHeading'>>();
+  const cacheKey = (courseId: string, folderId: string | null) => `${courseId}:${folderId ?? 'root'}`;
 
   const load = async (folderId: string | null, options: NavigateOptions = {}) => {
     const requestId = ++request;
-    const previous = get().currentFolderId;
-    set({ status: 'loading', error: null });
+    const before = get();
+    const courseId = before.courseId;
+    const previous = before.currentFolderId;
+    if (!courseId) return;
+
+    const cached = viewCache.get(cacheKey(courseId, folderId));
+    const canRetainCurrentView = before.hasLoadedView && before.status === 'ready';
+    let historyApplied = false;
+    const historyUpdate: Partial<ContentState> = {};
+    if (options.history === 'push' && previous !== folderId) {
+      historyUpdate.backStack = [...before.backStack, previous];
+      historyUpdate.forwardStack = [];
+    }
+
+    if (cached) {
+      set({ ...cached, ...historyUpdate, currentFolderId: folderId, status: 'ready', hasLoadedView: true, isRefreshing: true, error: null });
+      historyApplied = true;
+    } else if (canRetainCurrentView) {
+      set({ isRefreshing: true, error: null });
+    } else {
+      set({ status: 'loading', hasLoadedView: false, isRefreshing: false, error: null });
+    }
     try {
-      const courseId = get().courseId;
+      const knownChild = options.history === 'push'
+        ? before.items.find((item) => item.id === folderId && item.kind === 'folder')
+        : null;
+      const breadcrumbRequest = folderId === null
+        ? Promise.resolve([{ id: null, name: 'My Flow' }] as ContentBreadcrumb[])
+        : knownChild
+          ? Promise.resolve([...before.breadcrumbs, { id: knownChild.id, name: knownChild.name }])
+          : repository.getBreadcrumb(folderId, courseId);
       const [items, breadcrumbs, location] = await Promise.all([
-        repository.getChildren(folderId, get().courseId ?? undefined),
-        repository.getBreadcrumb(folderId, get().courseId ?? undefined),
-        courseId ? repository.getLocationSettings(courseId, folderId) : Promise.resolve(null),
+        repository.getChildren(folderId, courseId),
+        breadcrumbRequest,
+        repository.getLocationSettings(courseId, folderId),
       ]);
       if (requestId !== request) return;
+      const snapshot = { items, breadcrumbs, pageHeading: location.pageHeading };
+      viewCache.set(cacheKey(courseId, folderId), snapshot);
       const next: Partial<ContentState> = {
+        ...snapshot,
         currentFolderId: folderId,
-        items,
-        breadcrumbs,
-        pageHeading: location?.pageHeading ?? 'Untitled Page',
         status: 'ready',
+        hasLoadedView: true,
+        isRefreshing: false,
+        error: null,
       };
-      if (options.history === 'push' && previous !== folderId) {
-        next.backStack = [...get().backStack, previous];
-        next.forwardStack = [];
-      }
+      if (!historyApplied) Object.assign(next, historyUpdate);
       set(next);
     } catch (error) {
       if (requestId !== request) return;
-      set({ status: 'error', error: error instanceof Error ? error.message : 'Content could not be loaded.' });
+      const message = error instanceof Error ? error.message : 'Content could not be loaded.';
+      if (canRetainCurrentView || cached) set({ status: 'ready', isRefreshing: false, error: message });
+      else set({ status: 'error', hasLoadedView: false, isRefreshing: false, error: message });
     }
   };
 
@@ -153,6 +186,8 @@ export const createContentStore = (repository: ContentRepository = mockContentRe
 
   return {
     status: 'idle',
+    hasLoadedView: false,
+    isRefreshing: false,
     error: null,
     courseId: null,
     currentFolderId: null,
@@ -169,7 +204,7 @@ export const createContentStore = (repository: ContentRepository = mockContentRe
     },
     setCourse: async (courseId) => {
       if (get().courseId === courseId && get().status !== 'idle') return;
-      set({ courseId, currentFolderId: null, items: [], breadcrumbs: [{ id: null, name: 'My Flow' }], pageHeading: 'Untitled Page', backStack: [], forwardStack: [] });
+      set({ courseId, status: 'loading', hasLoadedView: false, isRefreshing: false, currentFolderId: null, items: [], breadcrumbs: [{ id: null, name: 'My Flow' }], pageHeading: '', backStack: [], forwardStack: [] });
       await load(null, { history: 'replace' });
     },
     navigate: load,
@@ -196,6 +231,7 @@ export const createContentStore = (repository: ContentRepository = mockContentRe
       if (!courseId) throw new Error('Choose a course before updating this page.');
       const location = await repository.updatePageHeading(courseId, get().currentFolderId, pageHeading);
       set({ pageHeading: location.pageHeading });
+      viewCache.delete(cacheKey(courseId, get().currentFolderId));
     },
     saveChildOrder: async (childOrder) => {
       const courseId = get().courseId;

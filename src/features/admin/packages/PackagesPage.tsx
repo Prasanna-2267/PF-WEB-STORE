@@ -555,9 +555,9 @@ export const PackagesPage: React.FC = () => {
         }
       />
 
-      {packageLoading || contentLoading || questionBanksLoading ? <AdminSkeleton variant="table" rows={6} label="Loading packages" /> : null}
+      {packageLoading ? <AdminSkeleton variant="table" rows={6} label="Loading packages" /> : null}
 
-      {packageError || contentError || questionBanksError ? (
+      {packageError || (editorOpen && (contentError || questionBanksError)) ? (
         <AdminEmptyState
           title="Packages could not be loaded"
           description={packageError ?? contentError ?? questionBanksError ?? 'Try loading the module again.'}
@@ -566,7 +566,7 @@ export const PackagesPage: React.FC = () => {
         />
       ) : null}
 
-      {!packageLoading && !packageError && !contentLoading && !questionBanksLoading && !questionBanksError && !scopedPackageCount ? (
+      {!packageLoading && !packageError && !scopedPackageCount ? (
         <AdminEmptyState
           title="No packages yet"
           description="Create a package by selecting existing files and folders from the Content Library."
@@ -579,7 +579,7 @@ export const PackagesPage: React.FC = () => {
         />
       ) : null}
 
-      {!packageLoading && !packageError && !contentLoading && !questionBanksLoading && !questionBanksError && scopedPackageCount ? (
+      {!packageLoading && !packageError && scopedPackageCount ? (
         <section className="pf-package-library" aria-label="Package library">
           <div className="pf-package-toolbar">
             <label className="pf-admin-search-field">

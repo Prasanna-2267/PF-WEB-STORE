@@ -309,7 +309,7 @@ const StoreLayout: React.FC = () => {
           <div><h3>Account</h3><Link to={ROUTES.STORE_PURCHASES}>My Purchases</Link><Link to={ROUTES.STORE_PROFILE}>Profile</Link><Link to={ROUTES.STORE_CART}>Cart</Link></div>
           <div><h3>Parallax Flow</h3><Link to={ROUTES.HOME}>Home</Link><Link to={ROUTES.ABOUT}>About Us</Link><Link to={ROUTES.CONTACT}>Contact</Link></div>
         </div>
-        <div className="pf-store-footer__bottom"><span>© {new Date().getFullYear()} Parallax Learning Hub LLP.</span><PoweredByNeuralWebLabs className="pf-store-footer__powered" /><span>Purchases unlock inside the Android application.</span></div>
+        <div className="pf-store-footer__bottom"><span>© {new Date().getFullYear()} Parallax Learning Hub LLP. All rights reserved.</span><PoweredByNeuralWebLabs className="pf-store-footer__powered" /><span>Purchases unlock inside the Android application.</span></div>
       </footer>
       </div>
     </MotionConfig>

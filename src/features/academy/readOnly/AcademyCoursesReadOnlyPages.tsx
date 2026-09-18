@@ -54,7 +54,7 @@ const formatDate = (value: string) => new Intl.DateTimeFormat('en-IN', { day: 'n
 const tone = (status: CourseStatus): AdminStatusTone => status === 'ACTIVE' ? 'success' : status === 'INACTIVE' ? 'warning' : 'neutral';
 const plainText = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 
-const MetricCard: React.FC<{ icon: React.ReactNode; label: string; value: number; color: string; background: string }> = ({ icon, label, value, color, background }) => (
+const MetricCard: React.FC<{ icon: React.ReactNode; label: string; value: number | string; color: string; background: string }> = ({ icon, label, value, color, background }) => (
   <div style={{ padding: 16, backgroundColor: '#ffffff', borderRadius: 12, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 14 }}>
     <div style={{ padding: 12, borderRadius: 10, backgroundColor: background, color }}>{icon}</div>
     <div><div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div><div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginTop: 2 }}>{value}</div></div>
@@ -114,6 +114,7 @@ export const AcademyCoursesReadOnlyPage: React.FC = () => {
   const [toast, setToast] = useState<AdminToastData | null>(null);
   const filters = useMemo(() => ({ page, limit: PAGE_LIMIT, includeArchived: true, search: search.trim() || undefined, status: status || undefined, sort: 'newest' as const }), [page, search, status]);
   const query = useAcademyCoursesReadOnly(activeAcademyId, filters);
+  const metricsPending = !query.data && query.isPending;
   const invalidate = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ['academy', activeAcademyId, 'courses'] }),
     queryClient.invalidateQueries({ queryKey: ['academy', activeAcademyId, 'overview'] }),
@@ -137,10 +138,10 @@ export const AcademyCoursesReadOnlyPage: React.FC = () => {
   return <motion.div className="pf-admin-page pf-academy-courses" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}>
     <AdminPageHeader title="Courses" description={`Courses created and managed exclusively by ${activeAcademy?.name ?? 'this Academy'}.`} actions={<button className="pf-admin-button pf-admin-button--primary" type="button" onClick={openCreate}><Plus size={16} /> New course</button>} />
     <section className="pf-admin-summary-grid pf-academy-course-summary">
-      <MetricCard icon={<BookMarked size={22} />} label="Total Courses" value={summary?.totalCourses ?? 0} color="#2563eb" background="#eff6ff" />
-      <MetricCard icon={<Layers size={22} />} label="Active Courses" value={summary?.activeCourses ?? 0} color="#16a34a" background="#f0fdf4" />
-      <MetricCard icon={<UsersRound size={22} />} label="Enrolled Students" value={summary?.totalEnrolledStudents ?? 0} color="#9333ea" background="#faf5ff" />
-      <MetricCard icon={<LibraryBig size={22} />} label="Content Items" value={summary?.totalContentItems ?? 0} color="#ea580c" background="#fff7ed" />
+      <MetricCard icon={<BookMarked size={22} />} label="Total Courses" value={metricsPending ? '—' : (summary?.totalCourses ?? 0)} color="#2563eb" background="#eff6ff" />
+      <MetricCard icon={<Layers size={22} />} label="Active Courses" value={metricsPending ? '—' : (summary?.activeCourses ?? 0)} color="#16a34a" background="#f0fdf4" />
+      <MetricCard icon={<UsersRound size={22} />} label="Enrolled Students" value={metricsPending ? '—' : (summary?.totalEnrolledStudents ?? 0)} color="#9333ea" background="#faf5ff" />
+      <MetricCard icon={<LibraryBig size={22} />} label="Content Items" value={metricsPending ? '—' : (summary?.totalContentItems ?? 0)} color="#ea580c" background="#fff7ed" />
     </section>
     <section className="pf-admin-table-card">
       <div className="pf-admin-table-card__header pf-academy-course-toolbar"><label className="pf-admin-search-field"><Search size={17} /><span className="pf-admin-sr-only">Search Academy courses</span><input className="pf-admin-input" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search courses by name, code, or description…" /></label><AppSelect className="pf-admin-select" value={status} onChange={(event) => { setStatus(event.target.value as CourseStatus | ''); setPage(1); }}><option value="">All Statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option><option value="ARCHIVED">Archived</option></AppSelect></div>

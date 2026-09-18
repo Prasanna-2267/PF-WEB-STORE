@@ -387,7 +387,7 @@ export const StoreHomePage: React.FC = () => {
               {featuredHeroProduct && (
                 <div className="pf-store-hero__visual" aria-label={`Featured resource: ${featuredHeroProduct.title}`}>
                   <div className="pf-store-hero__orb" />
-                  <StoreProductCover product={featuredHeroProduct} size="large" />
+                  <StoreProductCover product={featuredHeroProduct} size="large" useUploadedCover={false} />
                   <article className="pf-store-hero-float pf-store-hero-float--top"><Sparkles size={16} /><span>Visual Learning</span><strong>Infographic Edition</strong></article>
                   <article className="pf-store-hero-float pf-store-hero-float--bottom"><BookOpen size={16} /><span>Instant Access</span><strong>Available in your library</strong></article>
                 </div>

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api/client';
+import { useCourseStore } from '@/app/store/useCourseStore';
 import type { CourseStatus } from '@/features/admin/types/admin';
 
 export interface AdminCourseSummary {
@@ -161,8 +162,11 @@ export function useCreateAdminCourse(actorUserId: string | null) {
         method: 'POST',
         body: input,
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ADMIN_COURSES_READ_ONLY_QUERY_KEY });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ADMIN_COURSES_READ_ONLY_QUERY_KEY }),
+        useCourseStore.getState().refresh(),
+      ]);
     },
   });
 }
@@ -175,8 +179,11 @@ export function useUpdateAdminCourse(actorUserId: string | null) {
         method: 'PATCH',
         body: input,
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ADMIN_COURSES_READ_ONLY_QUERY_KEY });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ADMIN_COURSES_READ_ONLY_QUERY_KEY }),
+        useCourseStore.getState().refresh(),
+      ]);
     },
   });
 }
@@ -188,8 +195,11 @@ export function useDeleteAdminCourse(actorUserId: string | null) {
       apiRequest<{ success: boolean; message: string }>(`/api/admin/courses/${encodeURIComponent(courseId)}`, {
         method: 'DELETE',
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ADMIN_COURSES_READ_ONLY_QUERY_KEY });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ADMIN_COURSES_READ_ONLY_QUERY_KEY }),
+        useCourseStore.getState().refresh(),
+      ]);
     },
   });
 }

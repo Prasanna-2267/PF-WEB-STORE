@@ -33,8 +33,9 @@ export const useCourseStore = create<CourseState>((set, get) => {
     });
     return next;
   };
-  const load = async () => {
-    set({ status: 'loading', error: null });
+  const load = async (background = false) => {
+    if (background) set({ error: null });
+    else set({ status: 'loading', error: null });
     try {
       const courses = await courseRepository.list();
       const selections = chooseFallbacks(courses, { ...storedSelections(), ...get().selections });
@@ -48,7 +49,11 @@ export const useCourseStore = create<CourseState>((set, get) => {
     // validated them. This prevents stale fixture IDs from reaching UUID-only
     // backend routes during the first render.
     status: 'idle', courses: [], selections: {}, error: null,
-    initialize: async () => { if (get().status === 'idle') await load(); }, refresh: load,
+    initialize: async () => {
+      if (get().status === 'loading') return;
+      await load(get().status === 'ready');
+    },
+    refresh: () => load(false),
     select: (module, courseId) => set((state) => { const selections = { ...state.selections, [module]: courseId }; persistSelections(selections); return { selections }; }),
     selectedCourse: (module) => get().courses.find((course) => course.id === get().selections[module]) ?? null,
     createCourse: async (input) => { const course = await courseRepository.create(input); await load(); return course; },

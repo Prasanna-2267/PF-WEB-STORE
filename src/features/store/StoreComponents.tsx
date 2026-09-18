@@ -24,12 +24,13 @@ export const getProductTypeLabel = (type: StoreProductType): string => productTy
 export const StoreProductCover: React.FC<{
   product: StoreProduct;
   size?: 'card' | 'large' | 'mini';
-}> = ({ product, size = 'card' }) => {
+  useUploadedCover?: boolean;
+}> = ({ product, size = 'card', useUploadedCover = true }) => {
   const [coverFailed, setCoverFailed] = useState(false);
 
   useEffect(() => setCoverFailed(false), [product.coverImage]);
 
-  if (product.coverImage && !coverFailed) {
+  if (useUploadedCover && product.coverImage && !coverFailed) {
     return (
       <div className={`pf-store-cover pf-store-cover--${size}`} data-course={product.course} aria-hidden="true">
         <img src={product.coverImage} alt={product.title} className="pf-store-cover__img" onError={() => setCoverFailed(true)} />

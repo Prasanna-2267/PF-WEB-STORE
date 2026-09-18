@@ -21,6 +21,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { preloadRoute, scheduleWorkspacePreload } from '@/app/router/routePreload';
 import { useAcademyTenantStore } from '@/app/store/useAcademyTenantStore';
 import { useAuthStore } from '@/app/store/useAuthStore';
 import { useThemeStore } from '@/app/store/useThemeStore';
@@ -77,6 +78,9 @@ const AdminNavigationItem: React.FC<AdminNavigationItemProps> = ({ label, to, ic
     to={to}
     end={to === ROUTES.ACADEMY_OVERVIEW}
     className={({ isActive }) => `pf-admin-nav__link${isActive ? ' is-active' : ''}`}
+    onPointerEnter={() => { void preloadRoute(to); }}
+    onFocus={() => { void preloadRoute(to); }}
+    onPointerDown={() => { void preloadRoute(to); }}
   >
     {({ isActive }) => (
       <>
@@ -113,6 +117,8 @@ export const AcademyLayout: React.FC = () => {
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+
+  useEffect(() => scheduleWorkspacePreload('academy'), []);
   const previousPathRef = useRef(location.pathname);
 
   const sectionLabel = useMemo(() => getSectionLabel(location.pathname), [location.pathname]);

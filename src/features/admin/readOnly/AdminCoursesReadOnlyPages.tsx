@@ -60,6 +60,7 @@ export function AdminCoursesPage() {
   );
 
   const query = useAdminCoursesReadOnly(user?.id ?? null, queryParams);
+  const metricsPending = !query.data && query.isPending;
   const summary = query.data?.summary;
   const courses = query.data?.data ?? [];
   const meta = query.data?.meta ?? { page: 1, limit: 10, total: 0, totalPages: 1 };
@@ -81,28 +82,28 @@ export function AdminCoursesPage() {
         <article className="pf-admin-card">
           <BookMarked size={18} aria-hidden="true" />
           <div>
-            <strong>{summary?.totalCourses ?? meta.total ?? 0}</strong>
+            <strong>{metricsPending ? '—' : (summary?.totalCourses ?? meta.total ?? 0)}</strong>
             <p>Total Courses</p>
           </div>
         </article>
         <article className="pf-admin-card">
           <Layers size={18} aria-hidden="true" />
           <div>
-            <strong>{summary?.activeCourses ?? 0}</strong>
+            <strong>{metricsPending ? '—' : (summary?.activeCourses ?? 0)}</strong>
             <p>Active Courses</p>
           </div>
         </article>
         <article className="pf-admin-card">
           <UsersRound size={18} aria-hidden="true" />
           <div>
-            <strong>{summary?.totalEnrolledStudents ?? 0}</strong>
+            <strong>{metricsPending ? '—' : (summary?.totalEnrolledStudents ?? 0)}</strong>
             <p>Enrolled Students</p>
           </div>
         </article>
         <article className="pf-admin-card">
           <PackageIcon size={18} aria-hidden="true" />
           <div>
-            <strong>{summary?.totalPackages ?? 0}</strong>
+            <strong>{metricsPending ? '—' : (summary?.totalPackages ?? 0)}</strong>
             <p>Total Packages</p>
           </div>
         </article>

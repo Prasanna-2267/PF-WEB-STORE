@@ -145,7 +145,10 @@ const matchesContentFilter = (item: ContentItem, filter: ContentTypeFilter): boo
 export const ContentPage: React.FC = () => {
   const store = useContentStore();
   const courseId = useCourseStore((state) => state.selections.content);
+  const courseStatus = useCourseStore((state) => state.status);
+  const courseError = useCourseStore((state) => state.error);
   const initializeCourses = useCourseStore((state) => state.initialize);
+  const refreshCourses = useCourseStore((state) => state.refresh);
 
   useEffect(() => {
     void initializeCourses();
@@ -838,8 +841,56 @@ export const ContentPage: React.FC = () => {
     } catch (error) { notify('Drop could not be completed', error instanceof Error ? error.message : undefined, 'error'); }
   };
 
+  if (courseStatus === 'idle' || courseStatus === 'loading') {
+    return (
+      <motion.main className="pf-content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
+        <AdminPageHeader
+          title="Content"
+          description="Direct Parallax Flow content. Academy-owned files and folders remain in their Academy details page."
+          breadcrumbs={[{ label: 'Overview', to: '/admin/overview' }, { label: 'Content' }]}
+          actions={<CourseSelector module="content" />}
+        />
+        <section className="pf-content-browser" aria-busy="true">
+          <AdminSkeleton variant="detail" rows={7} label="Loading courses and content" />
+        </section>
+      </motion.main>
+    );
+  }
+
+  if (courseStatus === 'error') {
+    return (
+      <motion.main className="pf-content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
+        <AdminPageHeader
+          title="Content"
+          description="Direct Parallax Flow content. Academy-owned files and folders remain in their Academy details page."
+          breadcrumbs={[{ label: 'Overview', to: '/admin/overview' }, { label: 'Content' }]}
+          actions={<CourseSelector module="content" />}
+        />
+        <section className="pf-content-browser">
+          <AdminEmptyState title="Courses could not be loaded" description={courseError ?? 'Try loading the course list again.'} action={<button className="pf-admin-button" type="button" onClick={() => void refreshCourses()}>Try again</button>} />
+        </section>
+      </motion.main>
+    );
+  }
+
+  if (courseId && (store.courseId !== courseId || !store.hasLoadedView)) {
+    return (
+      <main className="pf-content">
+        <AdminPageHeader
+          title="Content"
+          description="Direct Parallax Flow content. Academy-owned files and folders remain in their Academy details page."
+          breadcrumbs={[{ label: 'Overview', to: '/admin/overview' }, { label: 'Content' }]}
+          actions={<CourseSelector module="content" />}
+        />
+        <section className="pf-content-browser" aria-busy="true">
+          <AdminSkeleton variant="detail" rows={7} label="Loading content" />
+        </section>
+      </main>
+    );
+  }
+
   return (
-    <motion.main className="pf-content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
+    <motion.main className="pf-content" initial={false} animate={{ opacity: 1 }}>
       <AdminPageHeader
         title="Content"
         description="Direct Parallax Flow content. Academy-owned files and folders remain in their Academy details page."
@@ -1072,8 +1123,9 @@ export const ContentPage: React.FC = () => {
 
         {searchQuery.trim() ? <div className="pf-content-search-caption"><Search /> <span>Results across My Flow for <strong>“{searchQuery.trim()}”</strong></span>{searching ? <small>Searching…</small> : <small>{displayItems.length} found</small>}</div> : null}
 
-        {store.status === 'loading' && !searchQuery ? <AdminSkeleton variant="table" rows={6} label="Loading content" /> : null}
+        {store.isRefreshing && !searchQuery ? <div className="pf-content-search-caption" role="status" aria-live="polite"><RefreshCw /><span>Updating folder...</span></div> : null}
         {store.status === 'error' ? <AdminEmptyState title="Content could not be loaded" description={store.error ?? 'Try again.'} action={<button className="pf-admin-button" type="button" onClick={() => void store.refresh()}>Try again</button>} /> : null}
+        {store.status === 'ready' && store.error ? <div className="pf-content-search-caption" role="alert"><span>{store.error}</span><button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={() => void store.refresh()}>Try again</button></div> : null}
 
         {/* Empty States */}
         {(store.status === 'ready' || searchQuery) && !searching && !displayItems.length ? (
