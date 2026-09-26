@@ -24,6 +24,7 @@ export const StudentQuestionsPage: React.FC = () => {
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const [descriptiveAnswers, setDescriptiveAnswers] = useState<Record<string, string>>({});
   const [showAnswer, setShowAnswer] = useState<Record<string, boolean>>({});
+  const [loadError, setLoadError] = useState('');
 
   // Filter state
   const [selectedKind, setSelectedKind] = useState<string>('');
@@ -35,6 +36,7 @@ export const StudentQuestionsPage: React.FC = () => {
 
   const loadQuestions = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const res = await studentQuestionApi.listQuestions({
         kind: selectedKind || undefined,
@@ -42,8 +44,10 @@ export const StudentQuestionsPage: React.FC = () => {
       });
       setQuestions(res.data);
       setActiveIdx(0);
-    } catch {
-      /* fallback active */
+    } catch (error) {
+      setQuestions([]);
+      setActiveIdx(0);
+      setLoadError(error instanceof Error ? error.message : 'Questions could not be loaded. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -119,6 +123,12 @@ export const StudentQuestionsPage: React.FC = () => {
         <div className="pf-sq-loading">
           <RefreshCw size={28} className="pf-sq-spinner" />
           <p>Loading questions from database...</p>
+        </div>
+      ) : loadError ? (
+        <div className="pf-sq-empty" role="alert">
+          <HelpCircle size={44} />
+          <h3>Questions could not be loaded</h3>
+          <p>{loadError}</p>
         </div>
       ) : questions.length === 0 ? (
         <div className="pf-sq-empty">

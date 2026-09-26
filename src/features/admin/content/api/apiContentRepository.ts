@@ -1,4 +1,3 @@
-import { CONTENT_FIXTURES } from '../data/contentFixtures';
 import type {
   ContentAccessType,
   ContentBreadcrumb,
@@ -22,12 +21,9 @@ import {
 import { apiRequest } from '@/lib/api/client';
 import { retryUploadStep } from '@/lib/api/uploadRetry';
 
-const STORAGE_KEY = 'pf_admin_content_v1';
 const ROOT_NAME = 'My Flow';
 const fileSources = new Map<string, File>();
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-const allowOfflineFixtures = import.meta.env.MODE === 'test';
-const FIXTURE_COURSE_ID = 'course-chartered-accountancy';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
@@ -36,7 +32,6 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
  * so an absent course must mean "not ready" rather than the legacy fixture id.
  */
 function resolveTargetCourse(courseId?: string): string | null {
-  if (allowOfflineFixtures) return courseId || FIXTURE_COURSE_ID;
   return courseId && UUID_PATTERN.test(courseId) ? courseId : null;
 }
 
@@ -51,41 +46,9 @@ function repositoryFailure(error: unknown, fallbackMessage: string): ContentRepo
   return new ContentRepositoryError(code, response?.message || fallbackMessage);
 }
 
-function requireBackend(error: unknown, fallbackMessage: string): void {
-  if (!allowOfflineFixtures) throw repositoryFailure(error, fallbackMessage);
+function requireBackend(error: unknown, message: string): never {
+  throw repositoryFailure(error, message);
 }
-
-interface LocalItemMetadata {
-  description?: string;
-  sampleImages?: any[];
-  storeSections?: any[];
-}
-
-function getItemMetadata(itemId: string): LocalItemMetadata | null {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(`pf_item_meta_${itemId}`);
-      if (raw) return JSON.parse(raw) as LocalItemMetadata;
-    }
-  } catch {
-    // Fallback
-  }
-  return null;
-}
-
-export function saveItemMetadata(itemId: string, metadata: LocalItemMetadata): void {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const existing = getItemMetadata(itemId) || {};
-      const next = { ...existing, ...metadata };
-      localStorage.setItem(`pf_item_meta_${itemId}`, JSON.stringify(next));
-    }
-  } catch {
-    // Fallback
-  }
-}
-
-let items: ContentItem[] = clone(CONTENT_FIXTURES);
 
 interface BackendContentDto {
   id: string;
@@ -119,8 +82,6 @@ interface BackendContentDto {
 
 function adaptBackendContent(dto: BackendContentDto): ContentItem {
   const isFolder = dto.kind === 'FOLDER' || dto.entityType === 'FOLDER' || dto.kind === 'folder';
-  const meta = getItemMetadata(dto.id);
-  const localItem = items.find((i) => i.id === dto.id);
   const backendSampleImages = dto.sampleImages
     ?.filter((image) => image.role !== 'PDF_FIRST_PAGE')
     .map((image) => ({
@@ -135,25 +96,25 @@ function adaptBackendContent(dto: BackendContentDto): ContentItem {
     ?.map((section) => ({ ...section, order: section.displayOrder })) ?? [];
   return {
     id: dto.id,
-    courseId: dto.courseId || (allowOfflineFixtures ? FIXTURE_COURSE_ID : ''),
+    courseId: dto.courseId || '',
     parentId: dto.parentId || null,
     name: dto.name,
     kind: isFolder ? 'folder' : 'file',
-    size: isFolder ? 0 : Number(dto.size ?? 1024 * 1024),
-    createdAt: dto.createdAt || new Date().toISOString(),
-    updatedAt: dto.updatedAt || new Date().toISOString(),
+    size: isFolder ? 0 : Number(dto.size ?? 0),
+    createdAt: dto.createdAt || '',
+    updatedAt: dto.updatedAt || '',
     lastOpenedAt: null,
-    owner: 'Super Admin',
-    mimeType: isFolder ? null : dto.mimeType ?? 'application/pdf',
+    owner: '',
+    mimeType: isFolder ? null : dto.mimeType ?? null,
     storagePath: null,
-    description: dto.description ?? meta?.description ?? localItem?.description ?? '',
+    description: dto.description ?? '',
     entityType: isFolder ? null : 'study-material',
     accessType: (dto.accessType || 'FREE') as any,
     price: dto.price ?? null,
     accessDurationValue: dto.accessDurationValue ?? null,
     accessDurationUnit: dto.accessDurationUnit ?? null,
-    sampleImages: backendSampleImages.length ? backendSampleImages : meta?.sampleImages ?? localItem?.sampleImages ?? [],
-    storeSections: backendStoreSections.length ? backendStoreSections : meta?.storeSections ?? localItem?.storeSections ?? [],
+    sampleImages: backendSampleImages,
+    storeSections: backendStoreSections,
     displayOrder: 0,
   };
 }
@@ -167,10 +128,10 @@ async function calculateSha256(blob: Blob): Promise<string> {
         .map((b) => b.toString(16).padStart(2, '0'))
         .join('');
     }
-  } catch {
-    // Fallback if subtle crypto unavailable
+  } catch (error) {
+    throw repositoryFailure(error, 'The selected file checksum could not be calculated. Please try again in a supported browser.');
   }
-  return 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+  throw new ContentRepositoryError('STORAGE_ERROR', 'This browser cannot securely calculate file checksums. Please update the browser and try again.');
 }
 
 const isNewSampleImage = (image: ContentSampleImage): boolean => image.dataUrl.startsWith('data:');
@@ -219,7 +180,7 @@ async function syncSampleImages(contentId: string, desiredImages: ContentSampleI
   return persisted;
 }
 
-export class MockContentRepository implements ContentRepository {
+export class ApiContentRepository implements ContentRepository {
   async getAllItems(courseId?: string): Promise<ContentItem[]> {
     const targetCourse = resolveTargetCourse(courseId);
     if (!targetCourse) return [];
@@ -231,8 +192,7 @@ export class MockContentRepository implements ContentRepository {
     } catch (error) {
       requireBackend(error, 'Content could not be loaded from the server.');
     }
-    const localForCourse = items.filter((item) => !item.courseId || item.courseId === targetCourse);
-    return clone(localForCourse);
+    throw new ContentRepositoryError('STORAGE_ERROR', 'The server returned an invalid content list.');
   }
 
   async getChildren(parentId: string | null, courseId?: string): Promise<ContentItem[]> {
@@ -263,8 +223,7 @@ export class MockContentRepository implements ContentRepository {
     } catch (error) {
       requireBackend(error, 'This content folder could not be loaded from the server.');
     }
-    const all = items.filter((item) => (!item.courseId || item.courseId === targetCourse) && (item.parentId ?? null) === parentId);
-    return clone(sortWithOrder(all));
+    throw new ContentRepositoryError('STORAGE_ERROR', 'The server returned an invalid folder listing.');
   }
 
   async getItem(itemId: string, courseId?: string): Promise<ContentItem> {
@@ -276,9 +235,7 @@ export class MockContentRepository implements ContentRepository {
     } catch (error) {
       requireBackend(error, 'The content item could not be loaded from the server.');
     }
-    const found = items.find((i) => i.id === itemId);
-    if (found) return clone(found);
-    throw new ContentRepositoryError('NOT_FOUND', 'Item not found.');
+    throw new ContentRepositoryError('STORAGE_ERROR', 'The server returned an invalid content item.');
   }
 
   async getBreadcrumb(folderId: string | null, courseId?: string): Promise<ContentBreadcrumb[]> {
@@ -305,10 +262,10 @@ export class MockContentRepository implements ContentRepository {
             path.push({ id: fetched.id, name: fetched.name });
             currentId = fetched.parentId;
           } else {
-            break;
+            throw new ContentRepositoryError('NOT_FOUND', 'A folder in this content path no longer exists.');
           }
-        } catch {
-          break;
+        } catch (error) {
+          throw repositoryFailure(error, 'The content path could not be loaded from the server.');
         }
       }
     }
@@ -365,11 +322,6 @@ export class MockContentRepository implements ContentRepository {
       }
     } catch (error) {
       requireBackend(error, 'The page heading could not be loaded from the server.');
-      const existing = this.locationSettingsMap.get(key);
-      if (existing) {
-        pageHeading = existing.pageHeading;
-        childOrder = existing.childOrder;
-      }
     }
 
     const existingMap = this.locationSettingsMap.get(key);
@@ -438,13 +390,6 @@ export class MockContentRepository implements ContentRepository {
       requireBackend(error, 'The content order could not be saved on the server.');
     }
 
-    // Update displayOrder in local items
-    const orderMap = new Map(childOrder.map((id, index) => [id, index]));
-    items.forEach((item) => {
-      if ((!item.courseId || item.courseId === courseId) && (item.parentId ?? null) === folderId && orderMap.has(item.id)) {
-        item.displayOrder = orderMap.get(item.id)!;
-      }
-    });
 
     const existing = this.locationSettingsMap.get(key);
     const pageHeading = existing?.pageHeading ?? 'Untitled Page';
@@ -481,63 +426,39 @@ export class MockContentRepository implements ContentRepository {
           name: input.name,
         },
       });
-      if (dto && dto.id) {
-        const item = adaptBackendContent(dto);
-        items.push(item);
-        return item;
-      }
+      return adaptBackendContent(dto);
     } catch (error) {
       requireBackend(error, 'The folder could not be created on the server.');
     }
-    const folder: ContentItem = {
-      id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      courseId: input.courseId,
-      parentId: input.parentId || null,
-      name: input.name,
-      kind: 'folder',
-      size: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      lastOpenedAt: null,
-      owner: 'Super Admin',
-      mimeType: null,
-      storagePath: null,
-      description: '',
-      entityType: null,
-      accessType: 'FREE',
-      price: null,
-      sampleImages: [],
-      storeSections: [],
-      displayOrder: 0,
-    };
-    items.push(folder);
-    return folder;
   }
 
   async uploadFile(parentId: string | null, input: ContentUploadInput): Promise<ContentItem> {
-    const item: ContentItem = {
-      id: `content-${Date.now()}`,
+    if (!input.sourceFile) throw new ContentRepositoryError('VALIDATION_ERROR', 'The selected file is no longer available. Please select it again.');
+    const [uploaded] = await this.publishContent({
       courseId: input.courseId,
-      parentId: parentId,
-      name: input.name,
-      kind: 'file',
-      size: input.size,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      lastOpenedAt: null,
-      owner: 'Super Admin',
-      mimeType: input.mimeType,
-      storagePath: null,
-      description: input.description || '',
-      entityType: input.entityType || 'study-material',
-      accessType: input.accessType || 'FREE',
-      price: input.price ?? null,
-      sampleImages: input.sampleImages || [],
-      storeSections: input.storeSections || [],
-      displayOrder: input.displayOrder || 0,
-    };
-    items.push(item);
-    return item;
+      destinationId: parentId,
+      entries: [{
+        temporaryId: crypto.randomUUID(),
+        parentTemporaryId: null,
+        relativePath: input.name,
+        kind: 'file',
+        name: input.name,
+        size: input.size,
+        mimeType: input.mimeType,
+        sourceFile: input.sourceFile,
+        entityType: input.entityType,
+        accessType: input.accessType ?? 'FREE',
+        price: input.price ?? null,
+        accessDurationValue: input.accessDurationValue ?? null,
+        accessDurationUnit: input.accessDurationUnit ?? null,
+        description: input.description ?? '',
+        sampleImages: input.sampleImages ?? [],
+        storeSections: input.storeSections ?? [],
+        displayOrder: input.displayOrder ?? 0,
+      }],
+    });
+    if (!uploaded) throw new ContentRepositoryError('STORAGE_ERROR', 'The server did not return the uploaded content item.');
+    return uploaded;
   }
 
   async publishContent(input: ContentPublishInput): Promise<ContentItem[]> {
@@ -571,42 +492,15 @@ export class MockContentRepository implements ContentRepository {
       } catch (error) {
         requireBackend(error, `The folder "${folderEntry.name}" could not be created.`);
       }
+      if (!createdItem) throw new ContentRepositoryError('STORAGE_ERROR', `The server did not return the created folder "${folderEntry.name}".`);
 
-      if (!createdItem) {
-        createdItem = {
-          id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          courseId: input.courseId,
-          parentId: parentId || null,
-          name: folderEntry.name,
-          kind: 'folder',
-          size: 0,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          lastOpenedAt: null,
-          owner: 'Super Admin',
-          mimeType: null,
-          storagePath: null,
-          description: folderEntry.description || '',
-          entityType: null,
-          accessType: 'FREE',
-          price: null,
-          sampleImages: [],
-          storeSections: [],
-          displayOrder: folderEntry.displayOrder || 0,
-        };
-      }
 
       if (folderEntry.pageHeading) {
-        try {
-          await this.updatePageHeading(input.courseId, createdItem.id, folderEntry.pageHeading);
-        } catch {
-          // Ignore
-        }
+        await this.updatePageHeading(input.courseId, createdItem.id, folderEntry.pageHeading);
       }
 
       temporaryToRealId.set(folderEntry.temporaryId, createdItem.id);
       results.push(createdItem);
-      items.push(createdItem);
     }
 
     // 2. Process Files next using the resolved folder parentIds
@@ -617,10 +511,10 @@ export class MockContentRepository implements ContentRepository {
 
       let createdItem: ContentItem | null = null;
       try {
-        if (!fileEntry.sourceFile && !allowOfflineFixtures) {
+        if (!fileEntry.sourceFile) {
           throw new ContentRepositoryError('VALIDATION_ERROR', `The source file for "${fileEntry.name}" is no longer available. Please select it again.`);
         }
-        const filePayload = fileEntry.sourceFile || new Blob(['Parallax Flow content file binary'], { type: fileEntry.mimeType || 'application/pdf' });
+        const filePayload = fileEntry.sourceFile;
         const checksumSha256 = await calculateSha256(filePayload);
         const intent = await apiRequest<{ uploadId: string; uploadUrl: string; headers: Record<string, string>; objectKey: string }>('/api/admin/content/upload-intents', {
           method: 'POST',
@@ -681,42 +575,10 @@ export class MockContentRepository implements ContentRepository {
       } catch (error) {
         requireBackend(error, `The file "${fileEntry.name}" could not be published. Please try again.`);
       }
+      if (!createdItem) throw new ContentRepositoryError('STORAGE_ERROR', `The server did not return the published file "${fileEntry.name}".`);
 
-      if (!createdItem) {
-        createdItem = {
-          id: `content-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          courseId: input.courseId,
-          parentId: parentId || null,
-          name: fileEntry.name,
-          kind: 'file',
-          size: fileEntry.size,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          lastOpenedAt: null,
-          owner: 'Super Admin',
-          mimeType: fileEntry.mimeType,
-          storagePath: null,
-          description: fileEntry.description,
-          entityType: fileEntry.entityType || 'study-material',
-          accessType: fileEntry.accessType,
-          price: fileEntry.price,
-          accessDurationValue: fileEntry.accessDurationValue,
-          accessDurationUnit: fileEntry.accessDurationUnit,
-          sampleImages: fileEntry.sampleImages,
-          storeSections: fileEntry.storeSections,
-          displayOrder: fileEntry.displayOrder,
-        };
-      }
 
-      if (fileEntry.sampleImages?.length || fileEntry.storeSections?.length || fileEntry.description) {
-        saveItemMetadata(createdItem.id, {
-          description: fileEntry.description ?? '',
-          sampleImages: fileEntry.sampleImages ?? [],
-          storeSections: fileEntry.storeSections ?? [],
-        });
-      }
       results.push(createdItem);
-      items.push(createdItem);
     }
 
     return results;
@@ -739,42 +601,27 @@ export class MockContentRepository implements ContentRepository {
 
   async deleteItems(itemIds: string[]): Promise<void> {
     for (const id of itemIds) {
-      try {
-        await apiRequest(`/api/admin/content/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      } catch {
-        // Ignore
-      }
+      await apiRequest(`/api/admin/content/${encodeURIComponent(id)}`, { method: 'DELETE' });
       for (const [key] of this.locationSettingsMap.entries()) {
         if (key.includes(id)) {
           this.locationSettingsMap.delete(key);
         }
       }
-      const index = items.findIndex((i) => i.id === id);
-      if (index !== -1) {
-        items.splice(index, 1);
-      }
     }
   }
 
   async restoreItem(item: ContentItem): Promise<void> {
-    const existing = items.find((i) => i.id === item.id);
-    if (!existing) {
-      items.push(item);
-    }
+    const restored = await apiRequest<BackendContentDto>(`/api/admin/content/${encodeURIComponent(item.id)}/restore`, { method: 'POST' });
+    if (!restored?.id) throw new ContentRepositoryError('STORAGE_ERROR', `The server did not confirm that "${item.name}" was restored.`);
   }
 
   async copyItems(itemIds: string[], destinationId: string | null): Promise<ContentItem[]> {
     const results: ContentItem[] = [];
     for (const id of itemIds) {
-      try {
-        const dto = await apiRequest<BackendContentDto>(`/api/admin/content/${encodeURIComponent(id)}/copy`, {
-          method: 'POST',
-          body: { parentId: destinationId },
-        });
-        if (dto && dto.id) results.push(adaptBackendContent(dto));
-      } catch {
-        // Ignore
-      }
+      const dto = await apiRequest<BackendContentDto>(`/api/admin/content/${encodeURIComponent(id)}/copy`, {
+        method: 'POST', body: { parentId: destinationId },
+      });
+      results.push(adaptBackendContent(dto));
     }
     return results;
   }
@@ -782,15 +629,10 @@ export class MockContentRepository implements ContentRepository {
   async moveItems(itemIds: string[], destinationId: string | null): Promise<ContentItem[]> {
     const results: ContentItem[] = [];
     for (const id of itemIds) {
-      try {
-        const dto = await apiRequest<BackendContentDto>(`/api/admin/content/${encodeURIComponent(id)}/move`, {
-          method: 'POST',
-          body: { parentId: destinationId },
-        });
-        if (dto && dto.id) results.push(adaptBackendContent(dto));
-      } catch {
-        // Ignore
-      }
+      const dto = await apiRequest<BackendContentDto>(`/api/admin/content/${encodeURIComponent(id)}/move`, {
+        method: 'POST', body: { parentId: destinationId },
+      });
+      results.push(adaptBackendContent(dto));
     }
     return results;
   }
@@ -821,11 +663,6 @@ export class MockContentRepository implements ContentRepository {
     accessDurationValue: number | null = null,
     accessDurationUnit: AccessDurationUnit | null = null
   ): Promise<ContentItem> {
-    saveItemMetadata(itemId, {
-      description: description ?? '',
-      sampleImages: sampleImages ?? [],
-      storeSections: storeSections ?? [],
-    });
     try {
       const dto = await apiRequest<BackendContentDto>(`/api/admin/content/${encodeURIComponent(itemId)}`, {
         method: 'PATCH',
@@ -842,7 +679,6 @@ export class MockContentRepository implements ContentRepository {
       if (dto && dto.id) {
         const persistedImages = await syncSampleImages(itemId, accessType === 'PAID' ? (sampleImages ?? []) : []);
         const item = adaptBackendContent({ ...dto, sampleImages: persistedImages });
-        const idx = items.findIndex((i) => i.id === itemId);
         const merged: ContentItem = {
           ...item,
           accessType,
@@ -853,9 +689,6 @@ export class MockContentRepository implements ContentRepository {
           ...(sampleImages ? { sampleImages } : {}),
           ...(storeSections ? { storeSections } : {}),
         };
-        if (idx !== -1) {
-          items[idx] = merged;
-        }
         return merged;
       }
     } catch (err) {
@@ -873,4 +706,4 @@ export class MockContentRepository implements ContentRepository {
   }
 }
 
-export const mockContentRepository = new MockContentRepository();
+export const apiContentRepository = new ApiContentRepository();

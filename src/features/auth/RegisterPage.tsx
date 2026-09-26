@@ -5,6 +5,7 @@ import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/app/store/useAuthStore';
 import { ROUTES } from '@/config/routes';
 import { SeoHead } from '@/seo/SeoHead';
+import { PRIVATE_ROBOTS } from '@/seo/siteMetadata';
 import { PasswordField } from './PasswordField';
 
 export const RegisterPage: React.FC = () => {
@@ -70,6 +71,7 @@ export const RegisterPage: React.FC = () => {
         title="Create Account | Parallax Flow"
         description="Create your Parallax Flow account for visual, adaptive learning experiences."
         canonicalPath="/register"
+        robots={PRIVATE_ROBOTS}
       />
       <div className="pf-auth-card">
         <p className="pf-auth-kicker">Account</p>

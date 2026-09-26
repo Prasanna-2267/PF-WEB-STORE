@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { mockAcademyRepository } from '@/features/admin/academies/api/mockAcademyRepository';
+import { apiAcademyRepository } from '@/features/admin/academies/api/apiAcademyRepository';
 import type { AcademyRepository } from '@/features/admin/academies/api/academyRepository';
 import type { Academy, AcademyInput, AcademyStatus } from '@/features/admin/academies/types/academy';
 
@@ -18,7 +18,7 @@ interface AcademyState {
   clearSelectedAcademy: () => void;
 }
 
-export const createAcademyStore = (repository: AcademyRepository = mockAcademyRepository) => create<AcademyState>((set, get) => {
+export const createAcademyStore = (repository: AcademyRepository = apiAcademyRepository) => create<AcademyState>((set, get) => {
   const load = async () => {
     set({ status: 'loading', error: null });
     try { set({ academies: await repository.list(), status: 'ready' }); }

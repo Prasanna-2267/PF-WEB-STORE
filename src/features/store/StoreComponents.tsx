@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Check, ChevronRight, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { buildStoreProductPath } from '@/config/routes';
-import { formatPrice } from './data/catalog';
+import { formatPrice } from './data/formatPrice';
 import { StoreAddToCartButton } from './StoreCartActions';
 import type { StoreProduct, StoreProductType } from './types/catalog';
 
@@ -53,7 +53,7 @@ export const StoreProductCover: React.FC<{
       <div className="pf-store-cover__copy">
         <small>{product.subject}</small>
         <strong>{product.title}</strong>
-        <span>{product.version}</span>
+        {product.version ? <span>{product.version}</span> : null}
       </div>
       <i>{getProductTypeLabel(product.productType)}</i>
     </div>
@@ -76,12 +76,14 @@ export const StoreProductCard: React.FC<{ product: StoreProduct; compact?: boole
     <div className="pf-store-product-card__content">
       <p className="pf-store-product-card__meta"><span>{product.subject}</span><span>{getProductTypeLabel(product.productType)}</span></p>
       <Link to={buildStoreProductPath(product.slug)}><h3>{product.title}</h3></Link>
-      <p className="pf-store-product-card__faculty">By {product.faculty}</p>
-      <div className="pf-store-product-card__rating" aria-label={`${product.rating} out of 5 from ${product.ratingCount} learners`}>
-        <Star size={14} fill="currentColor" aria-hidden="true" />
-        <strong>{product.rating.toFixed(1)}</strong>
-        <span>({product.ratingCount})</span>
-      </div>
+      {product.faculty ? <p className="pf-store-product-card__faculty">By {product.faculty}</p> : null}
+      {product.rating !== undefined && product.ratingCount !== undefined ? (
+        <div className="pf-store-product-card__rating" aria-label={`${product.rating} out of 5 from ${product.ratingCount} learners`}>
+          <Star size={14} fill="currentColor" aria-hidden="true" />
+          <strong>{product.rating.toFixed(1)}</strong>
+          <span>({product.ratingCount})</span>
+        </div>
+      ) : null}
       <div className="pf-store-product-card__purchase">
         <p><strong>{formatPrice(product.price)}</strong>{product.discount && <del>{formatPrice(product.discount.originalPrice)}</del>}</p>
       </div>

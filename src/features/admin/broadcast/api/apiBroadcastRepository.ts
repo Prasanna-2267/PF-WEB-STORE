@@ -54,17 +54,11 @@ function adaptBackendBroadcast(dto: BackendBroadcastDto): Broadcast {
   };
 }
 
-export class MockBroadcastRepository implements BroadcastRepository {
+export class ApiBroadcastRepository implements BroadcastRepository {
   async list(): Promise<Broadcast[]> {
-    try {
-      const response = await apiRequest<{ data: BackendBroadcastDto[] }>('/api/admin/broadcasts?limit=100');
-      if (response && Array.isArray(response.data)) {
-        return response.data.map(adaptBackendBroadcast);
-      }
-    } catch {
-      // Unauthenticated / fallback
-    }
-    return [];
+    const response = await apiRequest<{ data: BackendBroadcastDto[] }>('/api/admin/broadcasts?limit=100');
+    if (!Array.isArray(response.data)) throw new BroadcastRepositoryError('STORAGE_ERROR', 'The broadcast service returned an invalid response.');
+    return response.data.map(adaptBackendBroadcast);
   }
 
   async createDraft(input: BroadcastInput): Promise<Broadcast> {
@@ -203,28 +197,14 @@ export class MockBroadcastRepository implements BroadcastRepository {
   }
 
   async delete(broadcastId: string): Promise<void> {
-    try {
-      await apiRequest(`/api/admin/broadcasts/${encodeURIComponent(broadcastId)}/delete`, {
-        method: 'POST',
-      });
-    } catch {
-      // Ignore
-    }
+    await apiRequest(`/api/admin/broadcasts/${encodeURIComponent(broadcastId)}/delete`, { method: 'POST' });
   }
 
   private async updateStatus(broadcastId: string, action: string): Promise<Broadcast> {
-    try {
-      const dto = await apiRequest<BackendBroadcastDto>(`/api/admin/broadcasts/${encodeURIComponent(broadcastId)}/${action}`, {
-        method: 'POST',
-      });
-      if (dto && dto.id) {
-        return adaptBackendBroadcast(dto);
-      }
-    } catch {
-      // Ignore
-    }
-    throw new BroadcastRepositoryError('STORAGE_ERROR', `Failed to execute ${action} on broadcast.`);
+    const dto = await apiRequest<BackendBroadcastDto>(`/api/admin/broadcasts/${encodeURIComponent(broadcastId)}/${action}`, { method: 'POST' });
+    if (!dto?.id) throw new BroadcastRepositoryError('STORAGE_ERROR', 'The broadcast service returned an invalid response.');
+    return adaptBackendBroadcast(dto);
   }
 }
 
-export const mockBroadcastRepository = new MockBroadcastRepository();
+export const apiBroadcastRepository = new ApiBroadcastRepository();

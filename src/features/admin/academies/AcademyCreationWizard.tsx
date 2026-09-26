@@ -1,4 +1,5 @@
 import { AppSelect } from '@/components/ui/AppSelect';
+import { publicEnv } from '@/config/publicEnv';
 import { useMemo, useState } from 'react';
 import {
   ArrowLeft,
@@ -253,7 +254,7 @@ export function AcademyCreationWizard({ saving, error, onCancel, onCreate }: Pro
     setLookupMessage((current) => ({ ...current, [kind]: null }));
 
     try {
-      const res = await fetch(`https://api.postalpincode.in/pincode/${cleanPin}`);
+      const res = await fetch(`${publicEnv.postalLookupUrl}/${cleanPin}`);
       if (!res.ok) throw new Error('API Error');
       const data = await res.json();
       if (Array.isArray(data) && data[0]?.Status === 'Success' && data[0]?.PostOffice?.length) {
@@ -296,7 +297,7 @@ export function AcademyCreationWizard({ saving, error, onCancel, onCreate }: Pro
       }
     } catch {
       try {
-        const fallbackRes = await fetch(`https://api.zippopotam.us/in/${cleanPin}`);
+        const fallbackRes = await fetch(`${publicEnv.secondaryPostalLookupUrl}/${cleanPin}`);
         if (fallbackRes.ok) {
           const zipData = await fallbackRes.json();
           const place = zipData.places?.[0];

@@ -1,4 +1,6 @@
-const SITE_URL = 'https://parallaxflow.in';
+import { publicEnv } from '@/config/publicEnv';
+
+const SITE_URL = publicEnv.siteUrl;
 const SCHEMA_URL = 'https://schema.org';
 
 export type JsonLdObject = Record<string, unknown>;
@@ -72,33 +74,23 @@ export const generateOrganizationJsonLd = (): JsonLdObject[] => [
     '@type': 'EducationalOrganization',
     name: 'Parallax Learning Hub LLP',
     alternateName: 'Parallax Flow',
-    url: 'https://parallaxflow.in',
-    logo: 'https://parallaxflow.in/logo.png',
+    url: SITE_URL,
+    logo: `${SITE_URL}/logo.png`,
     sameAs: [
-      'https://www.linkedin.com/company/parallax-flow/',
-      'https://www.instagram.com/parallaxflow.in',
-      'https://play.google.com/store/apps/details?id=com.parallaxflow.app'
+      publicEnv.linkedInUrl,
+      publicEnv.instagramUrl,
+      publicEnv.playStoreUrl,
     ],
-    description: 'Learning, Designed Around You.'
+    description: 'Learning, Designed Around You.',
+    inLanguage: 'en-IN'
   },
   {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: 'Parallax Flow',
-    url: 'https://parallaxflow.in',
-    description: 'Intelligent Learning Platform'
-  },
-  {
-    '@context': 'https://schema.org',
-    '@type': 'SoftwareApplication',
-    name: 'Parallax Flow Android App',
-    operatingSystem: 'ANDROID',
-    applicationCategory: 'EducationalApplication',
-    offers: {
-      '@type': 'Offer',
-      price: '0',
-      priceCurrency: 'INR'
-    }
+    url: SITE_URL,
+    description: 'Intelligent Learning Platform',
+    inLanguage: 'en-IN'
   }
 ];
 

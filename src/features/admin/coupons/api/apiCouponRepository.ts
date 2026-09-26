@@ -2,8 +2,6 @@ import type { Coupon, CouponDiscountType, CouponInput, CouponUpdateInput } from 
 import { CouponRepositoryError, type CouponRepository } from './couponRepository';
 import { apiRequest } from '@/lib/api/client';
 
-const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-
 interface BackendCouponDto {
   id: string;
   code: string;
@@ -35,17 +33,11 @@ function adaptBackendCoupon(dto: BackendCouponDto): Coupon {
   };
 }
 
-export class MockCouponRepository implements CouponRepository {
+export class ApiCouponRepository implements CouponRepository {
   async list(): Promise<Coupon[]> {
-    try {
-      const response = await apiRequest<{ data: BackendCouponDto[] }>('/api/admin/coupons?limit=100');
-      if (response && Array.isArray(response.data)) {
-        return response.data.map(adaptBackendCoupon);
-      }
-    } catch {
-      // Unauthenticated fallback
-    }
-    return [];
+    const response = await apiRequest<{ data: BackendCouponDto[] }>('/api/admin/coupons?limit=100');
+    if (!Array.isArray(response.data)) throw new CouponRepositoryError('STORAGE_ERROR', 'The coupon service returned an invalid response.');
+    return response.data.map(adaptBackendCoupon);
   }
 
   async create(input: CouponInput): Promise<Coupon> {
@@ -105,14 +97,8 @@ export class MockCouponRepository implements CouponRepository {
   }
 
   async delete(couponId: string): Promise<void> {
-    try {
-      await apiRequest(`/api/admin/coupons/${encodeURIComponent(couponId)}`, {
-        method: 'DELETE',
-      });
-    } catch {
-      // Soft ignore
-    }
+    await apiRequest(`/api/admin/coupons/${encodeURIComponent(couponId)}`, { method: 'DELETE' });
   }
 }
 
-export const mockCouponRepository = new MockCouponRepository();
+export const apiCouponRepository = new ApiCouponRepository();

@@ -897,7 +897,7 @@ export const PackagesPage: React.FC = () => {
         size="small"
         footer={<><button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={() => setDeletePackage(null)} disabled={deleting}>Cancel</button><button className="pf-admin-button pf-admin-button--danger" type="button" onClick={() => void confirmDelete()} disabled={deleting}>{deleting ? 'Deleting…' : 'Delete package'}</button></>}
       >
-        <div className="pf-package-delete-confirm"><Trash2 size={22} /><p><strong>{deletePackage?.title}</strong> will no longer be available as a package. This cannot be undone in the current mock environment.</p></div>
+        <div className="pf-package-delete-confirm"><Trash2 size={22} /><p><strong>{deletePackage?.title}</strong> will no longer be available as a package. This action cannot be undone.</p></div>
       </AdminDialog>
 
       <AdminToast toast={toast} onDismiss={() => setToast(null)} />

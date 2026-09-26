@@ -1,1 +1,8 @@
+/about /about/index.html 200
+/contact /contact/index.html 200
+/home /home/index.html 200
+/store /store/index.html 200
+/login /login/index.html 200
+/register /register/index.html 200
+/forgot-password /forgot-password/index.html 200
 /* /index.html 200

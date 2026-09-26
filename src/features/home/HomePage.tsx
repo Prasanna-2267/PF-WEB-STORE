@@ -23,7 +23,9 @@ import { ROUTES } from '@/config/routes';
 import { useThemeStore } from '@/app/store/useThemeStore';
 import { useAuthStore } from '@/app/store/useAuthStore';
 import { SeoHead } from '@/seo/SeoHead';
+import { STATIC_SEO } from '@/seo/siteMetadata';
 import { PoweredByNeuralWebLabs } from '@/components/branding/PoweredByNeuralWebLabs';
+import { publicEnv } from '@/config/publicEnv';
 import './theme.css';
 import './navbar.css';
 import './hero.css';
@@ -449,6 +451,9 @@ export const HomePage: React.FC = () => {
   const isContactPage = location.pathname === ROUTES.CONTACT;
   const isAboutPage = location.pathname === ROUTES.ABOUT;
   const isHomeAlias = location.pathname === ROUTES.HOME_ALIAS;
+  const seoMetadata = isContactPage
+    ? STATIC_SEO.contact
+    : isAboutPage ? STATIC_SEO.about : isHomeAlias ? STATIC_SEO.homeAlias : STATIC_SEO.home;
 
   useEffect(() => {
     if (isContactPage && !showOpening) {
@@ -539,31 +544,7 @@ export const HomePage: React.FC = () => {
 
   return (
     <div className="pf-site">
-      <SeoHead
-        title={
-          isContactPage
-            ? 'Contact | Parallax Flow'
-            : isAboutPage
-            ? 'About Us | Parallax Flow'
-            : 'Parallax Flow'
-        }
-        description={
-          isContactPage
-            ? 'Send a message to Parallax Flow. Tell us how we can help.'
-            : isAboutPage
-            ? 'Discover the story, design philosophy, and vision behind Parallax Flow—an adaptive learning ecosystem.'
-            : 'Learning, Designed Around You.'
-        }
-        canonicalPath={
-          isContactPage
-            ? '/contact'
-            : isAboutPage
-            ? '/about'
-            : isHomeAlias
-            ? '/home'
-            : '/'
-        }
-      />
+      <SeoHead {...seoMetadata} />
       <AnimatePresence>
         {showOpening && (
           <motion.div
@@ -729,13 +710,13 @@ export const HomePage: React.FC = () => {
                 <a href="mailto:connect@parallaxflow.in" aria-label="Email connect@parallaxflow.in" title="Email connect@parallaxflow.in">
                   <Mail aria-hidden="true" />
                 </a>
-                <a href="https://www.linkedin.com/company/parallax-flow/" target="_blank" rel="noreferrer" aria-label="LinkedIn profile" title="LinkedIn profile">
+                <a href={publicEnv.linkedInUrl} target="_blank" rel="noreferrer" aria-label="LinkedIn profile" title="LinkedIn profile">
                   <Linkedin aria-hidden="true" />
                 </a>
-                <a href="https://www.instagram.com/parallaxflow.in?utm_source=qr&igsh=N2U1YWh5Yzlud2Jn" target="_blank" rel="noreferrer" aria-label="Instagram profile" title="Instagram profile">
+                <a href={publicEnv.instagramUrl} target="_blank" rel="noreferrer" aria-label="Instagram profile" title="Instagram profile">
                   <Instagram aria-hidden="true" />
                 </a>
-                <a href="https://wa.me/916369484337" target="_blank" rel="noreferrer" aria-label="Chat with Parallax Flow on WhatsApp" title="WhatsApp">
+                <a href={publicEnv.whatsappUrl} target="_blank" rel="noreferrer" aria-label="Chat with Parallax Flow on WhatsApp" title="WhatsApp">
                   <WhatsAppIcon />
                 </a>
               </div>
@@ -746,7 +727,7 @@ export const HomePage: React.FC = () => {
               <div className="pf-contact__map">
                 <iframe
                   title="Parallax Flow office location"
-                  src="https://www.google.com/maps?q=Block%2010%2C%20WeWork%20DLF%20Cybercity%2C%20124%2C%20Mount%20Poonamallee%20Rd%2C%20Manapakkam%2C%20Chennai%2C%20Tamil%20Nadu%20600089&amp;output=embed"
+                  src={publicEnv.officeMapUrl}
                   loading="lazy"
                   referrerPolicy="no-referrer-when-downgrade"
                 />
@@ -844,8 +825,8 @@ export const HomePage: React.FC = () => {
             <div className="pf-footer-pro__col">
               <h4>Connect</h4>
               <a href="mailto:connect@parallaxflow.in">connect@parallaxflow.in</a>
-              <a href="https://www.linkedin.com/company/parallax-flow/" target="_blank" rel="noreferrer">LinkedIn ↗</a>
-              <a href="https://www.instagram.com/parallaxflow.in?utm_source=qr&igsh=N2U1YWh5Yzlud2Jn" target="_blank" rel="noreferrer">Instagram ↗</a>
+              <a href={publicEnv.linkedInUrl} target="_blank" rel="noreferrer">LinkedIn ↗</a>
+              <a href={publicEnv.instagramUrl} target="_blank" rel="noreferrer">Instagram ↗</a>
             </div>
           </div>
         </div>

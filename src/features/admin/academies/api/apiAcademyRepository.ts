@@ -2,26 +2,6 @@ import type { Academy, AcademyInput, AcademyStatus } from '../types/academy';
 import { AcademyRepositoryError, type AcademyRepository } from './academyRepository';
 import { apiRequest } from '@/lib/api/client';
 
-const STORAGE_KEY = 'pf_admin_academies_v1';
-const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-const delay = (ms = 90) => new Promise((resolve) => window.setTimeout(resolve, ms));
-const normalize = (value: string): string => value.trim().replace(/\s+/g, ' ');
-const normalizeEmail = (value: string): string => value.trim().toLowerCase();
-
-const fallbackAcademies: Academy[] = [
-  {
-    id: 'academy-ink-001', name: 'Ink Academy', email: 'hello@inkacademy.in', phone: '+91 98765 43210',
-    address: '14 Knowledge Park, Indiranagar', city: 'Bengaluru', state: 'Karnataka', country: 'India', postalCode: '560038',
-    website: 'https://inkacademy.in', description: 'A technology academy focused on practical, industry-ready learning journeys.',
-    status: 'ACTIVE', adminName: 'John Doe', adminEmail: 'john@inkacademy.in', adminPhone: '+91 98450 11223',
-    studentCount: 124, activeStudentCount: 116, courseCount: 8, activeCourseCount: 6, packageCount: 4, orderCount: 286, revenue: 248500,
-    courses: [{ id: 'ink-course-1', name: 'Full Stack Development', studentCount: 124, status: 'ACTIVE' }],
-    students: [{ id: 'ink-student-1', name: 'Rahul Kumar', email: 'rahul@example.com', status: 'ACTIVE' }],
-    recentActivity: [{ id: 'ink-activity-1', label: 'New course created', occurredAt: '2026-08-14T10:20:00.000Z' }],
-    createdAt: '2026-08-01T09:00:00.000Z', updatedAt: '2026-08-14T10:20:00.000Z',
-  },
-];
-
 interface BackendAcademyDto {
   id: string;
   slug: string;
@@ -78,31 +58,17 @@ function adaptBackendAcademy(dto: BackendAcademyDto): Academy {
   };
 }
 
-export class MockAcademyRepository implements AcademyRepository {
+export class ApiAcademyRepository implements AcademyRepository {
   async list(): Promise<Academy[]> {
-    try {
-      const response = await apiRequest<{ data: BackendAcademyDto[] }>('/api/admin/academies?limit=100');
-      if (response && Array.isArray(response.data) && response.data.length > 0) {
-        return response.data.map(adaptBackendAcademy);
-      }
-    } catch {
-      // Fall back if unauthenticated
-    }
-    return clone(fallbackAcademies);
+    const response = await apiRequest<{ data: BackendAcademyDto[] }>('/api/admin/academies?limit=100');
+    if (!Array.isArray(response.data)) throw new AcademyRepositoryError('STORAGE_ERROR', 'The academy service returned an invalid response.');
+    return response.data.map(adaptBackendAcademy);
   }
 
   async get(academyId: string): Promise<Academy> {
-    try {
-      const dto = await apiRequest<BackendAcademyDto>(`/api/admin/academies/${encodeURIComponent(academyId)}`);
-      if (dto && dto.id) {
-        return adaptBackendAcademy(dto);
-      }
-    } catch {
-      // Fall back
-    }
-    const found = fallbackAcademies.find((a) => a.id === academyId);
-    if (!found) throw new AcademyRepositoryError('NOT_FOUND', 'Academy not found.');
-    return clone(found);
+    const dto = await apiRequest<BackendAcademyDto>(`/api/admin/academies/${encodeURIComponent(academyId)}`);
+    if (!dto?.id) throw new AcademyRepositoryError('STORAGE_ERROR', 'The academy service returned an invalid response.');
+    return adaptBackendAcademy(dto);
   }
 
   async create(input: AcademyInput): Promise<Academy> {
@@ -179,4 +145,4 @@ export class MockAcademyRepository implements AcademyRepository {
   }
 }
 
-export const mockAcademyRepository = new MockAcademyRepository();
+export const apiAcademyRepository = new ApiAcademyRepository();

@@ -31,8 +31,7 @@ export class ContentRepositoryError extends Error {
 }
 
 /**
- * UI-facing content contract. A production adapter can replace the mock with
- * authenticated APIs and object storage without changing the file-manager UI.
+ * UI-facing contract for authenticated content APIs and object storage.
  */
 export interface ContentRepository {
   getAllItems(courseId?: string): Promise<ContentItem[]>;
@@ -50,6 +49,7 @@ export interface ContentRepository {
   publishContent(input: ContentPublishInput): Promise<ContentItem[]>;
   renameItem(itemId: string, name: string): Promise<ContentItem>;
   deleteItems(itemIds: string[]): Promise<void>;
+  restoreItem(item: ContentItem): Promise<void>;
   copyItems(itemIds: string[], destinationId: string | null): Promise<ContentItem[]>;
   moveItems(itemIds: string[], destinationId: string | null): Promise<ContentItem[]>;
   updateDescription(itemId: string, description: string): Promise<ContentItem>;

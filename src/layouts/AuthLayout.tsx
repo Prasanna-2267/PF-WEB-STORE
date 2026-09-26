@@ -4,6 +4,7 @@ import { Sun, Moon, Mail, Linkedin, Instagram } from 'lucide-react';
 import { ROUTES } from '@/config/routes';
 import { useThemeStore } from '@/app/store/useThemeStore';
 import { PoweredByNeuralWebLabs } from '@/components/branding/PoweredByNeuralWebLabs';
+import { publicEnv } from '@/config/publicEnv';
 import '@/features/home/theme.css';
 import '@/features/home/footer.css';
 import '@/features/home/login.css';
@@ -77,8 +78,8 @@ export const AuthLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             <div className="pf-footer-pro__col">
               <h4>Connect</h4>
               <a href="mailto:connect@parallaxflow.in">connect@parallaxflow.in</a>
-              <a href="https://www.linkedin.com/company/parallax-flow/" target="_blank" rel="noreferrer">LinkedIn ↗</a>
-              <a href="https://www.instagram.com/parallaxflow.in?utm_source=qr&igsh=N2U1YWh5Yzlud2Jn" target="_blank" rel="noreferrer">Instagram ↗</a>
+              <a href={publicEnv.linkedInUrl} target="_blank" rel="noreferrer">LinkedIn ↗</a>
+              <a href={publicEnv.instagramUrl} target="_blank" rel="noreferrer">Instagram ↗</a>
             </div>
           </div>
         </div>

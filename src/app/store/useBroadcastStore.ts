@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { BroadcastRepositoryError, type BroadcastRepository } from '@/features/admin/broadcast/api/broadcastRepository';
-import { mockBroadcastRepository } from '@/features/admin/broadcast/api/mockBroadcastRepository';
+import { apiBroadcastRepository } from '@/features/admin/broadcast/api/apiBroadcastRepository';
 import type { Broadcast, BroadcastInput } from '@/features/admin/broadcast/types/broadcast';
 
 export interface BroadcastState {
@@ -25,7 +25,7 @@ export interface BroadcastState {
 
 const messageFor = (error: unknown, fallback: string) => error instanceof BroadcastRepositoryError || error instanceof Error ? error.message : fallback;
 
-export const createBroadcastStore = (repository: BroadcastRepository = mockBroadcastRepository) => create<BroadcastState>((set, get) => {
+export const createBroadcastStore = (repository: BroadcastRepository = apiBroadcastRepository) => create<BroadcastState>((set, get) => {
   let requestId = 0;
   const load = async () => {
     const current = ++requestId; set({ status: 'loading', error: null });

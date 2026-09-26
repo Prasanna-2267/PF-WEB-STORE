@@ -2,8 +2,6 @@ import type { LearningPackage, PackageInput } from '../types/package';
 import { PackageRepositoryError, type PackageRepository } from './packageRepository';
 import { apiRequest } from '@/lib/api/client';
 
-const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-
 interface BackendPackageDto {
   id: string;
   courseId?: string | null;
@@ -40,29 +38,17 @@ function adaptBackendPackage(dto: BackendPackageDto): LearningPackage {
   };
 }
 
-export class MockPackageRepository implements PackageRepository {
+export class ApiPackageRepository implements PackageRepository {
   async list(): Promise<LearningPackage[]> {
-    try {
-      const response = await apiRequest<{ data: BackendPackageDto[] }>('/api/admin/packages?limit=100');
-      if (response && Array.isArray(response.data)) {
-        return response.data.map(adaptBackendPackage);
-      }
-    } catch {
-      // Unauthenticated fallback
-    }
-    return [];
+    const response = await apiRequest<{ data: BackendPackageDto[] }>('/api/admin/packages?limit=100');
+    if (!Array.isArray(response.data)) throw new PackageRepositoryError('STORAGE_ERROR', 'The package service returned an invalid response.');
+    return response.data.map(adaptBackendPackage);
   }
 
   async get(packageId: string): Promise<LearningPackage> {
-    try {
-      const dto = await apiRequest<BackendPackageDto>(`/api/admin/packages/${encodeURIComponent(packageId)}`);
-      if (dto && dto.id) {
-        return adaptBackendPackage(dto);
-      }
-    } catch {
-      // Fallback
-    }
-    throw new PackageRepositoryError('NOT_FOUND', 'Package not found.');
+    const dto = await apiRequest<BackendPackageDto>(`/api/admin/packages/${encodeURIComponent(packageId)}`);
+    if (!dto?.id) throw new PackageRepositoryError('STORAGE_ERROR', 'The package service returned an invalid response.');
+    return adaptBackendPackage(dto);
   }
 
   async create(input: PackageInput): Promise<LearningPackage> {
@@ -119,4 +105,4 @@ export class MockPackageRepository implements PackageRepository {
   }
 }
 
-export const mockPackageRepository = new MockPackageRepository();
+export const apiPackageRepository = new ApiPackageRepository();

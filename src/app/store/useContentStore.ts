@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { mockContentRepository } from '@/features/admin/content/api/mockContentRepository';
+import { apiContentRepository } from '@/features/admin/content/api/apiContentRepository';
 import type { ContentRepository } from '@/features/admin/content/api/contentRepository';
 import type {
   ContentBreadcrumb,
@@ -75,7 +75,7 @@ const initialView = (): ContentViewMode => {
   return window.localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'list';
 };
 
-export const createContentStore = (repository: ContentRepository = mockContentRepository) => create<ContentState>((set, get) => {
+export const createContentStore = (repository: ContentRepository = apiContentRepository) => create<ContentState>((set, get) => {
   let request = 0;
   const viewCache = new Map<string, Pick<ContentState, 'items' | 'breadcrumbs' | 'pageHeading'>>();
   const cacheKey = (courseId: string, folderId: string | null) => `${courseId}:${folderId ?? 'root'}`;
@@ -351,4 +351,4 @@ export const createContentStore = (repository: ContentRepository = mockContentRe
 });
 
 export const useContentStore = createContentStore();
-export { mockContentRepository as contentRepository };
+export { apiContentRepository as contentRepository };

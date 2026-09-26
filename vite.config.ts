@@ -1,21 +1,26 @@
 import { defineConfig } from 'vitest/config';
+import { loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import fs from 'fs';
+import { emitProductionSeoAssets } from './src/seo/buildSeo';
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const environment = loadEnv(mode, __dirname, '');
+  if (!environment.VITE_SITE_URL) throw new Error('VITE_SITE_URL must be configured for production assets.');
+  const siteUrl = new URL(environment.VITE_SITE_URL).toString().replace(/\/$/, '');
+  const siteHost = new URL(siteUrl).hostname;
+  if (mode === 'production' && !['localhost', '127.0.0.1'].includes(siteHost) && !siteUrl.startsWith('https://')) {
+    throw new Error('VITE_SITE_URL must use HTTPS for production builds.');
+  }
+  return ({
   plugins: [
     react(),
     {
-      name: 'copy-index-to-404',
+      name: 'emit-production-seo-assets',
       closeBundle() {
         const distDir = path.resolve(__dirname, 'dist');
-        const indexPath = path.join(distDir, 'index.html');
-        const fourOhFourPath = path.join(distDir, '404.html');
-        if (fs.existsSync(indexPath)) {
-          fs.copyFileSync(indexPath, fourOhFourPath);
-        }
+        emitProductionSeoAssets(distDir, siteUrl);
       },
     },
   ],
@@ -35,4 +40,5 @@ export default defineConfig({
     environment: 'jsdom',
     pool: 'threads',
   },
+  });
 });

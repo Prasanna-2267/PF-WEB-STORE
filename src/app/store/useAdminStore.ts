@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { mockAdminRepository } from '@/features/admin/api/mockAdminRepository';
+import { apiAdminRepository } from '@/features/admin/api/apiAdminRepository';
 import type { AdminRepository } from '@/features/admin/api/adminRepository';
 import type {
   AccessGrantInput,
@@ -97,7 +97,7 @@ const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 
 /** Creates the admin store against any repository adapter, which keeps UI state testable. */
-export const createAdminStore = (repository: AdminRepository = mockAdminRepository) =>
+export const createAdminStore = (repository: AdminRepository = apiAdminRepository) =>
   create<AdminState>((set, get) => {
     let overviewRequestId = 0;
     let studentsRequestId = 0;

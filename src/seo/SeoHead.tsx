@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react';
 import { generateOrganizationJsonLd, JsonLdObject } from './structuredData';
+import { publicEnv } from '@/config/publicEnv';
+import { DEFAULT_ROBOTS, STATIC_SEO } from './siteMetadata';
 
 interface SeoHeadProps {
   title?: string;
@@ -11,7 +13,7 @@ interface SeoHeadProps {
   jsonLd?: JsonLdObject | JsonLdObject[];
 }
 
-const SITE_URL = 'https://parallaxflow.in';
+const SITE_URL = publicEnv.siteUrl;
 const DEFAULT_IMAGE = `${SITE_URL}/logo.png`;
 
 const toAbsoluteUrl = (value: string): string => {
@@ -23,10 +25,10 @@ const toAbsoluteUrl = (value: string): string => {
 };
 
 export const SeoHead: React.FC<SeoHeadProps> = ({
-  title = 'Parallax Flow',
-  description = 'Learning, Designed Around You.',
+  title = STATIC_SEO.home.title,
+  description = STATIC_SEO.home.description,
   canonicalPath = '/',
-  robots = 'index, follow',
+  robots = DEFAULT_ROBOTS,
   ogType = 'website',
   image = DEFAULT_IMAGE,
   jsonLd,
@@ -71,7 +73,9 @@ export const SeoHead: React.FC<SeoHeadProps> = ({
       { property: 'og:url', content: canonicalUrl },
       { property: 'og:type', content: ogType },
       { property: 'og:site_name', content: 'Parallax Flow' },
-      { property: 'og:image', content: socialImageUrl }
+      { property: 'og:locale', content: 'en_IN' },
+      { property: 'og:image', content: socialImageUrl },
+      { property: 'og:image:alt', content: `${title} — Parallax Flow` }
     ];
 
     ogTags.forEach(({ property, content }) => {
@@ -90,7 +94,8 @@ export const SeoHead: React.FC<SeoHeadProps> = ({
       { name: 'twitter:description', content: description },
       { name: 'twitter:url', content: canonicalUrl },
       { name: 'twitter:card', content: 'summary_large_image' },
-      { name: 'twitter:image', content: socialImageUrl }
+      { name: 'twitter:image', content: socialImageUrl },
+      { name: 'twitter:image:alt', content: `${title} — Parallax Flow` }
     ];
 
     twitterTags.forEach(({ name, content }) => {

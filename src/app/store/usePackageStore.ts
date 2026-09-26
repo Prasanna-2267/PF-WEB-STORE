@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { mockPackageRepository } from '@/features/admin/packages/api/mockPackageRepository';
+import { apiPackageRepository } from '@/features/admin/packages/api/apiPackageRepository';
 import type { PackageRepository } from '@/features/admin/packages/api/packageRepository';
 import type { LearningPackage, PackageInput } from '@/features/admin/packages/types/package';
 
@@ -14,7 +14,7 @@ interface PackageState {
   deletePackage: (packageId: string) => Promise<void>;
 }
 
-export const createPackageStore = (repository: PackageRepository = mockPackageRepository) => create<PackageState>((set, get) => {
+export const createPackageStore = (repository: PackageRepository = apiPackageRepository) => create<PackageState>((set, get) => {
   const load = async () => {
     set({ status: 'loading', error: null });
     try {

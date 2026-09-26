@@ -7,10 +7,9 @@ import { useThemeStore } from '@/app/store/useThemeStore';
 import { useAuthStore } from '@/app/store/useAuthStore';
 import { useCartStore } from '@/app/store/useCartStore';
 import { buildStoreCategoryPath, ROUTES } from '@/config/routes';
-import { getProductBySlug } from './data/catalog';
 import { getStoreCartGuard } from './StoreCartActions';
 import { useStoreContextStore } from './data/useStoreContext';
-import { usePublicCatalog, usePublicCatalogUserCourses } from './data/publicCatalogApi';
+import { adaptCatalogItemToProduct, adaptCatalogPackageToProduct, adaptCatalogQuestionBankToProduct, usePublicCatalog, usePublicCatalogUserCourses } from './data/publicCatalogApi';
 import { findCourseByIdentity, preferredCourseKey } from './utils/courseIdentity';
 import './store.css';
 import { PoweredByNeuralWebLabs } from '@/components/branding/PoweredByNeuralWebLabs';
@@ -91,6 +90,11 @@ const StoreLayout: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState('');
   const catalogQuery = usePublicCatalog();
+  const catalogProducts = useMemo(() => [
+    ...(catalogQuery.data?.packages ?? []).map(adaptCatalogPackageToProduct),
+    ...(catalogQuery.data?.questionBanks ?? []).map(adaptCatalogQuestionBankToProduct),
+    ...(catalogQuery.data?.paidItems ?? []).map(adaptCatalogItemToProduct),
+  ], [catalogQuery.data]);
   const activeCourse = useMemo(
     () => selectedCourseSlug === 'all' ? undefined : findCourseByIdentity(catalogQuery.data?.courses || [], selectedCourseSlug),
     [catalogQuery.data, selectedCourseSlug],
@@ -110,9 +114,9 @@ const StoreLayout: React.FC = () => {
 
   useEffect(() => {
     const pendingAddSlug = new URLSearchParams(location.search).get('add');
-    if (!isAuthenticated || !pendingAddSlug || location.pathname === ROUTES.STORE_CART) return;
+    if (!isAuthenticated || !pendingAddSlug || location.pathname === ROUTES.STORE_CART || catalogQuery.isLoading) return;
 
-    const product = getProductBySlug(pendingAddSlug);
+    const product = catalogProducts.find((item) => item.slug === pendingAddSlug || item.id === pendingAddSlug);
     if (product && !getStoreCartGuard(product, user, itemIds)) {
       addItem(product.id);
     }
@@ -126,7 +130,7 @@ const StoreLayout: React.FC = () => {
       search: serialisedSearch ? `?${serialisedSearch}` : '',
       hash: location.hash,
     }, { replace: true });
-  }, [addItem, isAuthenticated, itemIds, location.hash, location.pathname, location.search, navigate, user]);
+  }, [addItem, catalogProducts, catalogQuery.isLoading, isAuthenticated, itemIds, location.hash, location.pathname, location.search, navigate, user]);
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

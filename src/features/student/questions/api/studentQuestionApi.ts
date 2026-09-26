@@ -72,45 +72,11 @@ export const studentQuestionApi = {
     if (filters.page) params.set('page', String(filters.page));
     if (filters.limit) params.set('limit', String(filters.limit));
 
-    try {
-      const response = await apiRequest<{
-        data: StudentQuestionRecord[];
-        pagination: { page: number; limit: number; total: number; totalPages: number };
-      }>(`/api/student/questions?${params.toString()}`);
-      if (response && Array.isArray(response.data)) {
-        return response;
-      }
-    } catch {
-      // Fallback response for unauthenticated practice view
-    }
-
-    return {
-      data: [
-        {
-          id: 'sq-demo-1',
-          kind: 'NORMAL_MCQ',
-          difficulty: 'INTERMEDIATE',
-          questionHtml: '<p>Which audit evidence is generally considered the most reliable during an independent audit?</p>',
-          classificationMode: 'ENTIRE_CASE',
-          options: [
-            { id: 'A', optionLabel: 'A', html: '<p>Oral representation by management</p>', displayOrder: 0 },
-            { id: 'B', optionLabel: 'B', html: '<p>Internally generated document without controls</p>', displayOrder: 1 },
-            { id: 'C', optionLabel: 'C', html: '<p>External confirmation received directly by the auditor</p>', displayOrder: 2 },
-            { id: 'D', optionLabel: 'D', html: '<p>Photocopy supplied by an employee</p>', displayOrder: 3 },
-          ],
-          subQuestions: [],
-          classification: {
-            courseName: 'Chartered Accountancy',
-            subjectName: 'Auditing',
-            chapterName: 'Audit Evidence',
-            lessonName: 'Audit Procedures',
-            topicName: 'Reliability of Evidence',
-          },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      ],
-      pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
-    };
+    const response = await apiRequest<{
+      data: StudentQuestionRecord[];
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    }>(`/api/student/questions?${params.toString()}`);
+    if (!Array.isArray(response.data)) throw new Error('The question service returned an invalid response.');
+    return response;
   },
 };

@@ -55,7 +55,7 @@ function clearLocalSession(): void {
     [
       'pf_admin_course_context_v1', 'pf_admin_courses_v1', 'pf_admin_question_taxonomy_v1',
       'pf_admin_broadcasts_v1', 'pf_admin_question_bank_v2', 'pf_admin_coupons_v1',
-      'pf_admin_demo_repository_v1', 'pf_admin_content_v1', 'pf_admin_packages_v1',
+      'pf_admin_content_v1', 'pf_admin_packages_v1',
       'pf_admin_academies_v1',
     ].forEach((key) => window.localStorage.removeItem(key));
     window.dispatchEvent(new CustomEvent('pf:session-cleared'));

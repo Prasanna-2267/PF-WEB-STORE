@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { authService } from '@/services/auth.service';
 import { ROUTES } from '@/config/routes';
 import { SeoHead } from '@/seo/SeoHead';
+import { PRIVATE_ROBOTS } from '@/seo/siteMetadata';
 
 export const ForgotPasswordPage: React.FC = () => {
   const [sent, setSent] = useState(false);
@@ -31,6 +32,7 @@ export const ForgotPasswordPage: React.FC = () => {
         title="Forgot Password | Parallax Flow"
         description="Reset your Parallax Flow account password securely and regain access to your learning journey."
         canonicalPath="/forgot-password"
+        robots={PRIVATE_ROBOTS}
       />
       <div className="pf-auth-card">
         <p className="pf-auth-kicker">Account recovery</p>

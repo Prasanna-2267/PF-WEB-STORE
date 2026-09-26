@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { mockCouponRepository } from '@/features/admin/coupons/api/mockCouponRepository';
+import { apiCouponRepository } from '@/features/admin/coupons/api/apiCouponRepository';
 import { CouponRepositoryError, type CouponRepository } from '@/features/admin/coupons/api/couponRepository';
 import type { Coupon, CouponInput, CouponUpdateInput } from '@/features/admin/coupons/types/coupon';
 
@@ -23,7 +23,7 @@ const messageFor = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
-export const createCouponStore = (repository: CouponRepository = mockCouponRepository) => create<CouponState>((set, get) => {
+export const createCouponStore = (repository: CouponRepository = apiCouponRepository) => create<CouponState>((set, get) => {
   let requestId = 0;
 
   const load = async () => {

@@ -14,15 +14,6 @@
   CDN-Cache-Control: no-cache, no-store, must-revalidate
   Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
 
-/home
-  Cache-Control: no-cache, no-store, must-revalidate, no-transform
-  CDN-Cache-Control: no-cache, no-store, must-revalidate
-  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
-
-/home/
-  Cache-Control: no-cache, no-store, must-revalidate, no-transform
-  CDN-Cache-Control: no-cache, no-store, must-revalidate
-  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
 
 /contact
   Cache-Control: no-cache, no-store, must-revalidate, no-transform
@@ -34,35 +25,131 @@
   CDN-Cache-Control: no-cache, no-store, must-revalidate
   Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
 
+
+
+
+
+
+
+/home
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+/home/
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
 /login
   Cache-Control: no-cache, no-store, must-revalidate, no-transform
   CDN-Cache-Control: no-cache, no-store, must-revalidate
   Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
 
 /login/
   Cache-Control: no-cache, no-store, must-revalidate, no-transform
   CDN-Cache-Control: no-cache, no-store, must-revalidate
   Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
 
 /register
   Cache-Control: no-cache, no-store, must-revalidate, no-transform
   CDN-Cache-Control: no-cache, no-store, must-revalidate
   Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
 
 /register/
   Cache-Control: no-cache, no-store, must-revalidate, no-transform
   CDN-Cache-Control: no-cache, no-store, must-revalidate
   Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
 
 /forgot-password
   Cache-Control: no-cache, no-store, must-revalidate, no-transform
   CDN-Cache-Control: no-cache, no-store, must-revalidate
   Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
 
 /forgot-password/
   Cache-Control: no-cache, no-store, must-revalidate, no-transform
   CDN-Cache-Control: no-cache, no-store, must-revalidate
   Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+/academy
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+/academy/*
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+/student
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+/student/*
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+/store/cart
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+/store/cart/
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+/store/checkout
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+/store/checkout/*
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+/store/purchases
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+/store/purchases/*
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+/store/profile
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+
+/store/profile/
+  Cache-Control: no-cache, no-store, must-revalidate, no-transform
+  CDN-Cache-Control: no-cache, no-store, must-revalidate
+  Cloudflare-CDN-Cache-Control: no-cache, no-store, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
 
 /admin
   Cache-Control: no-cache, no-store, must-revalidate, no-transform

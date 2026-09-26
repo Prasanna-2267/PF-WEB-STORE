@@ -9,6 +9,7 @@ import {
 import type { AuthResult } from '@/lib/api/contracts';
 import { ROUTES } from '@/config/routes';
 import { SeoHead } from '@/seo/SeoHead';
+import { PRIVATE_ROBOTS } from '@/seo/siteMetadata';
 import { PasswordField } from './PasswordField';
 
 const ADMIN_OVERVIEW_PATH = '/admin/overview';
@@ -132,6 +133,7 @@ export const LoginPage: React.FC = () => {
         title="Login | Parallax Flow"
         description="Sign in to your Parallax Flow account to access your personalized learning space."
         canonicalPath="/login"
+        robots={PRIVATE_ROBOTS}
       />
       <div className="pf-auth-card">
         <p className="pf-auth-kicker">Account</p>
