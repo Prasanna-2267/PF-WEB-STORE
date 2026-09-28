@@ -1,4 +1,4 @@
-export type BroadcastStatus = 'DRAFT' | 'SCHEDULED' | 'ACTIVE' | 'EXPIRED' | 'ARCHIVED' | 'DISABLED';
+export type BroadcastStatus = 'ACTIVE' | 'ARCHIVED';
 export type BroadcastType = 'ANNOUNCEMENT' | 'IMPORTANT_NOTICE' | 'UPDATE' | 'PROMOTION' | 'MAINTENANCE' | 'FEATURE_UPDATE' | 'ACADEMIC' | 'STORE' | 'GENERAL' | 'CRITICAL_ALERT';
 export type BroadcastPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL';
 export type BroadcastAudienceKind = 'EVERYONE' | 'STUDENTS' | 'COURSES' | 'PACKAGES' | 'ACADEMIES' | 'ACADEMY_STUDENTS';
@@ -64,7 +64,7 @@ export interface Broadcast {
   type: BroadcastType;
   priority: BroadcastPriority;
   status: BroadcastStatus;
-  disabledFrom: 'ACTIVE' | 'SCHEDULED' | null;
+  disabledFrom: 'ACTIVE' | null;
   image: BroadcastImage | null;
   cta: BroadcastCta;
   audience: BroadcastAudience;
@@ -170,13 +170,7 @@ export const BROADCAST_FREQUENCY_LABELS: Record<BroadcastFrequency, string> = {
   ALWAYS_ACTIVE: 'Always while active',
 };
 
-export const getBroadcastStatus = (broadcast: Broadcast, now = new Date()): BroadcastStatus => {
-  if (broadcast.status === 'ARCHIVED' || broadcast.status === 'DRAFT' || broadcast.status === 'DISABLED') return broadcast.status;
-  const currentTime = now.getTime();
-  if (broadcast.endAt && new Date(broadcast.endAt).getTime() <= currentTime) return 'EXPIRED';
-  if (broadcast.status === 'SCHEDULED' && broadcast.startAt && new Date(broadcast.startAt).getTime() <= currentTime) return 'ACTIVE';
-  return broadcast.status;
-};
+export const getBroadcastStatus = (broadcast: Broadcast): BroadcastStatus => broadcast.status;
 
 export const allowedPlacementsFor = (platform: BroadcastPlatform): BroadcastPlacement[] => {
   if (platform === 'APP') return ['NOTIFICATION', 'HOME', 'COURSE', 'GENERAL'];

@@ -40,7 +40,7 @@ const academyBroadcast: Broadcast = {
   message: 'The examination timetable is available.',
   type: 'ACADEMIC',
   priority: 'HIGH',
-  status: 'DRAFT',
+  status: 'ARCHIVED',
   disabledFrom: null,
   image: null,
   cta: { enabled: false, text: '', action: 'INTERNAL_ROUTE', destination: '' },
@@ -71,16 +71,11 @@ const broadcastStore = (): BroadcastState => ({
   pendingId: null,
   initialize: vi.fn().mockResolvedValue(undefined),
   refresh: vi.fn().mockResolvedValue(undefined),
-  createDraft: vi.fn(),
+  createArchived: vi.fn(),
   updateBroadcast: vi.fn(),
   publishNow: vi.fn(),
-  scheduleBroadcast: vi.fn(),
   duplicateBroadcast: vi.fn(),
-  disableBroadcast: vi.fn(),
-  enableBroadcast: vi.fn(),
-  cancelSchedule: vi.fn(),
   archiveBroadcast: vi.fn(),
-  restoreBroadcast: vi.fn(),
   deleteBroadcast: vi.fn(),
 });
 
@@ -190,8 +185,9 @@ describe('Academy Questions and Broadcast shared-module parity', () => {
 
     const summary = screen.getByRole('region', { name: 'Broadcast summary' });
     expect(summary).toBeInTheDocument();
-    for (const label of ['Total', 'Active', 'Scheduled', 'Drafts', 'Expired', 'Archived']) expect(within(summary).getByText(label)).toBeInTheDocument();
+    for (const label of ['Total', 'On-Live', 'Archive']) expect(within(summary).getByText(label)).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Search broadcasts' })).toBeInTheDocument();
+    await user.click(within(summary).getByText('Archive').closest('button')!);
     expect(screen.getAllByText('Academy examination notice').length).toBeGreaterThan(0);
 
     const typeFilter = screen.getByRole('combobox', { name: 'Type' });
@@ -202,9 +198,10 @@ describe('Academy Questions and Broadcast shared-module parity', () => {
 
     await user.click(screen.getByRole('button', { name: /New broadcast/i }));
     const dialog = screen.getByRole('dialog', { name: 'New broadcast' });
-    for (const step of ['Basic', 'Content', 'Audience', 'Display', 'Schedule', 'Behavior', 'Review']) {
+    for (const step of ['Basic', 'Content', 'Audience', 'Display', 'Behavior', 'Review']) {
       expect(within(dialog).getByRole('button', { name: new RegExp(step) })).toBeInTheDocument();
     }
+    expect(within(dialog).queryByRole('button', { name: /Schedule/ })).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: /Audience/ }));
     await waitFor(() => expect(within(dialog).getByRole('heading', { name: 'Who should receive this?' })).toBeInTheDocument());
     expect(within(dialog).getByRole('button', { name: /Academy students only/i })).toBeInTheDocument();

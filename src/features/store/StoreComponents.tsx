@@ -14,7 +14,6 @@ const productTypeLabels: Record<StoreProductType, string> = {
   'question-bank': 'Question Bank',
   'formula-sheet': 'Formula Sheet',
   'mock-test': 'Mock Test',
-  'monthly-report': 'Monthly Report',
   bundle: 'Learning Bundle',
   subscription: 'Subscription',
 };

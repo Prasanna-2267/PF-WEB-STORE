@@ -106,7 +106,7 @@ export type AcademyBroadcastType =
   | 'ANNOUNCEMENT'
   | 'EXAM_ALERT';
 
-export type AcademyBroadcastStatus = 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'EXPIRED' | 'ARCHIVED';
+export type AcademyBroadcastStatus = 'ACTIVE' | 'ARCHIVED';
 
 export interface AcademyBroadcastRecord {
   id: string;
@@ -122,8 +122,6 @@ export interface AcademyBroadcastRecord {
   courseName?: string;
   attachmentName?: string;
   status: AcademyBroadcastStatus;
-  scheduledAt?: string | null;
-  expiresAt?: string | null;
   publishedAt?: string | null;
   createdAt: string;
 }

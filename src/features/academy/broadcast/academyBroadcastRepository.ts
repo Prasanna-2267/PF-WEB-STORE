@@ -20,7 +20,7 @@ interface BackendBroadcastDto {
 const safeAudience = (dto: BackendBroadcastDto): BroadcastAudienceKind => dto.courseTargets?.length ? 'COURSES' : 'ACADEMY_STUDENTS';
 const adapt = (dto: BackendBroadcastDto, image: BroadcastImage | null = null): Broadcast => ({
   id: dto.id, title: dto.title, subtitle: dto.subtitle ?? '', message: dto.message,
-  type: (dto.type ?? 'ANNOUNCEMENT') as Broadcast['type'], priority: (dto.priority ?? 'NORMAL') as Broadcast['priority'], status: (dto.status ?? 'DRAFT') as Broadcast['status'], disabledFrom: null,
+  type: (dto.type ?? 'ANNOUNCEMENT') as Broadcast['type'], priority: (dto.priority ?? 'NORMAL') as Broadcast['priority'], status: (dto.status === 'ACTIVE' ? 'ACTIVE' : 'ARCHIVED') as Broadcast['status'], disabledFrom: null,
   image,
   cta: dto.cta ? { enabled: dto.cta.enabled, text: dto.cta.text, action: dto.cta.action as Broadcast['cta']['action'], destination: dto.cta.destination } : { enabled: false, text: '', action: 'INTERNAL_ROUTE', destination: '' },
   audience: { kind: safeAudience(dto), courseIds: dto.courseTargets?.map((target) => target.course.id) ?? [], packageIds: [], academyIds: [] },
@@ -49,7 +49,6 @@ const academyPayload = (input: BroadcastInput) => {
   return {
     title: input.title, subtitle: input.subtitle || undefined, message: input.message, type, priority: input.priority,
     targetCourseId: input.audience.kind === 'COURSES' ? input.audience.courseIds[0] : null,
-    startAt: input.startAt ?? undefined, endAt: input.endAt ?? undefined,
     platform: 'APP' as const, placements: placements.length > 0 ? placements : ['NOTIFICATION'],
     cta: input.cta, frequency: input.frequency, dismissible: input.dismissible, presentation: input.presentation,
     displayOrder: input.displayOrder, customOrderWeight: input.customOrderWeight, acknowledgementRequired: input.acknowledgementRequired,
@@ -76,7 +75,7 @@ export const academyBroadcastRepository: BroadcastRepository = {
     const response = await apiRequest<{ data: BackendBroadcastDto[] }>(`${basePath}?limit=100`);
     return Promise.all(response.data.map(hydrate));
   },
-  async createDraft(input) {
+  async createArchived(input) {
     const created = await apiRequest<BackendBroadcastDto>(basePath, { method: 'POST', body: academyPayload(input) });
     await uploadImage(created.id, input.image);
     return detail(created.id);
@@ -90,16 +89,11 @@ export const academyBroadcastRepository: BroadcastRepository = {
     }
     return detail(id);
   },
-  async publishNow(id) { await apiRequest(`${basePath}/${encodeURIComponent(id)}/publish`, { method: 'POST' }); return detail(id); },
-  async schedule(id, input) { await apiRequest(`${basePath}/${encodeURIComponent(id)}/schedule`, { method: 'POST', body: { startAt: input.startAt } }); return detail(id); },
+  async publishNow(id) { await apiRequest(`${basePath}/${encodeURIComponent(id)}/on-live`, { method: 'POST' }); return detail(id); },
   async duplicate(id) {
     const source = await detail(id);
-    return this.createDraft({ ...source, title: `${source.title} (Copy)`, startAt: null, endAt: null, image: null });
+    return this.createArchived({ ...source, title: `${source.title} (Copy)`, startAt: null, endAt: null, image: null });
   },
-  async disable(id) { await apiRequest(`${basePath}/${encodeURIComponent(id)}/archive`, { method: 'POST' }); return detail(id); },
-  async enable(id) { await apiRequest(`${basePath}/${encodeURIComponent(id)}/restore`, { method: 'POST' }); return detail(id); },
-  async cancelSchedule(id) { await apiRequest(`${basePath}/${encodeURIComponent(id)}/cancel`, { method: 'POST' }); return detail(id); },
   async archive(id) { await apiRequest(`${basePath}/${encodeURIComponent(id)}/archive`, { method: 'POST' }); return detail(id); },
-  async restore(id) { await apiRequest(`${basePath}/${encodeURIComponent(id)}/restore`, { method: 'POST' }); return detail(id); },
   async delete(id) { await apiRequest(`${basePath}/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
 };

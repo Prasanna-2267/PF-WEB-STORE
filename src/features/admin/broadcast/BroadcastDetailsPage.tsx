@@ -23,9 +23,6 @@ const formatDateTime = (value: string | null): string => value
 
 const getStatusTone = (status: string): AdminStatusTone => {
   if (status === 'ACTIVE') return 'success';
-  if (status === 'SCHEDULED') return 'info';
-  if (status === 'DRAFT') return 'warning';
-  if (status === 'DISABLED') return 'danger';
   return 'neutral';
 };
 
@@ -97,7 +94,7 @@ export default function BroadcastDetailsPage() {
       />
 
       <div className="pf-admin-content">
-        {broadcast.status !== 'DRAFT' && (
+        {broadcast.status === 'ACTIVE' && (
           <section className="pf-broadcast-details-section">
             <h2 className="pf-broadcast-details-heading"><BarChart3 size={18} /> Performance Analytics</h2>
             <div className="pf-broadcast-analytics-grid">
@@ -158,8 +155,6 @@ export default function BroadcastDetailsPage() {
                 <h2 className="pf-broadcast-details-heading"><Clock size={18} /> Delivery & Behavior</h2>
                 <div className="pf-broadcast-details-card pf-broadcast-details-list">
                   <dl>
-                    <dt>Start Time (IST)</dt><dd>{formatDateTime(broadcast.startAt)}</dd>
-                    <dt>End Time (IST)</dt><dd>{formatDateTime(broadcast.endAt)}</dd>
                     <dt>Frequency</dt><dd>{BROADCAST_FREQUENCY_LABELS[broadcast.frequency]}</dd>
                     <dt>Dismissible</dt><dd>{broadcast.dismissible ? 'Yes' : 'No'}</dd>
                     <dt>Acknowledgement</dt><dd>{broadcast.acknowledgementRequired ? 'Required' : 'Not required'}</dd>

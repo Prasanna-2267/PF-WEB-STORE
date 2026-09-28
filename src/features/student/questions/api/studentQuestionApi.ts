@@ -37,6 +37,7 @@ export interface StudentQuestionRecord {
   caseHtml?: string;
   caseId?: string;
   classificationMode: 'ENTIRE_CASE' | 'INDIVIDUAL_SUB_QUESTIONS';
+  examName?: string;
   options: StudentOption[];
   subQuestions: StudentSubQuestion[];
   classification: StudentQuestionClassification;

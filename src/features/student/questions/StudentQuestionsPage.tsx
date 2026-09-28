@@ -175,6 +175,7 @@ export const StudentQuestionsPage: React.FC = () => {
                   )}
                 </div>
                 <div className="pf-sq-tags">
+                  {currentQ.examName?.trim() && <span className="pf-sq-tag-exam" title={currentQ.examName}>{currentQ.examName}</span>}
                   <span className={`pf-sq-tag-diff ${currentQ.difficulty.toLowerCase()}`}>
                     {currentQ.difficulty}
                   </span>

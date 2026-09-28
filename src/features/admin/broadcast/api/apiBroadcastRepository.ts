@@ -30,7 +30,7 @@ function adaptBackendBroadcast(dto: BackendBroadcastDto): Broadcast {
     message: dto.message,
     type: (dto.type || 'ANNOUNCEMENT') as any,
     priority: (dto.priority || 'NORMAL') as any,
-    status: (dto.status || 'DRAFT') as BroadcastStatus,
+    status: (dto.status === 'ACTIVE' ? 'ACTIVE' : 'ARCHIVED') as BroadcastStatus,
     disabledFrom: null,
     image: null,
     cta: { enabled: false, text: '', action: 'INTERNAL_ROUTE', destination: '' },
@@ -61,7 +61,7 @@ export class ApiBroadcastRepository implements BroadcastRepository {
     return response.data.map(adaptBackendBroadcast);
   }
 
-  async createDraft(input: BroadcastInput): Promise<Broadcast> {
+  async createArchived(input: BroadcastInput): Promise<Broadcast> {
     try {
       const dto = await apiRequest<BackendBroadcastDto>('/api/admin/broadcasts', {
         method: 'POST',
@@ -72,8 +72,6 @@ export class ApiBroadcastRepository implements BroadcastRepository {
           type: input.type || 'ANNOUNCEMENT',
           priority: input.priority || 'NORMAL',
           targetAcademyIds: input.audience?.academyIds && input.audience.academyIds.length > 0 ? input.audience.academyIds : undefined,
-          startAt: input.startAt || undefined,
-          endAt: input.endAt || undefined,
         },
       });
       if (dto && dto.id) {
@@ -96,8 +94,6 @@ export class ApiBroadcastRepository implements BroadcastRepository {
           type: input.type,
           priority: input.priority,
           targetAcademyIds: input.audience?.academyIds,
-          startAt: input.startAt || undefined,
-          endAt: input.endAt || undefined,
         },
       });
       if (dto && dto.id) {
@@ -111,7 +107,7 @@ export class ApiBroadcastRepository implements BroadcastRepository {
 
   async publishNow(broadcastId: string, _input?: BroadcastInput): Promise<Broadcast> {
     try {
-      const res = await apiRequest<{ updated?: BackendBroadcastDto; id?: string }>(`/api/admin/broadcasts/${encodeURIComponent(broadcastId)}/publish`, {
+      const res = await apiRequest<{ updated?: BackendBroadcastDto; id?: string }>(`/api/admin/broadcasts/${encodeURIComponent(broadcastId)}/on-live`, {
         method: 'POST',
       });
       const dto = res.updated || (res as unknown as BackendBroadcastDto);
@@ -124,26 +120,11 @@ export class ApiBroadcastRepository implements BroadcastRepository {
     throw new BroadcastRepositoryError('STORAGE_ERROR', 'Failed to publish broadcast on backend.');
   }
 
-  async schedule(broadcastId: string, input: BroadcastInput): Promise<Broadcast> {
-    try {
-      const dto = await apiRequest<BackendBroadcastDto>(`/api/admin/broadcasts/${encodeURIComponent(broadcastId)}/schedule`, {
-        method: 'POST',
-        body: { startAt: input.startAt },
-      });
-      if (dto && dto.id) {
-        return adaptBackendBroadcast(dto);
-      }
-    } catch (err) {
-      if (err instanceof Error) throw new BroadcastRepositoryError('VALIDATION_ERROR', err.message);
-    }
-    throw new BroadcastRepositoryError('STORAGE_ERROR', 'Failed to schedule broadcast on backend.');
-  }
-
   async duplicate(broadcastId: string): Promise<Broadcast> {
     const list = await this.list();
     const existing = list.find((b) => b.id === broadcastId);
     if (!existing) throw new BroadcastRepositoryError('NOT_FOUND', 'Broadcast not found.');
-    return this.createDraft({
+    return this.createArchived({
       title: `${existing.title} (Copy)`,
       subtitle: existing.subtitle,
       message: existing.message,
@@ -166,34 +147,8 @@ export class ApiBroadcastRepository implements BroadcastRepository {
     });
   }
 
-  async disable(broadcastId: string): Promise<Broadcast> {
-    return this.updateStatus(broadcastId, 'archive');
-  }
-
-  async enable(broadcastId: string): Promise<Broadcast> {
-    return this.updateStatus(broadcastId, 'restore');
-  }
-
-  async cancelSchedule(broadcastId: string): Promise<Broadcast> {
-    try {
-      const dto = await apiRequest<BackendBroadcastDto>(`/api/admin/broadcasts/${encodeURIComponent(broadcastId)}/cancel`, {
-        method: 'POST',
-      });
-      if (dto && dto.id) {
-        return adaptBackendBroadcast(dto);
-      }
-    } catch (err) {
-      if (err instanceof Error) throw new BroadcastRepositoryError('VALIDATION_ERROR', err.message);
-    }
-    throw new BroadcastRepositoryError('STORAGE_ERROR', 'Failed to cancel broadcast on backend.');
-  }
-
   async archive(broadcastId: string): Promise<Broadcast> {
     return this.updateStatus(broadcastId, 'archive');
-  }
-
-  async restore(broadcastId: string): Promise<Broadcast> {
-    return this.updateStatus(broadcastId, 'restore');
   }
 
   async delete(broadcastId: string): Promise<void> {

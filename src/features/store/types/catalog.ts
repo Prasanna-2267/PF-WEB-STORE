@@ -11,7 +11,6 @@ export type StoreProductType =
   | 'question-bank'
   | 'formula-sheet'
   | 'mock-test'
-  | 'monthly-report'
   | 'bundle'
   | 'subscription';
 

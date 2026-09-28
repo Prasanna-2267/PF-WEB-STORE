@@ -28,8 +28,8 @@ export interface AcademyContentItem {
 }
 
 export type AcademyContentCopyResult = AcademyContentItem | {
-  accepted: true;
-  job: { id: string; status: string; runAt: string };
+  copiedRootId: string;
+  itemCount: number;
 };
 
 export interface AcademyQuestion {
@@ -85,7 +85,7 @@ export interface AcademyBroadcast {
   message: string;
   type: 'ANNOUNCEMENT' | 'IMPORTANT_NOTICE' | 'UPDATE' | 'MAINTENANCE' | 'FEATURE_UPDATE' | 'ACADEMIC' | 'GENERAL' | 'CRITICAL_ALERT';
   priority: 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL';
-  status: 'DRAFT' | 'SCHEDULED' | 'ACTIVE' | 'ARCHIVED' | 'DISABLED' | 'EXPIRED';
+  status: 'ACTIVE' | 'ARCHIVED';
   audienceKind: 'ACADEMY_STUDENTS' | 'COURSES';
   courseTargets: Array<{ course: { id: string; name: string } }>;
   startAt: string | null;
@@ -189,7 +189,6 @@ export const academyBroadcastApi = {
   get: (id: string) => apiRequest<AcademyBroadcast>(`/api/academy/broadcasts/${encodeURIComponent(id)}`),
   create: (draft: AcademyBroadcastDraft) => apiRequest<AcademyBroadcast>('/api/academy/broadcasts', { method: 'POST', body: draft }),
   update: (id: string, draft: AcademyBroadcastDraft) => apiRequest<AcademyBroadcast>(`/api/academy/broadcasts/${encodeURIComponent(id)}`, { method: 'PATCH', body: draft }),
-  lifecycle: (id: string, action: 'publish' | 'cancel' | 'archive' | 'restore') => apiRequest<AcademyBroadcast>(`/api/academy/broadcasts/${encodeURIComponent(id)}/${action}`, { method: 'POST' }),
-  schedule: (id: string, startAt: string) => apiRequest<AcademyBroadcast>(`/api/academy/broadcasts/${encodeURIComponent(id)}/schedule`, { method: 'POST', body: { startAt } }),
+  lifecycle: (id: string, action: 'on-live' | 'archive') => apiRequest<AcademyBroadcast>(`/api/academy/broadcasts/${encodeURIComponent(id)}/${action}`, { method: 'POST' }),
   remove: (id: string) => apiRequest<{ id: string; deletedAt: string }>(`/api/academy/broadcasts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };

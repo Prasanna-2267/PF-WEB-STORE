@@ -203,6 +203,36 @@
   background: var(--pf-bg-main, #f1f5f9);
   border-radius: 6px;
 }
+.pf-sq-tag-exam {
+  max-width: min(320px, 45vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  color: #b7791f;
+  background: rgba(245, 158, 11, 0.12);
+  border-radius: 6px;
+}
+
+@media (max-width: 720px) {
+  .pf-sq-meta-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .pf-sq-breadcrumbs,
+  .pf-sq-tags {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .pf-sq-tag-exam {
+    max-width: 100%;
+  }
+}
 
 .pf-sq-case-passage {
   background: #f8fafc;

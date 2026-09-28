@@ -277,7 +277,7 @@ export const AcademyContentPage: React.FC = () => {
         pushHistory({ label: 'Reorder content', undo: () => academyContentApi.updateOrder(courseId, parentId, previous).then(() => undefined), redo: () => academyContentApi.updateOrder(courseId, parentId, next).then(() => undefined) });
       }
       setDialog(null); setTargetName(''); setSelected([]); setSelectMode(false); setOrdering(false); setOrderSelection([]);
-      notify(action.kind === 'archive' ? 'Content deleted' : action.kind === 'restore' ? 'Content restored' : action.kind === 'move' ? 'Content moved' : action.kind === 'copy' ? 'Content copied' : action.kind === 'order' ? 'Order saved' : 'Content saved', action.kind === 'copy' && (result as Array<unknown>).some?.((value: any) => value?.accepted) ? 'A folder copy job was accepted and will finish in the background.' : 'The Academy backend confirmed the change.');
+      notify(action.kind === 'archive' ? 'Content deleted' : action.kind === 'restore' ? 'Content restored' : action.kind === 'move' ? 'Content moved' : action.kind === 'copy' ? 'Content copied' : action.kind === 'order' ? 'Order saved' : 'Content saved', 'The Academy backend confirmed the change.');
     },
     onError: (error) => notify('Change failed', error instanceof Error ? error.message : 'The server rejected the request.', 'error'),
   });

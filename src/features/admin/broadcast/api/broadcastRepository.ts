@@ -14,15 +14,10 @@ export class BroadcastRepositoryError extends Error {
 
 export interface BroadcastRepository {
   list(): Promise<Broadcast[]>;
-  createDraft(input: BroadcastInput): Promise<Broadcast>;
+  createArchived(input: BroadcastInput): Promise<Broadcast>;
   update(broadcastId: string, input: BroadcastInput): Promise<Broadcast>;
   publishNow(broadcastId: string, input?: BroadcastInput): Promise<Broadcast>;
-  schedule(broadcastId: string, input: BroadcastInput): Promise<Broadcast>;
   duplicate(broadcastId: string): Promise<Broadcast>;
-  disable(broadcastId: string): Promise<Broadcast>;
-  enable(broadcastId: string): Promise<Broadcast>;
-  cancelSchedule(broadcastId: string): Promise<Broadcast>;
   archive(broadcastId: string): Promise<Broadcast>;
-  restore(broadcastId: string): Promise<Broadcast>;
   delete(broadcastId: string): Promise<void>;
 }

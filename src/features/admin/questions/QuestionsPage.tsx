@@ -12,7 +12,14 @@ type AddMethod = 'manual' | 'excel';
 const labels: Record<QuestionKind, string> = { NORMAL_MCQ: 'Normal MCQ', CASE_MCQ: 'Case-based MCQ' };
 const options = () => ['A', 'B', 'C', 'D'].map((optionLabel) => ({ optionLabel, html: '' }));
 const plain = (html = '') => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-const asHtml = (value: string) => value.trim().startsWith('<') ? value : `<p>${value.trim()}</p>`;
+const asHtml = (value: string) => {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('<')) return trimmed;
+  return trimmed
+    .split(/\r?\n\s*\r?\n/)
+    .map((paragraph) => `<p>${paragraph.replace(/\r?\n/g, '<br />')}</p>`)
+    .join('');
+};
 const fileBase64 = (file: File) => new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1] ?? ''); reader.onerror = reject; reader.readAsDataURL(file); });
 const download = ({ fileName, mimeType, contentBase64 }: { fileName: string; mimeType: string; contentBase64: string }) => { const bytes = Uint8Array.from(atob(contentBase64), (char) => char.charCodeAt(0)); const url = URL.createObjectURL(new Blob([bytes], { type: mimeType })); const anchor = document.createElement('a'); anchor.href = url; anchor.download = fileName; anchor.click(); URL.revokeObjectURL(url); };
 const date = (value: string) => new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value));

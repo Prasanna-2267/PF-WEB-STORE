@@ -4,11 +4,9 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Archive,
   BellRing,
-  CalendarClock,
   Check,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   Copy,
   Eye,
   FileText,
@@ -25,7 +23,6 @@ import {
   Trash2,
   Upload,
   Users,
-  X,
 } from 'lucide-react';
 import { useBroadcastStore } from '@/app/store/useBroadcastStore';
 import type { BroadcastState } from '@/app/store/useBroadcastStore';
@@ -71,22 +68,18 @@ import {
   type BroadcastRepeatBehavior,
 } from './types/broadcast';
 import './broadcast.css';
-import { AdminDateTimePicker } from '../AdminDateTimePicker';
 
 const ease = [0.22, 1, 0.36, 1] as const;
 const PAGE_SIZE = 10;
-const editorSteps = ['Basic', 'Content', 'Audience', 'Display', 'Schedule', 'Behavior', 'Review'] as const;
+const editorSteps = ['Basic', 'Content', 'Audience', 'Display', 'Behavior', 'Review'] as const;
 type EditorStep = typeof editorSteps[number];
 type StatusFilter = 'CURRENT' | 'ALL' | BroadcastStatus;
-type SortOption = 'NEWEST' | 'OLDEST' | 'MODIFIED' | 'START' | 'END' | 'PRIORITY';
+type SortOption = 'NEWEST' | 'OLDEST' | 'MODIFIED' | 'PRIORITY';
 type DateFilter = 'ANY' | 'TODAY' | 'NEXT_7' | 'LAST_30';
 type EditorMode = 'FORM' | 'PREVIEW' | 'DISCARD' | 'CONFIRM';
 const BROADCAST_EDITOR_SESSION_PREFIX = 'pf_admin_broadcast_editor_session_v1';
 
-interface BroadcastForm extends BroadcastInput {
-  deliveryMode: 'NOW' | 'SCHEDULED';
-  expirationMode: 'NONE' | 'AT';
-}
+type BroadcastForm = BroadcastInput;
 
 interface BroadcastEditorRecovery {
   form: BroadcastForm;
@@ -108,7 +101,7 @@ const readEditorRecovery = (key: string): BroadcastEditorRecovery | null => {
 
 interface PendingAction {
   broadcast: Broadcast;
-  kind: 'DISABLE' | 'ENABLE' | 'CANCEL_SCHEDULE' | 'PUBLISH' | 'ARCHIVE' | 'RESTORE' | 'DELETE';
+  kind: 'PUBLISH' | 'ARCHIVE' | 'DELETE';
 }
 
 const emptyForm = (scope: 'platform' | 'academy' = 'platform'): BroadcastForm => ({
@@ -116,7 +109,7 @@ const emptyForm = (scope: 'platform' | 'academy' = 'platform'): BroadcastForm =>
   cta: { enabled: false, text: '', action: 'INTERNAL_ROUTE', destination: '' },
   audience: { kind: scope === 'academy' ? 'ACADEMY_STUDENTS' : 'EVERYONE', courseIds: [], packageIds: [], academyIds: [] },
   platform: 'APP', placements: ['NOTIFICATION'], startAt: null, endAt: null,
-  frequency: 'ONCE', dismissible: true, deliveryMode: 'NOW', expirationMode: 'NONE',
+  frequency: 'ONCE', dismissible: true,
   presentation: 'NOTIFICATION', displayOrder: 'AUTOMATIC', customOrderWeight: 50,
   acknowledgementRequired: false, repeatBehavior: 'NEVER', showInWhatsNew: false,
 });
@@ -134,7 +127,6 @@ const formFromBroadcast = (broadcast: Broadcast): BroadcastForm => ({
   priority: broadcast.priority, image: broadcast.image, cta: { ...broadcast.cta }, audience: { ...broadcast.audience, courseIds: [...broadcast.audience.courseIds], packageIds: [...broadcast.audience.packageIds], academyIds: [...broadcast.audience.academyIds] },
   platform: broadcast.platform, placements: [...broadcast.placements], startAt: broadcast.startAt, endAt: broadcast.endAt,
   frequency: broadcast.frequency, dismissible: broadcast.dismissible,
-  deliveryMode: broadcast.status === 'SCHEDULED' ? 'SCHEDULED' : 'NOW', expirationMode: broadcast.endAt ? 'AT' : 'NONE',
   presentation: broadcast.presentation, displayOrder: broadcast.displayOrder, customOrderWeight: broadcast.customOrderWeight || 50,
   acknowledgementRequired: broadcast.acknowledgementRequired, repeatBehavior: broadcast.repeatBehavior, showInWhatsNew: broadcast.showInWhatsNew,
 });
@@ -142,8 +134,8 @@ const formFromBroadcast = (broadcast: Broadcast): BroadcastForm => ({
 const inputFromForm = (form: BroadcastForm): BroadcastInput => ({
   title: form.title, subtitle: form.subtitle, message: form.message, type: form.type, priority: form.priority,
   image: form.image, cta: { ...form.cta }, audience: { ...form.audience }, platform: form.platform,
-  placements: [...form.placements], startAt: form.deliveryMode === 'SCHEDULED' ? form.startAt : null,
-  endAt: form.expirationMode === 'AT' ? form.endAt : null, frequency: form.frequency, dismissible: form.dismissible,
+  placements: [...form.placements], startAt: null,
+  endAt: null, frequency: form.frequency, dismissible: form.dismissible,
   presentation: form.presentation, displayOrder: form.displayOrder, customOrderWeight: form.customOrderWeight,
   acknowledgementRequired: form.acknowledgementRequired, repeatBehavior: form.repeatBehavior, showInWhatsNew: form.showInWhatsNew,
 });
@@ -155,9 +147,6 @@ const formatDate = (value: string): string => new Intl.DateTimeFormat('en-IN', {
 const priorityRank: Record<BroadcastPriority, number> = { LOW: 1, NORMAL: 2, HIGH: 3, CRITICAL: 4 };
 const statusTone = (status: BroadcastStatus): 'success' | 'warning' | 'danger' | 'info' | 'neutral' => {
   if (status === 'ACTIVE') return 'success';
-  if (status === 'SCHEDULED') return 'info';
-  if (status === 'DRAFT') return 'warning';
-  if (status === 'DISABLED') return 'danger';
   return 'neutral';
 };
 
@@ -188,17 +177,6 @@ const validateForm = (form: BroadcastForm): Record<string, string> => {
   if (form.audience.kind === 'PACKAGES' && !form.audience.packageIds.length) errors.audience = 'Select at least one package.';
   if (form.audience.kind === 'ACADEMIES' && !form.audience.academyIds.length) errors.audience = 'Select at least one academy.';
   if (!form.placements.length) errors.placements = 'Select at least one display placement.';
-  if (form.deliveryMode === 'SCHEDULED') {
-    if (!form.startAt) errors.startAt = 'Choose a publishing date and time.';
-    else if (new Date(form.startAt).getTime() <= Date.now()) errors.startAt = 'Scheduled time must be in the future.';
-  }
-  if (form.expirationMode === 'AT') {
-    if (!form.endAt) errors.endAt = 'Choose an expiration date and time.';
-    else {
-      const startTime = form.deliveryMode === 'SCHEDULED' && form.startAt ? new Date(form.startAt).getTime() : Date.now();
-      if (new Date(form.endAt).getTime() <= startTime) errors.endAt = 'Expiration must be after the broadcast starts.';
-    }
-  }
   return errors;
 };
 
@@ -320,12 +298,12 @@ const BroadcastEditor: React.FC<EditorProps> = ({ broadcast, courses, packages, 
     reader.readAsDataURL(file);
   };
 
-  const saveDraft = async () => {
+  const saveArchived = async () => {
     if (saving) return; setSaving(true); setSubmitError(null);
     try {
       if (broadcast) await store.updateBroadcast(broadcast.id, inputFromForm(form));
-      else await store.createDraft(inputFromForm(form));
-      setBaseline(JSON.stringify(form)); clearRecovery(); onComplete(broadcast?.status === 'ACTIVE' ? 'Active broadcast changes saved.' : 'Broadcast saved as draft.');
+      else await store.createArchived(inputFromForm(form));
+      setBaseline(JSON.stringify(form)); clearRecovery(); onComplete(broadcast?.status === 'ACTIVE' ? 'On-Live broadcast changes saved.' : 'Broadcast saved to Archive.');
     } catch (error) { setSubmitError(error instanceof Error ? error.message : 'The broadcast could not be saved.'); }
     finally { setSaving(false); }
   };
@@ -345,11 +323,10 @@ const BroadcastEditor: React.FC<EditorProps> = ({ broadcast, courses, packages, 
         clearRecovery(); onComplete('Active broadcast updated. Changes may affect users immediately.');
       } else {
         let id = broadcast?.id;
-        if (!id) id = (await store.createDraft(input)).id;
+        if (!id) id = (await store.createArchived(input)).id;
         else await store.updateBroadcast(id, input);
-        if (form.deliveryMode === 'SCHEDULED') await store.scheduleBroadcast(id, input);
-        else await store.publishNow(id, input);
-        clearRecovery(); onComplete(form.deliveryMode === 'SCHEDULED' ? 'Broadcast scheduled successfully.' : 'Broadcast published successfully.');
+        await store.publishNow(id, input);
+        clearRecovery(); onComplete('Broadcast is On-Live.');
       }
     } catch (error) { setMode('FORM'); setSubmitError(error instanceof Error ? error.message : 'The broadcast could not be published.'); }
     finally { setSaving(false); }
@@ -369,11 +346,11 @@ const BroadcastEditor: React.FC<EditorProps> = ({ broadcast, courses, packages, 
           : <>
             <button className="pf-admin-button pf-admin-button--quiet" type="button" onClick={requestClose}>Cancel</button>
             <div className="pf-broadcast-footer__right">
-              <button className="pf-admin-button pf-admin-button--secondary" type="button" disabled={saving} onClick={() => void saveDraft()}><FileText size={15} /> {broadcast ? 'Save changes' : 'Save draft'}</button>
+              <button className="pf-admin-button pf-admin-button--secondary" type="button" disabled={saving} onClick={() => void saveArchived()}><FileText size={15} /> {broadcast ? 'Save changes' : 'Save to Archive'}</button>
               <button className="pf-admin-button pf-admin-button--secondary" type="button" onClick={() => setMode('PREVIEW')}><Eye size={15} /> Preview</button>
               <div className="pf-broadcast-footer__nav">
                 {currentIndex > 0 ? <button className="pf-admin-button pf-admin-button--secondary" type="button" onClick={() => changeStep(editorSteps[currentIndex - 1])}><ChevronLeft size={15} /> Back</button> : null}
-                {currentIndex < editorSteps.length - 1 ? <button className="pf-admin-button" type="button" onClick={() => changeStep(editorSteps[currentIndex + 1])}>Continue <ChevronRight size={15} /></button> : <button className="pf-admin-button" type="button" disabled={saving} onClick={beginFinalAction}>{activeWarning ? 'Review changes' : form.deliveryMode === 'SCHEDULED' ? 'Review schedule' : 'Review publish'} <ChevronRight size={15} /></button>}
+                {currentIndex < editorSteps.length - 1 ? <button className="pf-admin-button" type="button" onClick={() => changeStep(editorSteps[currentIndex + 1])}>Continue <ChevronRight size={15} /></button> : <button className="pf-admin-button" type="button" disabled={saving} onClick={beginFinalAction}>{activeWarning ? 'Review changes' : 'Review On-Live'} <ChevronRight size={15} /></button>}
               </div>
             </div>
           </>}
@@ -384,13 +361,13 @@ const BroadcastEditor: React.FC<EditorProps> = ({ broadcast, courses, packages, 
   return (
     <AdminDialog open onClose={requestClose} title={broadcast ? `Edit ${broadcast.title}` : 'New broadcast'} description="Create a controlled communication for a clearly defined audience." size="wide" footer={editorFooter}>
       <div ref={editorRef} className="pf-broadcast-editor">
-        {mode === 'DISCARD' ? <div className="pf-broadcast-decision"><ShieldAlert size={28} /><h3>Discard changes?</h3><p>Your unsaved broadcast configuration will be lost. Existing broadcasts and drafts are not affected.</p></div>
+        {mode === 'DISCARD' ? <div className="pf-broadcast-decision"><ShieldAlert size={28} /><h3>Discard changes?</h3><p>Your unsaved broadcast configuration will be lost. Existing broadcasts and archived items are not affected.</p></div>
           : mode === 'CONFIRM' ? (
             <div className="pf-broadcast-decision pf-broadcast-decision--publish">
               <header className="pf-broadcast-decision__header">
                 <Send size={28} />
-                <h3>{activeWarning ? 'Save changes to this active broadcast?' : form.deliveryMode === 'SCHEDULED' ? 'Schedule this broadcast?' : 'Publish this broadcast?'}</h3>
-                <p className="pf-broadcast-decision__warning">{activeWarning ? 'Once published, changes may affect users immediately according to your settings.' : form.deliveryMode === 'SCHEDULED' ? `Scheduled for ${formatDateTime(form.startAt)}.` : 'This broadcast will become visible immediately after confirmation.'}</p>
+                <h3>{activeWarning ? 'Save changes to this On-Live broadcast?' : 'Place this broadcast On-Live?'}</h3>
+                <p className="pf-broadcast-decision__warning">{activeWarning ? 'Changes affect users immediately.' : 'This broadcast will become visible immediately after confirmation.'}</p>
               </header>
               <div className="pf-broadcast-decision__split">
                 <div className="pf-broadcast-decision__preview-wrap">
@@ -400,7 +377,7 @@ const BroadcastEditor: React.FC<EditorProps> = ({ broadcast, courses, packages, 
                   <h4>Publish summary</h4>
                   <dl>
                     <div><dt>Audience</dt><dd>{getAudienceSummary({ audience: form.audience } as any, courses, packages, academies)}</dd></div>
-                    <div><dt>Delivery</dt><dd>{form.deliveryMode === 'SCHEDULED' ? 'Scheduled' : 'Immediately'}</dd></div>
+                    <div><dt>Lifecycle</dt><dd>On-Live immediately</dd></div>
                     <div><dt>Priority</dt><dd>{form.priority.charAt(0) + form.priority.slice(1).toLowerCase()}</dd></div>
                     <div><dt>Display</dt><dd>{form.placements.length > 0 ? form.placements.map(p => BROADCAST_PLACEMENT_LABELS[p]).join(', ') : 'None'}</dd></div>
                   </dl>
@@ -423,7 +400,6 @@ const BroadcastEditor: React.FC<EditorProps> = ({ broadcast, courses, packages, 
                     {step === 'Content' ? <ContentStep form={form} patch={patchForm} errors={errors} courses={courses} packages={packages} academies={academies} fileRef={fileRef} onImage={handleImage} scope={scope} /> : null}
                     {step === 'Audience' ? <AudienceStep form={form} choose={chooseAudience} toggle={toggleAudienceId} courses={courses} packages={packages} academies={academies} error={errors.audience} scope={scope} /> : null}
                     {step === 'Display' ? <DisplayStep form={form} patch={patchForm} changePlatform={changePlatform} togglePlacement={togglePlacement} error={errors.placements} scope={scope} /> : null}
-                    {step === 'Schedule' ? <ScheduleStep form={form} patch={patchForm} errors={errors} /> : null}
                     {step === 'Behavior' ? <BehaviorStep form={form} patch={patchForm} /> : null}
                     {step === 'Review' ? <ReviewStep form={form} errors={allErrors} courses={courses} packages={packages} academies={academies} onJump={changeStep} /> : null}
                   </motion.section>
@@ -508,14 +484,6 @@ const DisplayStep: React.FC<DisplayStepProps> = ({ form, patch, changePlatform, 
   <div className="pf-broadcast-dismiss-card"><div><strong>Show in What's New feed</strong><p>{form.showInWhatsNew ? 'This broadcast will be included in the What\'s New timeline.' : 'This broadcast is excluded from the What\'s New feed.'}</p></div><label className="pf-broadcast-switch"><input type="checkbox" checked={form.showInWhatsNew} onChange={(event) => patch('showInWhatsNew', event.target.checked)} /><span aria-hidden="true" /><strong>{form.showInWhatsNew ? 'Yes' : 'No'}</strong></label></div>
 </>;
 
-const ScheduleStep: React.FC<StepProps> = ({ form, patch, errors = {} }) => <>
-  <header><span>Schedule & expiration</span><h3>When should users see it?</h3><p>Publishing remains an explicit action. Opening this editor never makes a broadcast visible.</p></header>
-  <fieldset className="pf-broadcast-fieldset"><legend>Delivery</legend><div className="pf-broadcast-choice-grid pf-broadcast-choice-grid--two"><button type="button" className={form.deliveryMode === 'NOW' ? 'is-active' : ''} onClick={() => patch('deliveryMode', 'NOW')}><Send size={18} /><strong>Publish immediately</strong><small>Becomes active only after final confirmation.</small></button><button type="button" className={form.deliveryMode === 'SCHEDULED' ? 'is-active' : ''} onClick={() => patch('deliveryMode', 'SCHEDULED')}><CalendarClock size={18} /><strong>Schedule for later</strong><small>Choose a future date and time.</small></button></div></fieldset>
-  {form.deliveryMode === 'SCHEDULED' ? <label className="pf-broadcast-field" style={{ overflow: 'visible' }}><span>Start date and time (IST / Asia/Kolkata) *</span><AdminDateTimePicker value={form.startAt} min={new Date(Date.now() + 60_000).toISOString()} onChange={(iso) => patch('startAt', iso)} />{errors.startAt ? <em>{errors.startAt}</em> : null}</label> : <p className="pf-broadcast-callout"><Clock3 size={17} /> It will publish immediately after you review and confirm.</p>}
-  <fieldset className="pf-broadcast-fieldset"><legend>Expiration</legend><div className="pf-broadcast-segments"><button type="button" className={form.expirationMode === 'NONE' ? 'is-active' : ''} onClick={() => patch('expirationMode', 'NONE')}>No expiry</button><button type="button" className={form.expirationMode === 'AT' ? 'is-active' : ''} onClick={() => patch('expirationMode', 'AT')}>Set expiration</button></div></fieldset>
-  {form.expirationMode === 'AT' ? <label className="pf-broadcast-field" style={{ overflow: 'visible' }}><span>End date and time (IST / Asia/Kolkata) *</span><AdminDateTimePicker value={form.endAt} onChange={(iso) => patch('endAt', iso)} />{errors.endAt ? <em>{errors.endAt}</em> : null}</label> : null}
-</>;
-
 const BehaviorStep: React.FC<StepProps> = ({ form, patch }) => <>
   <header><span>Behavior</span><h3>How should the message behave?</h3><p>Frequency controls repeat visibility. Dismissibility determines whether users can close it.</p></header>
   <div className="pf-broadcast-form-grid">
@@ -530,22 +498,20 @@ const BehaviorStep: React.FC<StepProps> = ({ form, patch }) => <>
 
 interface ReviewStepProps { form: BroadcastForm; errors: Record<string, string>; courses: AdminCourse[]; packages: LearningPackage[]; academies: Academy[]; onJump: (step: EditorStep) => void; }
 const ReviewStep: React.FC<ReviewStepProps> = ({ form, errors, courses, packages, academies, onJump }) => {
-  const pseudo: Broadcast = { id: 'preview', ...inputFromForm(form), status: 'DRAFT', disabledFrom: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), timeline: [], analytics: { reached: 0, viewed: 0, uniqueViews: 0, clicked: 0, dismissed: 0, acknowledged: 0, ctr: 0 } };
+  const pseudo: Broadcast = { id: 'preview', ...inputFromForm(form), status: 'ARCHIVED', disabledFrom: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), timeline: [], analytics: { reached: 0, viewed: 0, uniqueViews: 0, clicked: 0, dismissed: 0, acknowledged: 0, ctr: 0 } };
   const rows = [
     ['Broadcast', `${BROADCAST_TYPE_LABELS[form.type]} · ${form.priority} priority`, 'Basic'],
     ['Audience', getAudienceSummary(pseudo, courses, packages, academies), 'Audience'],
     ['Display', `${BROADCAST_PRESENTATION_LABELS[form.presentation]} on ${form.platform} · ${form.placements.map((item) => BROADCAST_PLACEMENT_LABELS[item]).join(', ') || 'No placement'}`, 'Display'],
     ['Display Order', form.displayOrder === 'CUSTOM' ? `Custom (Weight: ${form.customOrderWeight})` : form.displayOrder === 'PINNED' ? 'Pinned (Top)' : 'Automatic', 'Display'],
     ["What's New", form.showInWhatsNew ? 'Include in feed' : 'Do not include', 'Display'],
-    ['Delivery', form.deliveryMode === 'SCHEDULED' ? formatDateTime(form.startAt) : 'Immediately after confirmation', 'Schedule'],
-    ['Expiration', form.expirationMode === 'AT' ? formatDateTime(form.endAt) : 'No expiry', 'Schedule'],
     ['CTA', form.cta.enabled ? `${form.cta.text || 'Missing text'} · ${form.cta.destination || 'Missing destination'}` : 'No CTA', 'Content'],
     ['Behavior', `${BROADCAST_FREQUENCY_LABELS[form.frequency]} · ${form.dismissible ? 'Dismissible' : 'Non-dismissible'}`, 'Behavior'],
     ['Acknowledgement', form.acknowledgementRequired ? 'Required' : 'Not required', 'Behavior'],
   ] as [string, string, EditorStep][];
   return <>
     <header><span>Final review</span><h3>{Object.keys(errors).length ? 'Missing required information' : 'Ready to publish'}</h3><p>Confirm who will see this message, where it appears, and when it becomes active.</p></header>
-    {Object.keys(errors).length ? <div className="pf-broadcast-review-errors"><ShieldAlert size={20} /><div><strong>Resolve {Object.keys(errors).length} issue{Object.keys(errors).length === 1 ? '' : 's'} before publishing.</strong>{Object.values(errors).map((error) => <p key={error}>{error}</p>)}</div></div> : <div className="pf-broadcast-ready"><Check size={19} /><span><strong>Configuration complete</strong><small>Nothing is visible until you confirm Publish or Schedule.</small></span></div>}
+    {Object.keys(errors).length ? <div className="pf-broadcast-review-errors"><ShieldAlert size={20} /><div><strong>Resolve {Object.keys(errors).length} issue{Object.keys(errors).length === 1 ? '' : 's'} before publishing.</strong>{Object.values(errors).map((error) => <p key={error}>{error}</p>)}</div></div> : <div className="pf-broadcast-ready"><Check size={19} /><span><strong>Configuration complete</strong><small>Nothing is visible until you confirm On-Live.</small></span></div>}
     <dl className="pf-broadcast-review-list">{rows.map(([label, value, target]) => <div key={label}><dt>{label}</dt><dd>{value}</dd><button type="button" onClick={() => onJump(target)}>Edit</button></div>)}</dl>
   </>;
 };
@@ -596,7 +562,7 @@ export const BroadcastPage: React.FC<BroadcastPageProps> = ({ scope = 'platform'
   useEffect(() => { const close = () => setActionMenu(null); window.addEventListener('click', close); return () => window.removeEventListener('click', close); }, []);
 
   const broadcasts = useMemo(() => store.broadcasts.map((item) => ({ ...item, status: getBroadcastStatus(item) })), [store.broadcasts]);
-  const counts = useMemo(() => ({ total: broadcasts.length, active: broadcasts.filter((item) => item.status === 'ACTIVE').length, scheduled: broadcasts.filter((item) => item.status === 'SCHEDULED').length, draft: broadcasts.filter((item) => item.status === 'DRAFT').length, expired: broadcasts.filter((item) => item.status === 'EXPIRED').length, archived: broadcasts.filter((item) => item.status === 'ARCHIVED').length }), [broadcasts]);
+  const counts = useMemo(() => ({ total: broadcasts.length, active: broadcasts.filter((item) => item.status === 'ACTIVE').length, archived: broadcasts.filter((item) => item.status === 'ARCHIVED').length }), [broadcasts]);
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase(); const now = Date.now(); const day = 86_400_000;
     const result = broadcasts.filter((broadcast) => {
@@ -606,15 +572,13 @@ export const BroadcastPage: React.FC<BroadcastPageProps> = ({ scope = 'platform'
       const matchesType = typeFilter === 'ALL' || broadcast.type === typeFilter;
       const matchesAudience = audienceFilter === 'ALL' || broadcast.audience.kind === audienceFilter;
       const matchesPriority = priorityFilter === 'ALL' || broadcast.priority === priorityFilter;
-      const reference = new Date(broadcast.startAt ?? broadcast.createdAt).getTime();
+      const reference = new Date(broadcast.publishedAt ?? broadcast.createdAt).getTime();
       const matchesDate = dateFilter === 'ANY' || dateFilter === 'TODAY' && Math.abs(reference - now) < day || dateFilter === 'NEXT_7' && reference >= now && reference <= now + day * 7 || dateFilter === 'LAST_30' && reference <= now && reference >= now - day * 30;
       return matchesQuery && matchesStatus && matchesType && matchesAudience && matchesPriority && matchesDate;
     });
     return result.sort((a, b) => {
       if (sort === 'OLDEST') return a.createdAt.localeCompare(b.createdAt);
       if (sort === 'MODIFIED') return b.updatedAt.localeCompare(a.updatedAt);
-      if (sort === 'START') return (a.startAt ?? '9999').localeCompare(b.startAt ?? '9999');
-      if (sort === 'END') return (a.endAt ?? '9999').localeCompare(b.endAt ?? '9999');
       if (sort === 'PRIORITY') {
         const orderA = a.displayOrder === 'CUSTOM' ? (a.customOrderWeight || 50) : a.displayOrder === 'PINNED' ? 1000 : 0;
         const orderB = b.displayOrder === 'CUSTOM' ? (b.customOrderWeight || 50) : b.displayOrder === 'PINNED' ? 1000 : 0;
@@ -636,66 +600,41 @@ export const BroadcastPage: React.FC<BroadcastPageProps> = ({ scope = 'platform'
       queryClient.invalidateQueries({ queryKey: ['academy', academyId, 'overview'] }),
     ]);
   };
-  const duplicate = async (broadcast: Broadcast) => { try { await store.duplicateBroadcast(broadcast.id); await invalidateScope(); showToast('Broadcast duplicated as draft.'); } catch (error) { showToast(error instanceof Error ? error.message : 'Could not duplicate.', 'error'); } };
+  const duplicate = async (broadcast: Broadcast) => { try { await store.duplicateBroadcast(broadcast.id); await invalidateScope(); showToast('Broadcast duplicated to Archive.'); } catch (error) { showToast(error instanceof Error ? error.message : 'Could not duplicate.', 'error'); } };
   const executeAction = async () => {
     if (!pendingAction) return; const { broadcast, kind } = pendingAction;
     try {
-      if (kind === 'DISABLE') await store.disableBroadcast(broadcast.id);
-      if (kind === 'ENABLE') await store.enableBroadcast(broadcast.id);
-      if (kind === 'CANCEL_SCHEDULE') await store.cancelSchedule(broadcast.id);
       if (kind === 'PUBLISH') await store.publishNow(broadcast.id);
       if (kind === 'ARCHIVE') await store.archiveBroadcast(broadcast.id);
-      if (kind === 'RESTORE') await store.restoreBroadcast(broadcast.id);
       if (kind === 'DELETE') await store.deleteBroadcast(broadcast.id);
       await invalidateScope();
-      const messages: Record<PendingAction['kind'], string> = { DISABLE: 'Broadcast disabled.', ENABLE: 'Broadcast enabled.', CANCEL_SCHEDULE: 'Schedule cancelled. Broadcast returned to drafts.', PUBLISH: 'Broadcast published successfully.', ARCHIVE: 'Broadcast archived.', RESTORE: 'Broadcast restored as disabled.', DELETE: 'Broadcast deleted.' };
+      const messages: Record<PendingAction['kind'], string> = { PUBLISH: 'Broadcast is On-Live.', ARCHIVE: 'Broadcast archived.', DELETE: 'Broadcast deleted.' };
       showToast(messages[kind]); setPendingAction(null); setDetails(null);
     } catch (error) { showToast(error instanceof Error ? error.message : 'The action could not be completed.', 'error'); }
   };
-
   const openEdit = (broadcast: Broadcast) => { setDetails(null); setEditor(broadcast); };
   const openPreview = (broadcast: Broadcast) => { setDetails(null); setPreview(broadcast); };
   const actionItems = (broadcast: Broadcast) => {
     const items: Array<{ label: string; icon: React.ReactNode; run: () => void; danger?: boolean }> = [];
-    const edit = () => items.push({ label: 'Edit', icon: <Pencil size={14} />, run: () => openEdit(broadcast) });
     const view = () => items.push({ label: 'View details', icon: <Eye size={14} />, run: () => scope === 'academy' ? setDetails(broadcast) : navigate(buildAdminBroadcastPath(broadcast.id)) });
     const previewItem = () => items.push({ label: 'Preview', icon: <Eye size={14} />, run: () => openPreview(broadcast) });
-    const duplicateItem = () => items.push({ label: 'Duplicate', icon: <Copy size={14} />, run: () => void duplicate(broadcast) });
-    if (broadcast.status === 'DRAFT') {
-      edit(); previewItem(); duplicateItem();
-      items.push({ label: 'Delete', icon: <Trash2 size={14} />, run: () => setPendingAction({ broadcast, kind: 'DELETE' }), danger: true });
-    } else if (broadcast.status === 'SCHEDULED') {
-      edit(); previewItem(); duplicateItem();
-      items.push({ label: 'Publish now', icon: <Send size={14} />, run: () => setPendingAction({ broadcast, kind: 'PUBLISH' }) });
-      items.push({ label: 'Cancel schedule', icon: <X size={14} />, run: () => setPendingAction({ broadcast, kind: 'CANCEL_SCHEDULE' }) });
-    } else if (broadcast.status === 'ACTIVE') {
+    const duplicateItem = () => items.push({ label: 'Duplicate to Archive', icon: <Copy size={14} />, run: () => void duplicate(broadcast) });
+    if (broadcast.status === 'ACTIVE') {
       view(); previewItem(); duplicateItem();
-      items.push({ label: 'Disable / End', icon: <ShieldAlert size={14} />, run: () => setPendingAction({ broadcast, kind: 'DISABLE' }) });
-      items.push({ label: 'View analytics', icon: <FileText size={14} />, run: () => showToast('Analytics coming in Phase 2.', 'info') });
-    } else if (broadcast.status === 'EXPIRED') {
-      view(); duplicateItem();
       items.push({ label: 'Archive', icon: <Archive size={14} />, run: () => setPendingAction({ broadcast, kind: 'ARCHIVE' }) });
-    } else if (broadcast.status === 'ARCHIVED') {
-      view(); duplicateItem();
-      items.push({ label: 'Restore', icon: <RefreshCw size={14} />, run: () => setPendingAction({ broadcast, kind: 'RESTORE' }) });
     } else {
-      edit(); previewItem(); duplicateItem();
-      items.push({ label: 'Enable', icon: <Check size={14} />, run: () => setPendingAction({ broadcast, kind: 'ENABLE' }) });
-      items.push({ label: 'Archive', icon: <Archive size={14} />, run: () => setPendingAction({ broadcast, kind: 'ARCHIVE' }) });
+      items.push({ label: 'Edit', icon: <Pencil size={14} />, run: () => openEdit(broadcast) });
+      previewItem(); duplicateItem();
+      items.push({ label: 'Set On-Live', icon: <Send size={14} />, run: () => setPendingAction({ broadcast, kind: 'PUBLISH' }) });
       items.push({ label: 'Delete', icon: <Trash2 size={14} />, run: () => setPendingAction({ broadcast, kind: 'DELETE' }), danger: true });
     }
     return items;
   };
-
   const summaryCards = [
     { label: 'Total', value: Number(counts.total || 0), filter: 'ALL' as StatusFilter, icon: <Megaphone size={18} /> },
-    { label: 'Active', value: Number(counts.active || 0), filter: 'ACTIVE' as StatusFilter, icon: <BellRing size={18} /> },
-    { label: 'Scheduled', value: Number(counts.scheduled || 0), filter: 'SCHEDULED' as StatusFilter, icon: <CalendarClock size={18} /> },
-    { label: 'Drafts', value: Number(counts.draft || 0), filter: 'DRAFT' as StatusFilter, icon: <FileText size={18} /> },
-    { label: 'Expired', value: Number(counts.expired || 0), filter: 'EXPIRED' as StatusFilter, icon: <Clock3 size={18} /> },
-    { label: 'Archived', value: Number(counts.archived || 0), filter: 'ARCHIVED' as StatusFilter, icon: <Archive size={18} /> },
+    { label: 'On-Live', value: Number(counts.active || 0), filter: 'ACTIVE' as StatusFilter, icon: <BellRing size={18} /> },
+    { label: 'Archive', value: Number(counts.archived || 0), filter: 'ARCHIVED' as StatusFilter, icon: <Archive size={18} /> },
   ];
-
   const description = scope === 'academy' ? `Create and manage communications only for students in ${academyName ?? 'your Academy'}.` : 'Direct Parallax Flow broadcasts. Academy broadcasts remain in their Academy details page.';
   if (store.status === 'loading' || store.status === 'idle') return <div className="pf-admin-page"><AdminPageHeader title="Broadcast" description={description} /><AdminSkeleton variant="table" rows={7} /></div>;
 
@@ -706,18 +645,18 @@ export const BroadcastPage: React.FC<BroadcastPageProps> = ({ scope = 'platform'
       {broadcasts.length === 0 ? <AdminEmptyState title="No broadcasts yet" description={scope === 'academy' ? 'Create the first announcement for this Academy. No fixture broadcasts are displayed.' : 'Create your first announcement, update, promotion or important notice.'} icon={<Megaphone size={22} />} action={<button className="pf-admin-button" onClick={() => setEditor(null)}><Plus size={15} /> New broadcast</button>} /> : <section className="pf-broadcast-library">
         <div className="pf-broadcast-toolbar">
           <label className="pf-admin-search-field"><Search size={16} /><input className="pf-admin-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search title, message, type, or audience" aria-label="Search broadcasts" /></label>
-          <label><span>Status</span><AppSelect className="pf-admin-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}><option value="CURRENT">Current (excludes archived)</option><option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="SCHEDULED">Scheduled</option><option value="DRAFT">Draft</option><option value="DISABLED">Disabled</option><option value="EXPIRED">Expired</option><option value="ARCHIVED">Archived</option></AppSelect></label>
+          <label><span>Status</span><AppSelect className="pf-admin-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}><option value="ALL">All</option><option value="ACTIVE">On-Live</option><option value="ARCHIVED">Archive</option></AppSelect></label>
           <label><span>Type</span><AppSelect className="pf-admin-select" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as 'ALL' | BroadcastType)}><option value="ALL">All types</option>{Object.entries(BROADCAST_TYPE_LABELS).filter(([value]) => scope === 'platform' || !['PROMOTION', 'STORE'].includes(value)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</AppSelect></label>
           <label><span>Audience</span><AppSelect className="pf-admin-select" value={audienceFilter} onChange={(event) => setAudienceFilter(event.target.value as 'ALL' | BroadcastAudienceKind)}><option value="ALL">All audiences</option>{Object.entries(BROADCAST_AUDIENCE_LABELS).filter(([value]) => scope === 'platform' || ['ACADEMY_STUDENTS', 'COURSES'].includes(value)).map(([value, label]) => <option key={value} value={value}>{scope === 'academy' && value === 'ACADEMY_STUDENTS' ? 'All Academy students' : label}</option>)}</AppSelect></label>
           <label><span>Priority</span><AppSelect className="pf-admin-select" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as 'ALL' | BroadcastPriority)}><option value="ALL">All priorities</option><option value="CRITICAL">Critical</option><option value="HIGH">High</option><option value="NORMAL">Normal</option><option value="LOW">Low</option></AppSelect></label>
           <label><span>Date</span><AppSelect className="pf-admin-select" value={dateFilter} onChange={(event) => setDateFilter(event.target.value as DateFilter)}><option value="ANY">Any date</option><option value="TODAY">Today</option><option value="NEXT_7">Next 7 days</option><option value="LAST_30">Past 30 days</option></AppSelect></label>
-          <label><span>Sort</span><AppSelect className="pf-admin-select" value={sort} onChange={(event) => setSort(event.target.value as SortOption)}><option value="NEWEST">Newest</option><option value="OLDEST">Oldest</option><option value="MODIFIED">Recently modified</option><option value="START">Start date</option><option value="END">End date</option><option value="PRIORITY">Priority</option></AppSelect></label>
+          <label><span>Sort</span><AppSelect className="pf-admin-select" value={sort} onChange={(event) => setSort(event.target.value as SortOption)}><option value="NEWEST">Newest</option><option value="OLDEST">Oldest</option><option value="MODIFIED">Recently modified</option><option value="PRIORITY">Priority</option></AppSelect></label>
         </div>
         {visible.length ? <>
-          <div className="pf-broadcast-table-wrap"><table className="pf-broadcast-table"><thead><tr><th>Broadcast</th><th>Type</th><th>Audience</th><th>Status</th><th>Schedule</th><th>Priority</th><th>Created / modified</th><th><span className="pf-admin-sr-only">Actions</span></th></tr></thead><tbody>{visible.map((broadcast) => <tr key={broadcast.id}><td><button className="pf-broadcast-title-button" onClick={() => setDetails(broadcast)}><strong>{broadcast.title}</strong><small>{broadcast.subtitle || broadcast.message}</small></button></td><td>{BROADCAST_TYPE_LABELS[broadcast.type]}</td><td><span title={getAudienceSummary(broadcast, courses, packages, academies)}>{getAudienceSummary(broadcast, courses, packages, academies)}</span></td><td><AdminStatusBadge tone={statusTone(broadcast.status)}>{broadcast.status}</AdminStatusBadge></td><td><strong>{broadcast.startAt ? formatDateTime(broadcast.startAt) : 'Not scheduled'}</strong><small>{broadcast.endAt ? `Ends ${formatDateTime(broadcast.endAt)}` : 'No expiry'}</small></td><td><span className={`pf-broadcast-priority pf-broadcast-priority--${broadcast.priority.toLowerCase()}`}>{broadcast.priority}</span></td><td><strong>{formatDate(broadcast.createdAt)}</strong><small>Edited {formatDate(broadcast.updatedAt)}</small></td><td className="pf-broadcast-actions-cell"><button className="pf-admin-icon-button" type="button" aria-label={`Actions for ${broadcast.title}`} onClick={(event) => { event.stopPropagation(); setActionMenu((current) => current === broadcast.id ? null : broadcast.id); }}><MoreHorizontal size={17} /></button>{actionMenu === broadcast.id ? <div className="pf-broadcast-action-menu" onClick={(event) => event.stopPropagation()}>{actionItems(broadcast).map((item) => <button key={item.label} type="button" className={item.danger ? 'is-danger' : ''} onClick={() => { setActionMenu(null); item.run(); }}>{item.icon}{item.label}</button>)}</div> : null}</td></tr>)}</tbody></table></div>
-          <div className="pf-broadcast-card-list">{visible.map((broadcast) => <motion.article key={broadcast.id} layout><header><div><button onClick={() => setDetails(broadcast)}>{broadcast.title}</button><small>{BROADCAST_TYPE_LABELS[broadcast.type]}</small></div><AdminStatusBadge tone={statusTone(broadcast.status)}>{broadcast.status}</AdminStatusBadge></header><p>{broadcast.message}</p><dl><div><dt>Audience</dt><dd>{getAudienceSummary(broadcast, courses, packages, academies)}</dd></div><div><dt>Priority</dt><dd>{broadcast.priority}</dd></div><div><dt>Starts</dt><dd>{broadcast.startAt ? formatDateTime(broadcast.startAt) : 'Not scheduled'}</dd></div><div><dt>Ends</dt><dd>{broadcast.endAt ? formatDateTime(broadcast.endAt) : 'No expiry'}</dd></div></dl><footer>{actionItems(broadcast).slice(0, 4).map((item) => <button key={item.label} type="button" className={item.danger ? 'is-danger' : ''} onClick={item.run}>{item.icon}{item.label}</button>)}</footer></motion.article>)}</div>
+          <div className="pf-broadcast-table-wrap"><table className="pf-broadcast-table"><thead><tr><th>Broadcast</th><th>Type</th><th>Audience</th><th>Status</th><th>Lifecycle</th><th>Priority</th><th>Created / modified</th><th><span className="pf-admin-sr-only">Actions</span></th></tr></thead><tbody>{visible.map((broadcast) => <tr key={broadcast.id}><td><button className="pf-broadcast-title-button" onClick={() => setDetails(broadcast)}><strong>{broadcast.title}</strong><small>{broadcast.subtitle || broadcast.message}</small></button></td><td>{BROADCAST_TYPE_LABELS[broadcast.type]}</td><td><span title={getAudienceSummary(broadcast, courses, packages, academies)}>{getAudienceSummary(broadcast, courses, packages, academies)}</span></td><td><AdminStatusBadge tone={statusTone(broadcast.status)}>{broadcast.status}</AdminStatusBadge></td><td><strong>{broadcast.status === 'ACTIVE' ? 'On-Live' : 'Archive'}</strong><small>{broadcast.publishedAt ? `Published ${formatDateTime(broadcast.publishedAt)}` : 'Not published'}</small></td><td><span className={`pf-broadcast-priority pf-broadcast-priority--${broadcast.priority.toLowerCase()}`}>{broadcast.priority}</span></td><td><strong>{formatDate(broadcast.createdAt)}</strong><small>Edited {formatDate(broadcast.updatedAt)}</small></td><td className="pf-broadcast-actions-cell"><button className="pf-admin-icon-button" type="button" aria-label={`Actions for ${broadcast.title}`} onClick={(event) => { event.stopPropagation(); setActionMenu((current) => current === broadcast.id ? null : broadcast.id); }}><MoreHorizontal size={17} /></button>{actionMenu === broadcast.id ? <div className="pf-broadcast-action-menu" onClick={(event) => event.stopPropagation()}>{actionItems(broadcast).map((item) => <button key={item.label} type="button" className={item.danger ? 'is-danger' : ''} onClick={() => { setActionMenu(null); item.run(); }}>{item.icon}{item.label}</button>)}</div> : null}</td></tr>)}</tbody></table></div>
+          <div className="pf-broadcast-card-list">{visible.map((broadcast) => <motion.article key={broadcast.id} layout><header><div><button onClick={() => setDetails(broadcast)}>{broadcast.title}</button><small>{BROADCAST_TYPE_LABELS[broadcast.type]}</small></div><AdminStatusBadge tone={statusTone(broadcast.status)}>{broadcast.status}</AdminStatusBadge></header><p>{broadcast.message}</p><dl><div><dt>Audience</dt><dd>{getAudienceSummary(broadcast, courses, packages, academies)}</dd></div><div><dt>Priority</dt><dd>{broadcast.priority}</dd></div><div><dt>Lifecycle</dt><dd>{broadcast.status === 'ACTIVE' ? 'On-Live' : 'Archive'}</dd></div></dl><footer>{actionItems(broadcast).slice(0, 4).map((item) => <button key={item.label} type="button" className={item.danger ? 'is-danger' : ''} onClick={item.run}>{item.icon}{item.label}</button>)}</footer></motion.article>)}</div>
           <footer className="pf-broadcast-pagination"><p>Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}</p><div><button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</button><span>Page {page} of {pageCount}</span><button type="button" disabled={page >= pageCount} onClick={() => setPage((current) => current + 1)}>Next</button></div></footer>
-        </> : <AdminEmptyState compact title={statusFilter === 'ACTIVE' ? 'No active broadcasts' : statusFilter === 'SCHEDULED' ? 'No scheduled broadcasts' : statusFilter === 'DRAFT' ? 'No drafts' : statusFilter === 'EXPIRED' ? 'No expired broadcasts' : statusFilter === 'ARCHIVED' ? 'No archived broadcasts' : 'No matching broadcasts'} description="Adjust the search or filters to see other communications." icon={<Search size={20} />} action={<button className="pf-admin-button pf-admin-button--secondary" onClick={() => { setQuery(''); setStatusFilter('CURRENT'); setTypeFilter('ALL'); setAudienceFilter('ALL'); setPriorityFilter('ALL'); setDateFilter('ANY'); }}>Clear filters</button>} />}
+        </> : <AdminEmptyState compact title={statusFilter === 'ACTIVE' ? 'No On-Live broadcasts' : statusFilter === 'ARCHIVED' ? 'Archive is empty' : 'No matching broadcasts'} description="Adjust the search or filters to see other communications." icon={<Search size={20} />} action={<button className="pf-admin-button pf-admin-button--secondary" onClick={() => { setQuery(''); setStatusFilter('CURRENT'); setTypeFilter('ALL'); setAudienceFilter('ALL'); setPriorityFilter('ALL'); setDateFilter('ANY'); }}>Clear filters</button>} />}
       </section>}
     </>}
 
@@ -726,7 +665,7 @@ export const BroadcastPage: React.FC<BroadcastPageProps> = ({ scope = 'platform'
       {preview ? <BroadcastPreview form={formFromBroadcast(preview)} mode={previewMode} onModeChange={setPreviewMode} /> : null}
     </AdminDialog>
     <AdminDialog open={Boolean(details)} onClose={() => setDetails(null)} title={details?.title ?? 'Broadcast details'} description={scope === 'academy' ? 'Live Academy-scoped broadcast data returned by the backend.' : 'Broadcast details'} size="large" footer={<button className="pf-admin-button pf-admin-button--secondary" onClick={() => setDetails(null)}>Close</button>}>
-      {details ? <><BroadcastPreview form={formFromBroadcast(details)} mode="DESKTOP" /><dl className="pf-broadcast-review-list"><div><dt>Audience</dt><dd>{getAudienceSummary(details, courses, packages, academies)}</dd></div><div><dt>Status</dt><dd>{details.status}</dd></div><div><dt>Priority</dt><dd>{details.priority}</dd></div><div><dt>Starts</dt><dd>{details.startAt ? formatDateTime(details.startAt) : 'Not scheduled'}</dd></div><div><dt>Ends</dt><dd>{details.endAt ? formatDateTime(details.endAt) : 'No expiry'}</dd></div></dl></> : null}
+      {details ? <><BroadcastPreview form={formFromBroadcast(details)} mode="DESKTOP" /><dl className="pf-broadcast-review-list"><div><dt>Audience</dt><dd>{getAudienceSummary(details, courses, packages, academies)}</dd></div><div><dt>Status</dt><dd>{details.status}</dd></div><div><dt>Priority</dt><dd>{details.priority}</dd></div><div><dt>Lifecycle</dt><dd>{details.status === 'ACTIVE' ? 'On-Live' : 'Archive'}</dd></div></dl></> : null}
     </AdminDialog>
     <AdminDialog open={Boolean(pendingAction)} onClose={() => setPendingAction(null)} title={pendingAction ? `${pendingAction.kind.split('_').map((word) => word[0] + word.slice(1).toLocaleLowerCase()).join(' ')} broadcast?` : 'Confirm action'} description={pendingAction?.kind === 'DELETE' ? 'This action cannot be undone.' : pendingAction?.kind === 'PUBLISH' ? 'This announcement will become visible to the selected audience immediately.' : 'The broadcast lifecycle will be updated immediately.'} size="small" footer={<><button className="pf-admin-button pf-admin-button--secondary" onClick={() => setPendingAction(null)}>Cancel</button><button className={`pf-admin-button${pendingAction?.kind === 'DELETE' ? ' pf-admin-button--danger' : ''}`} disabled={Boolean(store.pendingId)} onClick={() => void executeAction()}>{store.pendingId ? 'Working…' : 'Confirm'}</button></>}>
       {pendingAction ? <div className="pf-broadcast-confirm"><strong>{pendingAction.broadcast.title}</strong><p>Current status: {pendingAction.broadcast.status}</p></div> : null}

@@ -89,7 +89,7 @@ const receiptResourceLabel = (value: string) => ({
   PACKAGE: 'Study package',
   PREMIUM_NOTES: 'Premium note',
   QUESTION_BANK: 'Question Bank',
-  MONTHLY_REPORT: 'Monthly report',
+
 }[value] ?? value.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()));
 
 const customerOrderStatus = (status: string, refundStatus?: string) => {
@@ -155,7 +155,7 @@ const collectionLabels = {
   subscription: 'Subscriptions',
 } as const;
 
-const noteTypes: StoreProductType[] = ['visual-notes', 'mind-maps', 'revision-notes', 'formula-sheet', 'mock-test', 'monthly-report'];
+const noteTypes: StoreProductType[] = ['visual-notes', 'mind-maps', 'revision-notes', 'formula-sheet', 'mock-test'];
 const useCompleteStoreCatalog = () => {
   const query = usePublicCatalog({ page: 1, limit: 100 });
   const products = useMemo(() => {
@@ -975,9 +975,8 @@ export const StorePurchasesPage: React.FC = () => {
         </section>
         <div className="pf-store-order-history__heading"><div><p className="pf-store-kicker">Library access</p><h2>Unlocked resources</h2></div><span>{products.length} items</span></div>
         {entitlements.isLoading ? <div className="pf-store-cart-empty"><BookOpen size={30} /><h2>Opening your purchases…</h2></div> : products.length ? <div className="pf-store-purchase-library">{products.map((product) => {
-          const isReport = product.resourceType === 'MONTHLY_REPORT';
-          const resourceLabel = isReport ? 'Monthly report' : product.resourceType === 'PACKAGE' ? 'Study package' : 'Premium note';
-          const appLink = isReport ? 'parallaxflow://monthly-reports' : `parallaxflow://${product.resourceType === 'PACKAGE' ? 'packages' : 'content'}/${product.resourceId}`;
+          const resourceLabel = product.resourceType === 'PACKAGE' ? 'Study package' : 'Premium note';
+          const appLink = `parallaxflow://${product.resourceType === 'PACKAGE' ? 'packages' : 'content'}/${product.resourceId}`;
           return <article key={product.id}><div className="pf-store-success-mark is-verified"><Check size={22} /></div><div><span>{product.status === 'EXPIRING_SOON' ? 'Expiring soon' : 'Unlocked'}</span><h2>{product.title}</h2><p>{resourceLabel} · {product.order?.orderNumber ?? 'Access grant'}</p></div><a className="pf-store-button" href={appLink}>Open in app <ExternalLink size={15} /></a></article>;
         })}</div> : <div className="pf-store-cart-empty"><BookOpen size={30} /><h2>No verified purchases yet.</h2><p>Resources appear here after the payment server grants access.</p><Link className="pf-store-button pf-store-button--dark" to={ROUTES.STORE}>Explore the Store</Link></div>}
       </PageReveal>

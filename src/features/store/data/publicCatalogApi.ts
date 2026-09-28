@@ -213,7 +213,6 @@ export function adaptCatalogItemToProduct(dto: CatalogProductSource): StoreProdu
 
   const priceNum = typeof dto.price === 'number' ? dto.price : parseFloat(String(dto.price)) || 0;
 
-  const isMonthlyReport = dto.entityType === 'MONTHLY_REPORT';
   const isPdf = dto.mimeType?.toLowerCase() === 'application/pdf';
   const hasContentPreview = Boolean(dto.mimeType) && dto.kind?.toUpperCase() !== 'FOLDER';
 
@@ -225,7 +224,7 @@ export function adaptCatalogItemToProduct(dto: CatalogProductSource): StoreProdu
     faculty: dto.course?.academy?.name,
     subject: dto.course?.name || '',
     course: (dto.course?.slug || dto.courseId || normalizeCourseKey(dto.course?.name)) as any,
-    productType: isMonthlyReport ? 'monthly-report' : 'revision-notes',
+    productType: 'revision-notes',
     price: priceNum,
     currency: 'INR',
     discount: null,
@@ -253,7 +252,7 @@ export function adaptCatalogItemToProduct(dto: CatalogProductSource): StoreProdu
     learningOutcomes: highlights.map((highlight) => `${highlight.heading}: ${highlight.content}`),
     included: [],
     audience: [],
-    deepLink: isMonthlyReport ? 'parallaxflow://monthly-reports' : `parallaxflow://content/${dto.id}`,
+    deepLink: `parallaxflow://content/${dto.id}`,
     isPremium: true,
     isActive: true,
   };
