@@ -34,7 +34,18 @@ describe('server authentication adapter', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ idToken: 'google-id-token-from-provider' });
   });
 
-  it('does not fabricate password-reset success while the backend route is absent', async () => {
-    await expect(authService.requestPasswordReset('user@test.invalid')).rejects.toMatchObject({ code: 'FEATURE_NOT_AVAILABLE', status: 501 });
+  it('uses the real password-reset request and confirmation endpoints', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response({ challengeId: 'challenge-1', expiresAt: '2026-10-19T12:00:00.000Z' }))
+      .mockResolvedValueOnce(response({ changed: true, sessionsRevoked: true }));
+    await expect(authService.requestPasswordReset(' user@test.invalid ')).resolves.toMatchObject({ challengeId: 'challenge-1' });
+    await expect(authService.confirmPasswordReset({
+      challengeId: 'challenge-1',
+      code: '1234',
+      newPassword: 'secure-password-123',
+      confirmPassword: 'secure-password-123',
+    })).resolves.toEqual({ changed: true, sessionsRevoked: true });
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/auth/password-reset/request');
+    expect(String(fetchMock.mock.calls[1][0])).toContain('/api/auth/password-reset/confirm');
   });
 });

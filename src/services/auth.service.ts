@@ -1,4 +1,4 @@
-import { apiRequest, ApiError } from '@/lib/api/client';
+import { apiRequest } from '@/lib/api/client';
 import type { AuthResult, SessionResult } from '@/lib/api/contracts';
 
 export interface LoginCredentials {
@@ -11,6 +11,18 @@ export interface RegisterCredentials {
   fullName: string;
   email: string;
   password: string;
+}
+
+export interface PasswordResetChallenge {
+  challengeId: string;
+  expiresAt: string;
+}
+
+export interface ConfirmPasswordResetInput {
+  challengeId: string;
+  code: string;
+  newPassword: string;
+  confirmPassword: string;
 }
 
 export const authService = {
@@ -34,8 +46,12 @@ export const authService = {
     return apiRequest('/api/auth/session', { method: 'GET', signal });
   },
 
-  async requestPasswordReset(_email?: string): Promise<never> {
-    throw new ApiError('Password reset is not available from the server yet. Contact support for account recovery.', 501, 'FEATURE_NOT_AVAILABLE');
+  requestPasswordReset(email: string): Promise<PasswordResetChallenge> {
+    return apiRequest('/api/auth/password-reset/request', { method: 'POST', auth: false, body: { email: email.trim() } });
+  },
+
+  confirmPasswordReset(input: ConfirmPasswordResetInput): Promise<{ changed: true; sessionsRevoked: true }> {
+    return apiRequest('/api/auth/password-reset/confirm', { method: 'POST', auth: false, body: input });
   },
 
   async logout(): Promise<void> {

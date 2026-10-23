@@ -29,20 +29,33 @@ export type QuestionPayload = {
   options?: Option[]; subQuestions?: Omit<SubQuestion, 'id'>[];
 };
 export type QuestionBank = {
-  id: string; courseId: string; name: string; slug: string; description: string;
+  id: string; courseId: string; subjectFolderId: string | null; name: string; slug: string; description: string;
   questionKinds?: QuestionKind[];
   accessType: 'FREE' | 'PAID'; status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   price: number | string;
   accessDurationValue: number | null;
   accessDurationUnit: 'DAYS' | 'WEEKS' | 'MONTHS' | null;
+  subjectFolder: { id: string; name: string } | null;
   _count: { questions: number; practiceSessions: number };
 };
+export type QuestionBankSubjectFolder = { id: string; name: string };
 export type QuestionBankPayload = {
   courseId: string; name: string; description?: string; accessType: 'FREE' | 'PAID';
   price?: number | null; accessDurationValue?: number | null;
   accessDurationUnit?: 'DAYS' | 'WEEKS' | 'MONTHS' | null;
 };
 export type ImportValidation = { valid: boolean; totalRows: number; questionCount: number; errors: Array<{ row: number; field: string; problem: string }>; validationDigest: string };
+
+export type BulkQuestionAction = 'publish' | 'archive' | 'restore' | 'delete' | 'update-classification';
+export type BulkQuestionSelection =
+  | { mode: 'ids'; courseId: string; ids: string[] }
+  | { mode: 'filter'; filters: Record<string, string>; excludeIds?: string[] };
+export type BulkQuestionResult = {
+  action: BulkQuestionAction;
+  requested: number;
+  succeeded: Array<{ id: string }>;
+  failed: Array<{ id: string; code: string; message: string }>;
+};
 
 const base = (scope: 'platform' | 'academy') => scope === 'academy' ? '/api/academy/questions' : '/api/admin/questions';
 const academy = (scope: 'platform' | 'academy', academyId?: string | null) => scope === 'academy' ? { academyId } : {};
@@ -60,14 +73,16 @@ export const questionWorkspaceApi = {
   },
   files: (scope: 'platform' | 'academy', academyId: string | null | undefined, courseId: string) => apiRequest<LinkedFile[]>(`${base(scope)}/files?courseId=${encodeURIComponent(courseId)}`, academy(scope, academyId)),
   banks: (scope: 'platform' | 'academy', academyId: string | null | undefined, courseId: string) => apiRequest<QuestionBank[]>(`${base(scope)}/banks?courseId=${encodeURIComponent(courseId)}&includeArchived=true`, academy(scope, academyId)),
+  bankSubjectFolders: (scope: 'platform' | 'academy', academyId: string | null | undefined, courseId: string) => apiRequest<QuestionBankSubjectFolder[]>(`${base(scope)}/bank-subject-folders?courseId=${encodeURIComponent(courseId)}`, academy(scope, academyId)),
   createBank: (scope: 'platform' | 'academy', academyId: string | null | undefined, payload: QuestionBankPayload) => apiRequest<QuestionBank>(`${base(scope)}/banks`, { ...academy(scope, academyId), method: 'POST', body: payload }),
   updateBank: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string, payload: QuestionBankPayload) => apiRequest<QuestionBank>(`${base(scope)}/banks/${id}`, { ...academy(scope, academyId), method: 'PATCH', body: payload }),
-  bankLifecycle: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string, action: 'publish' | 'archive' | 'restore') => apiRequest<QuestionBank>(`${base(scope)}/banks/${id}/${action}`, { ...academy(scope, academyId), method: 'POST' }),
+  bankLifecycle: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string, action: 'publish' | 'archive' | 'restore', subjectFolderId?: string) => apiRequest<QuestionBank>(`${base(scope)}/banks/${id}/${action}`, { ...academy(scope, academyId), method: 'POST', body: action === 'publish' ? { subjectFolderId } : {} }),
   removeBank: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string) => apiRequest<{ id: string; deleted: true }>(`${base(scope)}/banks/${id}`, { ...academy(scope, academyId), method: 'DELETE' }),
   list: async (scope: 'platform' | 'academy', academyId: string | null | undefined, params: URLSearchParams) => { const response = await apiRequest<{ data: WorkspaceQuestion[]; pagination: { page: number; total: number; totalPages: number } }>(`${base(scope)}?${params}`, academy(scope, academyId)); return { ...response, data: response.data.map(normalizeQuestion) }; },
   get: async (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string) => normalizeQuestion(await apiRequest<WorkspaceQuestion>(`${base(scope)}/${id}`, academy(scope, academyId))),
   save: (scope: 'platform' | 'academy', academyId: string | null | undefined, payload: QuestionPayload, id?: string) => apiRequest<WorkspaceQuestion>(id ? `${base(scope)}/${id}` : base(scope), { ...academy(scope, academyId), method: id ? 'PUT' : 'POST', body: payload }),
   lifecycle: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string, action: 'publish' | 'archive' | 'restore') => apiRequest<WorkspaceQuestion>(`${base(scope)}/${id}/${action}`, { ...academy(scope, academyId), method: 'POST' }),
+  bulk: (scope: 'platform' | 'academy', academyId: string | null | undefined, payload: { selection: BulkQuestionSelection; action: BulkQuestionAction; classification?: { examName?: string; chapterName?: string; conceptName?: string } }) => apiRequest<BulkQuestionResult>(`${base(scope)}/bulk`, { ...academy(scope, academyId), method: 'POST', body: payload }),
   duplicate: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string) => apiRequest<WorkspaceQuestion>(`${base(scope)}/${id}/clone`, { ...academy(scope, academyId), method: 'POST' }),
   remove: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string) => apiRequest<{ id: string; deleted: true }>(`${base(scope)}/${id}`, { ...academy(scope, academyId), method: 'DELETE' }),
   template: (scope: 'platform' | 'academy', academyId: string | null | undefined, mode: QuestionMode) => apiRequest<{ fileName: string; mimeType: string; contentBase64: string }>(`${base(scope)}/templates/${mode}`, academy(scope, academyId)),
