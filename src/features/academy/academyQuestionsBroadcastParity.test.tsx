@@ -179,15 +179,14 @@ describe('Academy Questions and Broadcast shared-module parity', () => {
     expect(screen.getByText('0 sub-questions')).toBeInTheDocument();
   });
 
-  it('requires and submits an eligible My Flow subject when publishing a Question Bank', async () => {
+  it('publishes a course-level Question Bank without a My Flow subject mapping', async () => {
     const bankId = '44444444-4444-4444-8444-444444444444';
-    const folderId = '55555555-5555-4555-8555-555555555555';
     vi.mocked(api.apiRequest).mockImplementation(async (path: string, options?: any) => {
       if (path.startsWith('/api/academy/courses')) return { data: [academyCourse] } as never;
       if (path.includes('/questions/files')) return [] as never;
-      if (path.includes('/questions/bank-subject-folders')) return [{ id: folderId, name: 'Paper-1: Accounting' }] as never;
       if (path.includes('/questions/banks') && path.endsWith('/publish')) return { id: bankId } as never;
-      if (path.includes('/questions/banks')) return [{ id: bankId, courseId, subjectFolderId: null, subjectFolder: null, name: 'Mapped Bank', slug: 'mapped-bank', description: '', accessType: 'FREE', status: 'DRAFT', price: 0, accessDurationValue: null, accessDurationUnit: null, _count: { questions: 1, practiceSessions: 0 } }] as never;
+      if (path.includes(`/questions/banks/${bankId}/sections`)) return { bank: { id: bankId, name: 'Course Bank', courseId, status: 'DRAFT' }, parentId: null, depth: 0, breadcrumbs: [{ id: null, name: 'Course Bank' }], sections: [], questions: [{ id: 'question-a', kind: 'NORMAL_MCQ', status: 'PUBLISHED', questionHtml: '<p>Question</p>', caseHtml: '', marks: 1, createdAt: now, updatedAt: now }], allSections: [], childSectionLimit: 7, maxDepth: 5 } as never;
+      if (path.includes('/questions/banks')) return [{ id: bankId, courseId, name: 'Course Bank', slug: 'course-bank', description: '', accessType: 'FREE', status: 'DRAFT', price: 0, accessDurationValue: null, accessDurationUnit: null, _count: { questions: 1, sections: 0, practiceSessions: 0 } }] as never;
       if (path.startsWith('/api/academy/questions?')) return { data: [], pagination: { page: 1, total: 0, totalPages: 1 } } as never;
       return [] as never;
     });
@@ -196,18 +195,12 @@ describe('Academy Questions and Broadcast shared-module parity', () => {
     renderPage(<QuestionsPage scope="academy" academyId={academyId} academyName="Academy A" />);
     await user.click((await screen.findByText('Question Bank')).closest('button')!);
     await user.click(screen.getAllByRole('combobox')[1]!);
-    await user.click(await screen.findByRole('option', { name: /Mapped Bank/ }));
+    await user.click(await screen.findByRole('option', { name: /Course Bank/ }));
     await user.click(await screen.findByRole('button', { name: 'Publish bank' }));
-
-    const dialog = await screen.findByRole('dialog', { name: 'Publish Question Bank' });
-    expect(within(dialog).getByRole('button', { name: 'Publish bank' })).toBeDisabled();
-    await user.click(within(dialog).getByRole('combobox'));
-    await user.click(await screen.findByRole('option', { name: 'Paper-1: Accounting' }));
-    await user.click(within(dialog).getByRole('button', { name: 'Publish bank' }));
 
     await waitFor(() => expect(api.apiRequest).toHaveBeenCalledWith(
       `/api/academy/questions/banks/${bankId}/publish`,
-      expect.objectContaining({ academyId, method: 'POST', body: { subjectFolderId: folderId } }),
+      expect.objectContaining({ academyId, method: 'POST', body: {} }),
     ));
   });
   it('renders shared Broadcast stats, filters, listing, and Academy-only editor choices', async () => {

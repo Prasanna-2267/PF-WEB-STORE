@@ -5,9 +5,11 @@ export type QuestionKind = 'NORMAL_MCQ' | 'CASE_MCQ';
 export type QuestionStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 export type LinkedFile = { id: string; name: string; mimeType: string | null; accessType: 'FREE' | 'PAID'; status: string; parentId?: string | null };
 export type Option = { optionLabel: string; html: string };
-export type SubQuestion = { id?: string; questionHtml: string; options: Option[]; correctOptionId: string | null; correctExplanationHtml?: string; premiumWrongOptionsExplanationHtml: string; examName: string; chapterName: string; conceptName: string };
+export type SubQuestion = { id?: string; questionHtml: string; marks: number; options: Option[]; correctOptionId: string | null; correctExplanationHtml?: string; premiumWrongOptionsExplanationHtml: string; examName: string; chapterName: string; conceptName: string };
 export type WorkspaceQuestion = {
   id: string; kind: QuestionKind; status: QuestionStatus; difficulty: string;
+  marks: number;
+  examAttempts: string[];
   questionHtml: string; caseHtml: string; correctOptionId: string | null;
   practiceCollection: 'PYQ' | 'RTP' | 'MTP' | 'ORIGINAL' | 'QUESTION_BANK';
   correctExplanationHtml: string; premiumWrongOptionsExplanationHtml: string;
@@ -15,30 +17,35 @@ export type WorkspaceQuestion = {
   options: Option[]; subQuestions: SubQuestion[]; courseId: string;
   contentLinks: Array<{ contentItemId: string; contentItem: LinkedFile }>;
   questionBankId: string | null;
+  questionBankSectionId: string | null;
+  supersedesQuestionId?: string | null;
+  replacementQuestion?: { id: string; status: QuestionStatus; deletedAt: string | null } | null;
+  revisionCreated?: boolean;
   questionBank: { id: string; name: string; accessType: 'FREE' | 'PAID'; status: string } | null;
-  _count?: { options: number; subQuestions: number };
+  _count?: { options: number; subQuestions: number; practiceSessionQuestions?: number };
   createdAt: string; updatedAt: string;
 };
 export type QuestionPayload = {
   kind: QuestionKind; status: 'DRAFT' | 'PUBLISHED'; courseId: string; contentItemIds: string[];
+  marks: number;
   practiceCollection?: 'ORIGINAL' | 'QUESTION_BANK';
-  questionBankId?: string;
+  questionBankId?: string; questionBankSectionId?: string;
   questionHtml?: string; caseHtml?: string; correctOptionId?: string;
   correctExplanationHtml?: string; premiumWrongOptionsExplanationHtml?: string;
   examName?: string; chapterName?: string; conceptName?: string;
   options?: Option[]; subQuestions?: Omit<SubQuestion, 'id'>[];
 };
 export type QuestionBank = {
-  id: string; courseId: string; subjectFolderId: string | null; name: string; slug: string; description: string;
+  id: string; courseId: string; name: string; slug: string; description: string;
   questionKinds?: QuestionKind[];
   accessType: 'FREE' | 'PAID'; status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   price: number | string;
   accessDurationValue: number | null;
   accessDurationUnit: 'DAYS' | 'WEEKS' | 'MONTHS' | null;
-  subjectFolder: { id: string; name: string } | null;
-  _count: { questions: number; practiceSessions: number };
+  _count: { questions: number; sections: number; practiceSessions: number };
 };
-export type QuestionBankSubjectFolder = { id: string; name: string };
+export type QuestionBankSection = { id: string; parentId: string | null; name: string; displayOrder: number; createdAt: string; updatedAt: string; _count: { children: number; questions: number } };
+export type QuestionBankLocation = { bank: { id: string; name: string; courseId: string; status: string }; parentId: string | null; depth: number; breadcrumbs: Array<{ id: string | null; name: string }>; sections: QuestionBankSection[]; questions: Array<{ id: string; kind: QuestionKind; status: QuestionStatus; questionHtml: string; caseHtml: string; marks: number; createdAt: string; updatedAt: string }>; allSections: Array<Pick<QuestionBankSection, 'id' | 'parentId' | 'name' | '_count'>>; childSectionLimit: number; maxDepth: number };
 export type QuestionBankPayload = {
   courseId: string; name: string; description?: string; accessType: 'FREE' | 'PAID';
   price?: number | null; accessDurationValue?: number | null;
@@ -53,7 +60,7 @@ export type BulkQuestionSelection =
 export type BulkQuestionResult = {
   action: BulkQuestionAction;
   requested: number;
-  succeeded: Array<{ id: string }>;
+  succeeded: Array<{ id: string; outcome: 'ARCHIVED' | 'DELETED' | 'UPDATED' }>;
   failed: Array<{ id: string; code: string; message: string }>;
 };
 
@@ -61,8 +68,15 @@ const base = (scope: 'platform' | 'academy') => scope === 'academy' ? '/api/acad
 const academy = (scope: 'platform' | 'academy', academyId?: string | null) => scope === 'academy' ? { academyId } : {};
 const normalizeQuestion = (question: WorkspaceQuestion): WorkspaceQuestion => ({
   ...question,
+  marks: Number.isInteger(question.marks) && question.marks > 0 ? question.marks : 1,
+  examAttempts: Array.isArray(question.examAttempts) ? question.examAttempts : question.examName ? [question.examName] : [],
   options: Array.isArray(question.options) ? question.options : [],
-  subQuestions: Array.isArray(question.subQuestions) ? question.subQuestions : [],
+  subQuestions: Array.isArray(question.subQuestions)
+    ? question.subQuestions.map((subQuestion) => ({
+        ...subQuestion,
+        marks: Number.isInteger(subQuestion.marks) && subQuestion.marks > 0 ? subQuestion.marks : 1,
+      }))
+    : [],
   contentLinks: Array.isArray(question.contentLinks) ? question.contentLinks : [],
 });
 
@@ -73,10 +87,14 @@ export const questionWorkspaceApi = {
   },
   files: (scope: 'platform' | 'academy', academyId: string | null | undefined, courseId: string) => apiRequest<LinkedFile[]>(`${base(scope)}/files?courseId=${encodeURIComponent(courseId)}`, academy(scope, academyId)),
   banks: (scope: 'platform' | 'academy', academyId: string | null | undefined, courseId: string) => apiRequest<QuestionBank[]>(`${base(scope)}/banks?courseId=${encodeURIComponent(courseId)}&includeArchived=true`, academy(scope, academyId)),
-  bankSubjectFolders: (scope: 'platform' | 'academy', academyId: string | null | undefined, courseId: string) => apiRequest<QuestionBankSubjectFolder[]>(`${base(scope)}/bank-subject-folders?courseId=${encodeURIComponent(courseId)}`, academy(scope, academyId)),
   createBank: (scope: 'platform' | 'academy', academyId: string | null | undefined, payload: QuestionBankPayload) => apiRequest<QuestionBank>(`${base(scope)}/banks`, { ...academy(scope, academyId), method: 'POST', body: payload }),
   updateBank: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string, payload: QuestionBankPayload) => apiRequest<QuestionBank>(`${base(scope)}/banks/${id}`, { ...academy(scope, academyId), method: 'PATCH', body: payload }),
-  bankLifecycle: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string, action: 'publish' | 'archive' | 'restore', subjectFolderId?: string) => apiRequest<QuestionBank>(`${base(scope)}/banks/${id}/${action}`, { ...academy(scope, academyId), method: 'POST', body: action === 'publish' ? { subjectFolderId } : {} }),
+  bankLifecycle: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string, action: 'publish' | 'archive' | 'restore') => apiRequest<QuestionBank>(`${base(scope)}/banks/${id}/${action}`, { ...academy(scope, academyId), method: 'POST', body: {} }),
+  bankLocation: async (scope: 'platform' | 'academy', academyId: string | null | undefined, bankId: string, parentId?: string | null) => { const location = await apiRequest<QuestionBankLocation>(`${base(scope)}/banks/${bankId}/sections${parentId ? `?parentId=${encodeURIComponent(parentId)}` : ''}`, academy(scope, academyId)); return { ...location, breadcrumbs: location.breadcrumbs ?? [{ id: null, name: location.bank?.name ?? 'Question Bank' }], sections: location.sections ?? [], questions: location.questions ?? [], allSections: location.allSections ?? [], childSectionLimit: location.childSectionLimit ?? 7, maxDepth: location.maxDepth ?? 5, depth: location.depth ?? 0 }; },
+  createBankSection: (scope: 'platform' | 'academy', academyId: string | null | undefined, bankId: string, input: { parentId?: string | null; name: string }) => apiRequest<QuestionBankSection>(`${base(scope)}/banks/${bankId}/sections`, { ...academy(scope, academyId), method: 'POST', body: input }),
+  updateBankSection: (scope: 'platform' | 'academy', academyId: string | null | undefined, bankId: string, sectionId: string, input: { parentId?: string | null; name?: string }) => apiRequest<QuestionBankSection>(`${base(scope)}/banks/${bankId}/sections/${sectionId}`, { ...academy(scope, academyId), method: 'PATCH', body: input }),
+  removeBankSection: (scope: 'platform' | 'academy', academyId: string | null | undefined, bankId: string, sectionId: string) => apiRequest<{ id: string; deleted: true }>(`${base(scope)}/banks/${bankId}/sections/${sectionId}`, { ...academy(scope, academyId), method: 'DELETE' }),
+  moveBankQuestions: (scope: 'platform' | 'academy', academyId: string | null | undefined, bankId: string, questionIds: string[], sectionId?: string | null) => apiRequest<{ moved: number; sectionId: string | null }>(`${base(scope)}/banks/${bankId}/questions/move`, { ...academy(scope, academyId), method: 'POST', body: { questionIds, sectionId: sectionId ?? null } }),
   removeBank: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string) => apiRequest<{ id: string; deleted: true }>(`${base(scope)}/banks/${id}`, { ...academy(scope, academyId), method: 'DELETE' }),
   list: async (scope: 'platform' | 'academy', academyId: string | null | undefined, params: URLSearchParams) => { const response = await apiRequest<{ data: WorkspaceQuestion[]; pagination: { page: number; total: number; totalPages: number } }>(`${base(scope)}?${params}`, academy(scope, academyId)); return { ...response, data: response.data.map(normalizeQuestion) }; },
   get: async (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string) => normalizeQuestion(await apiRequest<WorkspaceQuestion>(`${base(scope)}/${id}`, academy(scope, academyId))),
@@ -84,7 +102,7 @@ export const questionWorkspaceApi = {
   lifecycle: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string, action: 'publish' | 'archive' | 'restore') => apiRequest<WorkspaceQuestion>(`${base(scope)}/${id}/${action}`, { ...academy(scope, academyId), method: 'POST' }),
   bulk: (scope: 'platform' | 'academy', academyId: string | null | undefined, payload: { selection: BulkQuestionSelection; action: BulkQuestionAction; classification?: { examName?: string; chapterName?: string; conceptName?: string } }) => apiRequest<BulkQuestionResult>(`${base(scope)}/bulk`, { ...academy(scope, academyId), method: 'POST', body: payload }),
   duplicate: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string) => apiRequest<WorkspaceQuestion>(`${base(scope)}/${id}/clone`, { ...academy(scope, academyId), method: 'POST' }),
-  remove: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string) => apiRequest<{ id: string; deleted: true }>(`${base(scope)}/${id}`, { ...academy(scope, academyId), method: 'DELETE' }),
+  remove: (scope: 'platform' | 'academy', academyId: string | null | undefined, id: string) => apiRequest<{ id: string; deleted: boolean; archived: boolean; message: string }>(`${base(scope)}/${id}`, { ...academy(scope, academyId), method: 'DELETE' }),
   template: (scope: 'platform' | 'academy', academyId: string | null | undefined, mode: QuestionMode) => apiRequest<{ fileName: string; mimeType: string; contentBase64: string }>(`${base(scope)}/templates/${mode}`, academy(scope, academyId)),
   validateImport: (scope: 'platform' | 'academy', academyId: string | null | undefined, payload: object) => apiRequest<ImportValidation>(`${base(scope)}/imports/validate`, { ...academy(scope, academyId), method: 'POST', body: payload, timeoutMs: 60_000 }),
   commitImport: (scope: 'platform' | 'academy', academyId: string | null | undefined, payload: object) => apiRequest<{ imported: number }>(`${base(scope)}/imports/commit`, { ...academy(scope, academyId), method: 'POST', body: payload, timeoutMs: 90_000 }),
